@@ -1,0 +1,47 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Xcode / Swift
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# macOS
+.DS_Store
+
+# Python tooling caches
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Machine learning artifacts (keep datasets and weights out of Git)
+data/
+datasets/
+models/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.onnx
+*.safetensors
+*.pkl
+.ipynb_checkpoints/
+wandb/
+mlruns/
+
+# Xcode build output
+build/

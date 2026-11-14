@@ -1,0 +1,25 @@
+# Python developer tooling required by the ECC Python rules
+# (.claude/rules/ecc/python/*.md) and the project PostToolUse hook
+# (.claude/hooks/post-edit-format-lint.sh).
+#
+# Setup:
+#   python3 -m venv .venv
+#   .venv/bin/pip install -r requirements-dev.txt
+
+# Formatting / linting
+black==26.10.1
+isort==9.0.2
+ruff==0.17.5
+
+# Type checking
+mypy==2.4.1
+
+# Security scanning
+bandit==1.9.4
+
+# Testing
+pytest==9.2.0
+pytest-cov==7.1.0
+
+# Secret loading from .env (see python/security.md)
+python-dotenv==1.2.4
