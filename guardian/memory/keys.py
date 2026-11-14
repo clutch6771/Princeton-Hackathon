@@ -12,6 +12,7 @@ CHATLOG = "chatlog"
 NOTES = "notes"
 INBOX = "inbox"
 REVIEWS = "reviews"
+REVIEW_SNAPSHOTS = "review_snapshots"
 
 SEARCH_LIMIT = 1000
 

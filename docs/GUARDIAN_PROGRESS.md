@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Saturday Nov 14, 4:15 pm. Branch: `guardian`.
+Last updated: Saturday Nov 14, 5:15 pm. Branch: `guardian`.
 
 ## Where things stand
 
@@ -12,12 +12,12 @@ Last updated: Saturday Nov 14, 4:15 pm. Branch: `guardian`.
 | 1. Interview and value approval | Done | `e5d897a`, `5fbb82f` |
 | 2. Reel explanation and feedback in chat | Done | `b2fc5ea` |
 | Integration checkpoint 1 | Ready on the Guardian side; waiting for the owner to confirm the chat from the app or the dev server | `86e0a5f` and the dev-server commit |
-| 3. Reflector | Not started | |
+| 3. Reflector | Done | this commit |
 | 4. Inbox approval (`get_questions`, `answer_question`) | Not started | |
 | 5. Learning evaluation | Not started | |
 | Optional items | Not started | |
 
-Offline tests: 217 passing in `guardian/` and 9 in `dev_server/`. They use a scripted model and make no API calls.
+Offline tests: 267 passing in `guardian/` and 9 in `dev_server/`. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -115,6 +115,30 @@ Results: the dev server answered all four routes against the live model (status,
 Also changed at this checkpoint: an invalid edit of a card now returns a short message written for the user. Before, it returned the format guidance written for the agent.
 
 Gate before Step 3: the owner confirms the chat works from the app or the dev server.
+
+## Step 3: Reflector
+
+Built: the Reflector deep agent (`reflector.py`), its five tools (`tools_reflector.py`), the `session-review` skill, the inbox with staged cards (`memory/inbox.py`), review records with snapshot and restore (`memory/reviews.py`), the guarded backend for the Reflector's own files (`memory/reflector_files.py`), and `reflect_pending` (`reflect_flow.py`).
+
+Order followed: the tool restrictions were built and tested first, before any test or run gave the Reflector reel data.
+
+- **Tool set.** `ToolAllowlist` middleware hides every tool not on a fixed list and refuses a call to one anyway, so the default `task` and `delete` tools are gone and a tool added by a library upgrade stays hidden. `TodoListMiddleware` supplies `write_todos`.
+- **Files.** `/memories/` holds only brief.md, hypotheses.md and `sessions/<id>.md` for one user, with caps enforced on write and edit (150 words, 10 hypotheses, 200 words). Approved values, notes, the chat log and the inbox are stored elsewhere and are not mounted. `permissions` is a second barrier.
+- **Reel data.** `dump_session`, `dump_feedback` and `dump_chatlog` write read-only copies to `/scratch/`. Anything read back from files or searches is labelled as untrusted data by the frame-text guard.
+- **Cards.** `queue_question` stages a value-change card with the same quote, evidence and duplicate checks as chat proposals. Limits: 2 per run, 5 open in the inbox. Re-rate cards are refused (optional feature not built).
+- **All or nothing.** Before a run the three files are saved. On any failure they are restored and staged cards and proposals are dropped. On success staged cards become pending, the "What I learned" card is added under one fixed ID per session, and the feedback cursor moves to when the run began.
+- **One run at a time.** A per-user lock in the process plus the `running` review record; a run left running for 10 minutes is rolled back and retried; a session is skipped after 3 failed attempts.
+- **What a run must produce.** A session summary with 1 to 3 "What I learned" bullets, each citing evidence that exists, and one closing question (from the reflection addendum). Otherwise the run fails and is rolled back. More than 3 bullets are cut to 3.
+- **Sessions seen** in hypotheses.md is recomputed in code from the distinct session IDs in each hypothesis's evidence.
+
+Results: 25 tests on the agent and its tools, 25 on `reflect_pending` (success, repeat calls, failure and restore, retry limit, crashed runs, concurrent calls, unfinished sessions, caps across five sessions).
+
+Live (Flash-Lite), the seeded feedback session, two runs of about 85 seconds each, both committed on the first attempt:
+
+- Run 1 queued a refinement of V1 with an "Unless" line for injury rehab and a "What I learned" card ending with a question. It did not propose a value for the three "not for me" marks.
+- The skill's step 5 was made explicit about counting marks per group. Run 2 queued both cards: the V1 refinement, and a new value for hustle content with `Suggested wording`, citing the three marks and telling the user the wording is a suggestion.
+
+Decision: the Reflector stays on `gemini-3.5-flash-lite`. It followed the session-review skill.
 
 ## Conventions
 

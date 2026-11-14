@@ -18,6 +18,7 @@ from guardian.datasource import DataSource
 from guardian.memory import checks, formats, keys, values
 from guardian.types import Interrupt, ValueChange
 
+STATUS_STAGED = "staged"  # queued by a Reflector run that has not finished
 STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
 STATUS_REJECTED = "rejected"
@@ -138,6 +139,21 @@ def _save(store: BaseStore, proposal: Proposal) -> None:
     )
 
 
+def commit_staged(store: BaseStore, user_id: str, run_id: str) -> None:
+    """Make a successful Reflector run's staged proposals pending."""
+    for proposal in list_proposals(store, user_id):
+        if proposal.status == STATUS_STAGED and proposal.source.get("run_id") == run_id:
+            _save(store, replace(proposal, status=STATUS_PENDING))
+
+
+def discard_staged(store: BaseStore, user_id: str) -> None:
+    """Drop every staged proposal: a failed or crashed run leaves nothing behind."""
+    namespace = keys.namespace(user_id, keys.PROPOSALS)
+    for proposal in list_proposals(store, user_id):
+        if proposal.status == STATUS_STAGED:
+            store.delete(namespace, proposal.id)
+
+
 # --- Creating ------------------------------------------------------------------------
 
 
@@ -151,8 +167,9 @@ def create_proposal(
     evidence: str,
     source: dict[str, str],
     now: datetime,
+    status: str = STATUS_PENDING,
 ) -> CreateResult:
-    """Check a proposed value change and record it as pending.
+    """Check a proposed value change and record it (pending, or staged for a Reflector run).
 
     Returns the proposal, or an error written for the agent that proposed it.
     """
@@ -186,7 +203,7 @@ def create_proposal(
         evidence=evidence.strip(),
         old_text=old_text,
         fingerprint=values.fingerprint(old_text),
-        status=STATUS_PENDING,
+        status=status,
         source=dict(source),
         created=now.isoformat(),
     )
@@ -287,7 +304,7 @@ def _duplicate_error(
             existing.proposed_text, text
         ):
             continue
-        if existing.status == STATUS_PENDING:
+        if existing.status in (STATUS_PENDING, STATUS_STAGED):
             return "The same change is already waiting for the user's decision."
         if existing.status == STATUS_REJECTED:
             return "The user already rejected this change. Do not propose it again in the same form."

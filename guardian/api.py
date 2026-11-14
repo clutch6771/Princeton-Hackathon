@@ -17,7 +17,7 @@ from typing import Any
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 
-from guardian import chat_flow, config, models
+from guardian import chat_flow, config, models, reflect_flow
 from guardian.chat_agent import build_chat_agent
 from guardian.datasource import DataSource
 from guardian.deps import Deps
@@ -87,6 +87,21 @@ def resume(user_id: str, thread_id: str, decision: Decision) -> GuardianResponse
     """Apply the user's decision (approve, edit or reject) to the value card pending on a thread."""
     deps = _require_deps()
     return chat_flow.resume(deps, _agent(deps), user_id, thread_id, decision)
+
+
+def reflect_pending(user_id: str) -> int:
+    """Review every finished session that has not been reviewed; returns how many.
+
+    Safe to call at any time (broadcast stop, app open, a 10-minute timer): it is
+    idempotent and returns 0 if a review is already running. It can take 1 to 3
+    minutes, so run it as a background job, never inside a request the app waits on.
+    """
+    deps = _require_deps()
+
+    def build_model() -> Any:
+        return deps.reflector_model or models.build_model(config.reflector_model_name())
+
+    return reflect_flow.reflect_pending(deps, user_id, build_model)
 
 
 def get_values(user_id: str) -> str:

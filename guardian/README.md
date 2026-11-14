@@ -2,7 +2,7 @@
 
 The two agents that talk with the user and learn about them: the **Guardian** (chat agent) and the **Reflector** (background session review). This package exposes Python functions only. The backend wraps them in routes; the Judge calls one of them for the values text.
 
-Status: chat, value approval, the values lookup, reel explanation and feedback in chat all work. The Reflector and the inbox (`reflect_pending`, `get_questions`, `answer_question`) are still to come.
+Status: chat, value approval, the values lookup, reel explanation, feedback in chat and the Reflector's session review (`reflect_pending`) all work. The inbox functions (`get_questions`, `answer_question`) are next.
 
 Related pages:
 
@@ -73,7 +73,7 @@ install_initial_values(store, datasource, "demo-user", datetime.now(UTC))   # op
 | `GET /memory` | `get_memory(user_id)` | Yes |
 | `GET /questions` | `get_questions(user_id)` | Checkpoint 2 |
 | `POST /questions/{id}/answer` | `answer_question(user_id, question_id, answer)` | Checkpoint 2 |
-| Background job | `reflect_pending(user_id)` | Checkpoint 2 |
+| Background job | `reflect_pending(user_id)` | Yes. Returns the number of sessions reviewed. Takes 1 to 3 minutes: never call it inside a request the app waits on |
 
 Request and response shapes are in `guardian/types.py`. They match the build spec.
 

@@ -33,3 +33,13 @@ class ChatRunContext:
 
     user_id: str
     thread_id: str
+
+
+@dataclass(frozen=True)
+class ReflectorRun:
+    """One Reflector run: bound to one user and one finished session."""
+
+    user_id: str
+    session_id: str
+    run_id: str
+    since: datetime  # new feedback and chat are collected from this time

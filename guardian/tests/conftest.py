@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
-from guardian import api, chat_agent
+from guardian import api, chat_agent, reflector
 from guardian.datasource import FakeDataSource
 from guardian.seed.install import install_initial_values
 from guardian.tests.fakes import ScriptedChatModel
@@ -43,6 +43,7 @@ def datasource(clock: Callable[[], datetime]) -> FakeDataSource:
 @pytest.fixture(autouse=True)
 def fast_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(chat_agent, "RETRY_INITIAL_DELAY_SECONDS", 0.0)
+    monkeypatch.setattr(reflector, "RETRY_INITIAL_DELAY_SECONDS", 0.0)
 
 
 @pytest.fixture
