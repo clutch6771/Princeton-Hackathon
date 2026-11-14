@@ -55,6 +55,7 @@ This project combines:
 - Use pull requests to merge into main.
 
 ## Tooling
+Teammate machine setup: see `SETUP.md`.
 - Python: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`
   (black, isort, ruff, mypy, bandit, pytest, pytest-cov; config in `pyproject.toml`).
 - Swift: `brew install swiftformat swiftlint` (config in `.swiftformat`, `.swiftlint.yml`).
