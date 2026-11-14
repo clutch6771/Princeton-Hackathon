@@ -1,5 +1,5 @@
-import Foundation
 import CoreVideo
+import Foundation
 import UIKit
 
 /// Frames in, finished ReelObservations out. Runs in the app (demo capture) and
@@ -49,7 +49,14 @@ final class ReelTracker {
                 let r = extractor.extract(from: img)
                 text = r.lines
                 sensitive = r.sensitive
-                frameBase64 = r.sensitive ? nil : UIImage(cgImage: img).jpegData(compressionQuality: 0.5)?.base64EncodedString()
+                let scale = min(1, 512.0 / CGFloat(max(img.width, img.height)))
+                let size = CGSize(width: CGFloat(img.width) * scale, height: CGFloat(img.height) * scale)
+                let format = UIGraphicsImageRendererFormat()
+                format.scale = 1
+                let sampled = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                    UIImage(cgImage: img).draw(in: CGRect(origin: .zero, size: size))
+                }
+                frameBase64 = r.sensitive ? nil : sampled.jpegData(compressionQuality: 0.5)?.base64EncodedString()
             }
         }
     }
@@ -58,7 +65,9 @@ final class ReelTracker {
     func flush() {
         guard let s = startWall else { return }
         let end = Date()
-        if end.timeIntervalSince(s) >= 0.4 { emit(from: s, to: end, confidence: startConfidence) }
+        if end.timeIntervalSince(s) >= 0.4 {
+            emit(from: s, to: end, confidence: startConfidence)
+        }
         startWall = nil
         anchorT = nil
         detector.reset()
@@ -85,7 +94,8 @@ final class ReelTracker {
         let obs = ReelObservation(
             id: UUID(), startedAt: start, endedAt: max(end, start),
             ocrText: sensitive ? [] : text,
-            confidence: confidence, sensitiveSkipped: sensitive)
+            confidence: confidence, sensitiveSkipped: sensitive
+        )
         onObservation?(obs)
     }
 }

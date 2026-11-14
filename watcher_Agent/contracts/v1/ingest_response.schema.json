@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "AckStatus": {
+      "description": "What happened to an uploaded capture event.\n\n``accepted`` means admission to ephemeral, in-memory processing. It is\nnot durable storage of the media.",
+      "enum": [
+        "accepted",
+        "duplicate",
+        "late_discarded",
+        "privacy_excluded",
+        "corrupt_discarded"
+      ],
+      "title": "AckStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Acknowledgement of an externally captured media upload.",
+  "properties": {
+    "admitted_by_current_process": {
+      "default": true,
+      "description": "False when the first delivery was acknowledged by a server process that has since restarted; that media is not recoverable.",
+      "title": "Admitted By Current Process",
+      "type": "boolean"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "prior_outcome": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For duplicates: outcome of the first delivery.",
+      "title": "Prior Outcome"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AckStatus"
+    }
+  },
+  "required": [
+    "event_id",
+    "session_id",
+    "status"
+  ],
+  "title": "IngestResponse",
+  "type": "object",
+  "x-contract-version": "1"
+}

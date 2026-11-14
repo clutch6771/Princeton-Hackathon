@@ -1,0 +1,30 @@
+# Runtime dependencies of the Judge backend (watcher_Agent/judge).
+# Pinned. Resolved on Python 3.14 (macOS arm64) on 2026-11-14.
+#
+# Install (from the repository root):
+#   .venv/bin/pip install -r requirements-dev.txt     # includes this file
+# or runtime only:
+#   .venv/bin/pip install -r watcher_Agent/requirements.txt
+
+# HTTP API
+fastapi==0.163.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.33
+httpx==0.28.1
+
+# Typed contracts and configuration
+pydantic==2.14.3
+pydantic-settings==2.16.3
+
+# Tiger Data (PostgreSQL) access and the shared LangGraph memory Store
+psycopg[binary,pool]==3.3.9
+langgraph-checkpoint-postgres==3.2.1
+
+# Media handling, in memory only (PyAV bundles FFmpeg; no system ffmpeg needed)
+av==19.0.2
+pillow==13.0.0
+numpy==2.5.4
+
+# Gemini understanding and embedding adapters
+langchain-google-genai==4.5.0
+google-genai==3.3.0

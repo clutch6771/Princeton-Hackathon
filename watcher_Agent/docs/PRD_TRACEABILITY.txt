@@ -1,0 +1,60 @@
+PRD TRACEABILITY (2026-11-14 integration revision)
+=================================================
+Source: docs/project.prd.md; Guardian: docs/GUARDIAN_SPEC_V5.md.
+This revision follows the requested ownership split: Judge interprets evidence
+and writes verdicts; native app owns capture and notification functionality.
+Earlier Reel-Watcher-Agent docs assigning notification policy/outbox to the
+Judge are superseded. Historical plan/migrations are not runtime specifications.
+
+Requirement                         Implementation / representative tests
+----------------------------------- --------------------------------------------
+External JPEG/AAC ingestion          api/routes_api, ingest/service; test_api
+Privacy before provider input       privacy/eligibility; test_privacy_gate
+Timestamp segmentation/audio join   segmentation, audio, pipeline/finalizer;
+                                    test_segmentation, test_audio, test_pipeline
+Already segmented native uploads    api/native_api, ingest/native; test_application_integration
+One normal judgment call/reel       understanding, pipeline; test_pipeline, test_adapters
+Grok STT + vision contract           understanding/grok; test_grok
+Guardian approval -> codecs -> SQL   test_guardian_decisions, storage/test_guardian_judge_samples
+Independent confirm/deny references  judge/evaluation; test_guardian_decisions
+Approved values read-only           values/postgres_source + reader; test_values,
+                                    storage/test_postgres_integration
+Guardian approved wording preserved values/markdown_parser (In my words/Agreed wording)
+At most 3 explicit examples          feedback/retriever; test_services, test_prompt
+Reason cites approved value IDs     understanding/validation; test_validation
+No invented speech                  transcriber/transcript; test_validation,
+                                    native transcripts partial in application tests
+Injection treated as evidence       understanding/prompt; test_prompt, test_pipeline
+Null verdict for failures           contracts/record + pipeline; test_pipeline
+Single thumbnail + async embedding  pipeline/job, embedding; test_services, storage tests
+Session counts/completion event     pipeline/accounting, lifecycle; test_lifecycle,
+                                    test_review_regressions
+Timeline, feedback, deletion        feedback/service, routes_api; test_api/test_services
+Shared Guardian DataSource          integration/guardian_source; application integration
+No Judge notification functionality no policy routes/outbox/contracts/runtime service;
+                                    application integration + test_api
+No Judge capture functionality      model gets prepared evidence and no tools;
+                                    native capture remains in AttentionAgent/
+Real PostgreSQL role + migrations   persistence, migrations; tests/storage
+Real Gemini request shape           understanding/gemini; test_adapters (stubbed HTTP)
+
+Current implementation limits
+-------------------------------
+The current native JSON path sends one frame + device transcript (partial).
+The PRD stream path receives up to 3 selected frames plus assembled AAC audio,
+but the native periodic JPEG/AAC uploader and a trusted feed gate remain to
+be implemented. Legacy uploads are refused in production. Similar feedback
+retrieval is a recent-feedback fallback on the Judge and keyword matching in
+the Guardian adapter, not semantic nearest-neighbour retrieval.
+
+Chat route wrapping, value approval UI, Reflector orchestration and device
+notification policy remain separate owners. Guardian files were not modified.
+The Judge does not call an agent at session completion.
+
+Verification must distinguish synthetic provider tests, real PostgreSQL
+repository/role tests, opt-in live Gemini tests and physical-device tests.
+No synthetic test result establishes provider quality or device behavior.
+
+Grok is now the default provider. Its audio path requires separate xAI STT
+and vision requests; the one-call Gemini PRD path remains optional. See
+SAMPLE_EXECUTIONS.txt for actual replay results and opt-in live Grok checks.

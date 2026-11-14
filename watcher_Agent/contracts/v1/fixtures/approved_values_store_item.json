@@ -1,0 +1,13 @@
+{
+  "approval": {
+    "approved_at": "2026-11-14T09:05:00Z",
+    "status": "approved"
+  },
+  "content": "# Approved values (synthetic development sample)\n\n## V1: Cooking I can actually make (strength: medium)\n- Want more: short weeknight recipes, technique explainers\n- Want less: extreme eating challenges\n- Unless: the challenge is a professional chef demonstrating technique\n- In my words: \"show me food I could cook tonight\"\n- Evidence: onboarding conversation; approved 2026-11-14\n- Approved: 2026-11-14T09:00:00Z\n\n## V2: Fitness (strength: high)\n- Want more: workouts\n- Want less: none\n- Unless: none\n- In my words: \"more gym content\"\n- Evidence: onboarding conversation; approved 2026-11-13\n- Approved: 2026-11-13T09:00:00Z\n- Status: superseded by V3\n\n## V3: Fitness without body comparison (strength: high)\n- Want more: form tutorials, training plans, recovery\n- Want less: before/after transformations, physique rating\n- Unless: none\n- In my words: \"gym stuff is great, comparing bodies is not\"\n- Evidence: disagreed with a synthetic reel; approved 2026-11-14\n- Approved: 2026-11-14T09:05:00Z\n",
+  "lifecycle": {
+    "status": "active",
+    "superseded_by": null
+  },
+  "revision": 7,
+  "sha256": "733091b9d698352e96df8c7a8cc934b564d08940c162d36e88696da7412d4fff"
+}

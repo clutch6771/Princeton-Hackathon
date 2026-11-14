@@ -1,0 +1,147 @@
+{
+  "$defs": {
+    "Eligibility": {
+      "description": "Result of the native feed-eligibility gate for one event.",
+      "enum": [
+        "eligible",
+        "ineligible",
+        "unknown"
+      ],
+      "title": "Eligibility",
+      "type": "string"
+    },
+    "GateCapability": {
+      "description": "Which kind of gate produced the privacy provenance.",
+      "enum": [
+        "native_gate",
+        "dev_fake",
+        "none"
+      ],
+      "title": "GateCapability",
+      "type": "string"
+    },
+    "PrivacyProvenance": {
+      "additionalProperties": false,
+      "description": "Evidence about how (and whether) an event was privacy-screened.",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/GateCapability"
+        },
+        "eligibility": {
+          "$ref": "#/$defs/Eligibility"
+        },
+        "gate_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Gate Id",
+          "type": "string"
+        },
+        "gate_version": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Gate Version",
+          "type": "string"
+        },
+        "method": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        },
+        "surface": {
+          "$ref": "#/$defs/Surface"
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_version",
+        "capability",
+        "eligibility",
+        "surface",
+        "method"
+      ],
+      "title": "PrivacyProvenance",
+      "type": "object"
+    },
+    "Surface": {
+      "description": "The on-screen surface the gate recognised.",
+      "enum": [
+        "instagram_reels",
+        "other",
+        "unknown"
+      ],
+      "title": "Surface",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Current Swift payload; goals and sensitivity never become approved values.",
+  "properties": {
+    "dwell_seconds": {
+      "exclusiveMinimum": 0,
+      "maximum": 90,
+      "title": "Dwell Seconds",
+      "type": "number"
+    },
+    "frame_base64": {
+      "anyOf": [
+        {
+          "maxLength": 400000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Frame Base64"
+    },
+    "privacy": {
+      "$ref": "#/$defs/PrivacyProvenance"
+    },
+    "reel_index": {
+      "minimum": 1,
+      "title": "Reel Index",
+      "type": "integer"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "transcript_text": {
+      "anyOf": [
+        {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Transcript Text"
+    }
+  },
+  "required": [
+    "session_id",
+    "reel_index",
+    "dwell_seconds"
+  ],
+  "title": "NativeReelUpload",
+  "type": "object",
+  "x-contract-version": "1"
+}

@@ -1,0 +1,20 @@
+{
+  "capture_ts_ms": 1800000014000,
+  "contract_version": "1",
+  "event_id": "aaaaaaa1-0000-4000-8000-000000000008",
+  "height": 512,
+  "mime_type": "image/jpeg",
+  "privacy": {
+    "capability": "native_gate",
+    "eligibility": "eligible",
+    "gate_id": "feed-eligibility-gate",
+    "gate_version": "1.0.0",
+    "method": "on_device_classifier",
+    "surface": "instagram_reels"
+  },
+  "session_id": "11111111-1111-4111-8111-111111111111",
+  "source_id": "ios-broadcast-synthetic",
+  "source_seq": 7,
+  "transition_at_ms": 1800000013300,
+  "width": 288
+}

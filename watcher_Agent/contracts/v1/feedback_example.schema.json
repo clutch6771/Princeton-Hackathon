@@ -1,0 +1,137 @@
+{
+  "$defs": {
+    "FeedbackLabel": {
+      "description": "Explicit user reaction to a verdict.",
+      "enum": [
+        "agree",
+        "disagree",
+        "not_for_me",
+        "fine",
+        "rerate"
+      ],
+      "title": "FeedbackLabel",
+      "type": "string"
+    },
+    "RetrievalMode": {
+      "description": "How the examples supplied to a judgment were chosen.\n\nThe new reel's text does not exist before the understanding call, so the\nJudge cannot retrieve by similarity to it. Version 1 uses a bounded,\nclearly labeled recent-feedback fallback.",
+      "enum": [
+        "recent_explicit_feedback",
+        "none"
+      ],
+      "title": "RetrievalMode",
+      "type": "string"
+    },
+    "Verdict": {
+      "description": "PRD verdict enum, always relative to the user's approved values.",
+      "enum": [
+        "aligned",
+        "neutral",
+        "conflict"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One explicit feedback example placed in a Judge prompt (at most three).",
+  "properties": {
+    "comment": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Comment"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "feedback_id": {
+      "format": "uuid",
+      "title": "Feedback Id",
+      "type": "string"
+    },
+    "label": {
+      "$ref": "#/$defs/FeedbackLabel"
+    },
+    "prior_value_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Prior Value Ids",
+      "type": "array"
+    },
+    "prior_verdict": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Verdict"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "reel_description": {
+      "title": "Reel Description",
+      "type": "string"
+    },
+    "reel_id": {
+      "format": "uuid",
+      "title": "Reel Id",
+      "type": "string"
+    },
+    "retrieval_mode": {
+      "$ref": "#/$defs/RetrievalMode"
+    },
+    "values_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Values Revision"
+    },
+    "values_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Values Sha256"
+    }
+  },
+  "required": [
+    "feedback_id",
+    "reel_id",
+    "label",
+    "reel_description",
+    "created_at",
+    "retrieval_mode"
+  ],
+  "title": "FeedbackExample",
+  "type": "object",
+  "x-contract-version": "1"
+}
