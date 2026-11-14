@@ -1,0 +1,74 @@
+[
+  {
+    "id": "fb_001",
+    "reel_id": "rl_001",
+    "ts": "2026-11-13T22:20:20Z",
+    "label": "disagree",
+    "comment": "this is someone recovering from knee surgery, that's rehab not comparison",
+    "source": "app",
+    "link": null
+  },
+  {
+    "id": "fb_002",
+    "reel_id": "rl_003",
+    "ts": "2026-11-13T22:20:40Z",
+    "label": "not_for_me",
+    "comment": null,
+    "source": "app",
+    "link": null
+  },
+  {
+    "id": "fb_003",
+    "reel_id": "rl_004",
+    "ts": "2026-11-13T22:21:00Z",
+    "label": "disagree",
+    "comment": "physio before and after is different, I find it motivating",
+    "source": "app",
+    "link": null
+  },
+  {
+    "id": "fb_004",
+    "reel_id": "rl_006",
+    "ts": "2026-11-13T22:21:20Z",
+    "label": "not_for_me",
+    "comment": null,
+    "source": "app",
+    "link": null
+  },
+  {
+    "id": "fb_005",
+    "reel_id": "rl_007",
+    "ts": "2026-11-13T22:21:40Z",
+    "label": "disagree",
+    "comment": "rehab progress is fine, it's about getting better not looking better",
+    "source": "app",
+    "link": null
+  },
+  {
+    "id": "fb_006",
+    "reel_id": "rl_009",
+    "ts": "2026-11-13T22:22:00Z",
+    "label": "disagree",
+    "comment": "recovery from an injury like this is ok with me",
+    "source": "app",
+    "link": null
+  },
+  {
+    "id": "fb_007",
+    "reel_id": "rl_010",
+    "ts": "2026-11-13T22:22:20Z",
+    "label": "not_for_me",
+    "comment": null,
+    "source": "app",
+    "link": null
+  },
+  {
+    "id": "fb_008",
+    "reel_id": "rl_011",
+    "ts": "2026-11-13T22:22:40Z",
+    "label": "disagree",
+    "comment": "this isn't a physique thing, it's injury recovery",
+    "source": "app",
+    "link": null
+  }
+]

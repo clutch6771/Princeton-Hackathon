@@ -1,0 +1,102 @@
+{
+  "rl_021": {
+    "conflict": false,
+    "in_pattern": true,
+    "description": "Runner's stress-fracture comeback, from walking boot to first race, shown week by week"
+  },
+  "rl_022": {
+    "conflict": false,
+    "in_pattern": true,
+    "description": "Person talking to camera on a hospital ward"
+  },
+  "rl_023": {
+    "conflict": false,
+    "in_pattern": true,
+    "description": "Physio compares a patient's ankle mobility before and after a six-week programme"
+  },
+  "rl_024": {
+    "conflict": false,
+    "in_pattern": true,
+    "description": "Climber relearns to grip after wrist surgery, cut between early and late sessions"
+  },
+  "rl_025": {
+    "conflict": true,
+    "in_pattern": true,
+    "description": "Person talking to camera while walking through an airport"
+  },
+  "rl_026": {
+    "conflict": true,
+    "in_pattern": true,
+    "description": "Slideshow of sports cars and a villa with a voice-over selling a trading course"
+  },
+  "rl_027": {
+    "conflict": true,
+    "in_pattern": true,
+    "description": "Screen recording of an online store's payouts with captions about passive income"
+  },
+  "rl_028": {
+    "conflict": true,
+    "in_pattern": true,
+    "description": "Person talking to camera in a parked car"
+  },
+  "rl_029": {
+    "conflict": true,
+    "in_pattern": false,
+    "description": "Creator ranks followers' abs from photos sent in"
+  },
+  "rl_030": {
+    "conflict": true,
+    "in_pattern": false,
+    "description": "Ad for a weight-loss tea showing the same person before and after thirty days"
+  },
+  "rl_031": {
+    "conflict": false,
+    "in_pattern": false,
+    "description": "Trainer corrects common squat mistakes with side-by-side clips"
+  },
+  "rl_032": {
+    "conflict": false,
+    "in_pattern": false,
+    "description": "Ten-minute stretching routine for sore legs after a run"
+  },
+  "rl_033": {
+    "conflict": true,
+    "in_pattern": false,
+    "description": "Street interview edited so two strangers scream at each other about a tax policy"
+  },
+  "rl_034": {
+    "conflict": false,
+    "in_pattern": false,
+    "description": "Person talking to camera in a lab coat"
+  },
+  "rl_035": {
+    "conflict": false,
+    "in_pattern": false,
+    "description": "Local reporter walks through a flood warning for the river district, with a map of affected streets"
+  },
+  "rl_036": {
+    "conflict": true,
+    "in_pattern": false,
+    "description": "Creator eats fifty chicken nuggets and a tray of noodles on camera with exaggerated sound"
+  },
+  "rl_037": {
+    "conflict": false,
+    "in_pattern": false,
+    "description": "Three-ingredient lentil soup made for under three dollars"
+  },
+  "rl_038": {
+    "conflict": false,
+    "in_pattern": false,
+    "description": "Dog waits by the door and spins when its owner comes home"
+  },
+  "rl_039": {
+    "conflict": true,
+    "in_pattern": false,
+    "description": "Person talking to camera in a dark room with a microphone"
+  },
+  "rl_040": {
+    "conflict": false,
+    "in_pattern": false,
+    "description": "Student shares a spaced-repetition schedule for exam revision"
+  }
+}
