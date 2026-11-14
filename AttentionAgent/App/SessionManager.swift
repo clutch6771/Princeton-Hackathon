@@ -14,6 +14,14 @@ final class SessionManager {
     var statusMessage: String?
     var debugLine = ""
     var records: [ReelRecord] = []
+    var userGoal = SharedStore.userGoal
+    var activeDigest: CheckpointDigest?
+    var showReset = false
+    // TODO: Teammate Backend Hook: Inject APIClient conforming to AgentBackendServing here.
+    private var agentBackend: any AgentBackendServing { SharedStore.useLiveBackend ? LiveAgentBackend() : MockAgentBackend() }
+    private var lastPoll = Date.distantPast
+    private var polling = false
+    private var seenInterventions = Set<UUID>()
     var checkpointInterval = 15
     var latestReport: CheckpointReport?
     var showReport = false
@@ -44,8 +52,7 @@ final class SessionManager {
         booted = true
         let d = UserDefaults.standard
         if let raw = d.string(forKey: "mode"), let m = SourceMode(rawValue: raw) { mode = m }
-        let saved = d.integer(forKey: "interval")
-        checkpointInterval = saved > 0 ? saved : SharedStore.checkpointInterval
+        checkpointInterval = SharedStore.checkpointInterval
         consumed = d.integer(forKey: "consumed")
         loadHistory()
         resetNextCheckpoint()
@@ -66,6 +73,7 @@ final class SessionManager {
     }
 
     func setInterval(_ n: Int) {
+        let n = max(1, min(100, n))
         checkpointInterval = n
         UserDefaults.standard.set(n, forKey: "interval")
         SharedStore.checkpointInterval = n
@@ -79,6 +87,11 @@ final class SessionManager {
     // MARK: Start / stop
 
     func start() {
+        guard Date().timeIntervalSince1970 >= SharedStore.pausedUntil else {
+            statusMessage = "Monitoring is paused. Try again after the pause expires."
+            return
+        }
+        SharedStore.sessionID = UUID().uuidString
         statusMessage = nil
         notifier.requestPermission()
         switch mode {
@@ -142,6 +155,18 @@ final class SessionManager {
     // MARK: Timer
 
     private func tick() {
+        if isMonitoring && SharedStore.useLiveBackend && !polling && Date().timeIntervalSince(lastPoll) >= 8 {
+            lastPoll = Date(); polling = true
+            Task {
+                defer { polling = false }
+                do {
+                    if let digest = try await LiveAgentBackend().pending(), seenInterventions.insert(digest.id).inserted {
+                        activeDigest = digest
+                        try await AgentNotification.deliver(digest)
+                    }
+                } catch { statusMessage = "Guardian connection unavailable: \(error.localizedDescription)" }
+            }
+        }
         if mode == .instagramBroadcast {
             let active = SharedStore.broadcastActive && !SharedStore.stopRequested
             if active != isMonitoring {
@@ -207,16 +232,53 @@ final class SessionManager {
             flaggedCount: batch.filter { !($0.analysis?.flaggedPatterns.isEmpty ?? true) }.count,
             headline: "Checkpoint reached", mismatches: [])
         latestReport = report
-        if notify { notifier.deliver(report) }
+        if notify {
+            guard let digest = SharedStore.useLiveBackend
+                ? (try? await agentBackend.fetchCheckpointDigest(reelsWatched: batch.count, threshold: checkpointInterval))
+                : MockAgentBackend.digest(observations: batch.map(\.observation), total: batch.count) else {
+                statusMessage = "Checkpoint unavailable. Check your backend connection."
+                return
+            }
+            activeDigest = digest
+            do { try await AgentNotification.deliver(digest) }
+            catch { statusMessage = error.localizedDescription }
+        }
     }
 
     func openReport() { showReport = true }
 
-    func handleNotificationTap() {
-        ingestBacklog()
+    func handleNotificationTap(_ digest: CheckpointDigest, reset: Bool = false) {
+        activeDigest = digest
+        showReport = false
+        selectedTab = .coach
+        showReset = reset
+        if !messages.contains(where: { $0.attachedDigest?.id == digest.id }) {
+            messages.append(ChatMessage(isUser: false, text: digest.coachHookMessage, attachedDigest: digest))
+        }
+    }
+
+    func simulateCheckpoint() {
+        notifier.requestPermission()
+        let now = Date()
+        let samples = (0..<checkpointInterval).map { i in
+            ReelObservation(id: UUID(), startedAt: now.addingTimeInterval(-Double(i * 12 + 10)), endedAt: now.addingTimeInterval(-Double(i * 12)), ocrText: i % 3 == 0 ? ["Outrage of the day", "#news"] : ["Learn something", "#science"], confidence: 1, sensitiveSkipped: false)
+        }
+        let digest = MockAgentBackend.digest(observations: samples, total: samples.count)
+        handleNotificationTap(digest)
         Task {
-            await refreshReport(notify: false)
-            showReport = true
+            do { try await AgentNotification.deliver(digest) }
+            catch { statusMessage = "Notification unavailable: \(error.localizedDescription)" }
+        }
+    }
+
+    func saveGoal(_ goal: String) {
+        let value = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        userGoal = value
+        SharedStore.userGoal = value
+        Task {
+            do { try await agentBackend.updateUserPreferences(value) }
+            catch { statusMessage = "Goal saved locally; sync failed." }
         }
     }
 
@@ -243,10 +305,39 @@ final class SessionManager {
 
     func send(_ text: String) {
         messages.append(ChatMessage(isUser: true, text: text))
+        let context = activeDigest
         Task {
-            let reply = (try? await api.chat(text)) ?? ChatReply(text: "Backend not reachable.", proposal: nil)
-            messages.append(ChatMessage(isUser: false, text: reply.text))
-            if let p = reply.proposal { proposal = ProposedPreference(text: p) }
+            do {
+                let reply = try await agentBackend.sendMessageToCoach(text, context: context)
+                messages.append(reply)
+                if let action = reply.clientAction { execute(action) }
+            }
+            catch { messages.append(ChatMessage(isUser: false, text: "Coach unavailable. Please try again.")) }
+        }
+    }
+
+    func execute(_ action: GuardianClientAction) {
+        let confirmation: String
+        switch action.type {
+        case .updateThreshold:
+            guard let value = action.threshold, (1...100).contains(value) else { return }
+            setInterval(value); confirmation = "Alerts updated to every \(value) reels."
+        case .updateSensitivity:
+            guard let value = action.sensitivity, ["low", "medium", "high"].contains(value) else { return }
+            SharedStore.sensitivity = value; confirmation = "Sensitivity updated to \(value)."
+        case .pauseMonitoring:
+            guard let minutes = action.minutes, (1...1440).contains(minutes) else { return }
+            SharedStore.pausedUntil = Date().addingTimeInterval(Double(minutes * 60)).timeIntervalSince1970
+            stop(); confirmation = "Monitoring paused for \(minutes) minutes. Restart manually when ready."
+        }
+        messages.append(ChatMessage(isUser: false, text: confirmation))
+    }
+    func correct(_ event: FlaggedReelEvent, correction: String) {
+        Task {
+            do {
+                if SharedStore.useLiveBackend { try await LiveAgentBackend().feedback(event: event.id, correction: correction) }
+                messages.append(ChatMessage(isUser: false, text: "Correction saved: \(correction)."))
+            } catch { messages.append(ChatMessage(isUser: false, text: "Correction could not be sent. Please retry.")) }
         }
     }
 

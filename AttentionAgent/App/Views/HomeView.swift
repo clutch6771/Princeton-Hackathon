@@ -1,7 +1,9 @@
 import SwiftUI
+import Speech
 
 struct HomeView: View {
     @Environment(SessionManager.self) private var session
+    @State private var showConnection = false
     @State private var pickerTrigger = 0
 
     var body: some View {
@@ -21,6 +23,17 @@ struct HomeView: View {
             .pickerStyle(.menu)
             .disabled(session.isMonitoring)
 
+            VStack {
+                Picker("Checkpoint", selection: Binding(get: { session.checkpointInterval }, set: { session.setInterval($0) })) {
+                    ForEach([10, 15, 30, 50], id: \.self) { Text("\($0) reels").tag($0) }
+                }.pickerStyle(.segmented)
+                Stepper("Every \(session.checkpointInterval) reels", value: Binding(get: { session.checkpointInterval }, set: { session.setInterval($0) }), in: 1...100)
+                Button("Simulate Checkpoint") { session.simulateCheckpoint() }
+                    .buttonStyle(.bordered)
+                Text("Demo coach • simulated checkpoint data").font(.caption).foregroundStyle(.secondary)
+            }.padding(.horizontal)
+
+            Button("Backend Connection & Permissions") { showConnection = true }
             Text(hint)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -64,6 +77,7 @@ struct HomeView: View {
                 .opacity(0.01)
                 .allowsHitTesting(false)
         )
+        .sheet(isPresented: $showConnection) { NavigationStack { BackendConnectionView() } }
         .navigationTitle("AttentionAgent")
     }
 
@@ -76,5 +90,39 @@ struct HomeView: View {
         case .instagramBroadcast:
             return "Tap Start, choose AttentionBroadcast, tap Start Broadcast, then open Instagram. Stop here or from the red status bar."
         }
+    }
+}
+
+
+struct BackendConnectionView: View {
+    @State private var url = SharedStore.backendBaseURL
+    @State private var live = SharedStore.useLiveBackend
+    @State private var connected: Bool?
+    @State private var testing = false
+    @State private var speech = SFSpeechRecognizer.authorizationStatus()
+    var body: some View {
+        Form {
+            Section("Backend Connection") {
+                TextField("Server URL", text: $url).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .onChange(of: url) { _, value in SharedStore.backendBaseURL = value; connected = nil }
+                Toggle("Live Python Backend", isOn: $live).onChange(of: live) { _, value in SharedStore.useLiveBackend = value }
+                Text(live ? "Live mode" : "Mock Mode")
+                Button(testing ? "Testing…" : "Test Connection") {
+                    testing = true
+                    Task {
+                        do { try await LiveAgentBackend().health(); connected = true }
+                        catch { connected = false }
+                        testing = false
+                    }
+                }.disabled(testing)
+                if let connected { Text(connected ? "Connected" : "Offline").foregroundStyle(connected ? .green : .red) }
+            }
+            Section("Speech Recognition Permission") {
+                Text(speech == .authorized ? "Authorized • on-device only" : speech == .notDetermined ? "Not requested" : "Unavailable — enable Speech Recognition in Settings")
+                Button("Request Speech Permission") {
+                    SFSpeechRecognizer.requestAuthorization { status in Task { @MainActor in speech = status } }
+                }
+            }
+        }.navigationTitle("Connection & Permissions")
     }
 }

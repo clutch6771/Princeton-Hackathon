@@ -25,12 +25,6 @@ struct CheckpointReport: Codable {
     let mismatches: [String]
 }
 
-struct ChatMessage: Identifiable, Hashable {
-    let id = UUID()
-    let isUser: Bool
-    let text: String
-}
-
 struct ProposedPreference: Identifiable, Hashable {
     let id = UUID()
     let text: String
