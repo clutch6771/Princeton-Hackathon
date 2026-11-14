@@ -602,3 +602,23 @@ def test_quote_found_requires_a_continuous_passage():
     assert checks.quote_found("it’s about getting better", sources)
     assert not checks.quote_found("rehab is about looking better", sources)
     assert not checks.quote_found("  ", sources)
+
+
+def test_carried_over_wording_must_be_identical_to_the_stored_line(store, datasource):
+    value_id = approved_value(store, datasource)
+    stored = values.get_value(store, USER, value_id).text
+    reworded = stored.replace("- Unless: none", "- Unless: budgeting tips").replace(
+        "I don't want hustle", "i don't want Hustle"
+    )
+
+    created = propose(
+        store,
+        datasource,
+        text=reworded,
+        value_id=value_id,
+        evidence="fb_004",
+        call="c2",
+    )
+
+    assert created.proposal is None
+    assert "Suggested wording" in created.error

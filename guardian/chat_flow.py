@@ -11,10 +11,17 @@ from langgraph.types import Command
 
 from guardian import config
 from guardian.deps import ChatRunContext, Deps
-from guardian.memory import proposals, records, values
+from guardian.memory import formats, proposals, records, values
 from guardian.types import ChatContext, Decision, GuardianResponse
 
 logger = logging.getLogger("guardian")
+
+# Shown when a card carries suggested wording and the model sent no text with it, so
+# the user is always told the wording is not their own.
+SUGGESTED_WORDING_NOTE = (
+    "I've suggested wording for this value. Edit the card to put it in your own "
+    "words, or approve it as it is."
+)
 
 USER_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 CONTEXT_ENTRIES = ("onboarding", "chat", "drift_notification", "reel", "learned")
@@ -192,11 +199,18 @@ def run(
         if result.get("__interrupt__")
         else None
     )
+    if waiting is not None and not reply and has_suggested_wording(waiting):
+        reply = SUGGESTED_WORDING_NOTE
     if reply:
         records.append_chat_turn(
             deps.store, user_id, records.ROLE_GUARDIAN, reply, deps.clock()
         )
     return respond(reply=reply, pending=proposals.card(waiting) if waiting else None)
+
+
+def has_suggested_wording(proposal: proposals.Proposal) -> bool:
+    entry = formats.parse_entry(proposal.proposed_text).entry
+    return entry is not None and entry.wording_label == formats.WORDING_SUGGESTED
 
 
 def last_reply_text(result: dict[str, Any]) -> str | None:

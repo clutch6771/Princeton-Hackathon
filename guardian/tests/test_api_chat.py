@@ -13,7 +13,7 @@ from deepagents.backends import StoreBackend
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from guardian import api, chat_agent, config
+from guardian import api, chat_agent, chat_flow, config
 from guardian.memory import checks, keys, proposals, records, values
 from guardian.tests.conftest import NOW, OTHER_USER, USER
 from guardian.tests.fakes import FailingChatModel, ScriptedChatModel, reply, tool_call
@@ -503,3 +503,40 @@ def test_entry_points_require_configuration(monkeypatch):
 
     with pytest.raises(config.ConfigError):
         api.get_values(USER)
+
+
+# --- Fixed note for a suggestion card (live-run fix 1) --------------------------------
+
+
+def test_suggestion_card_without_chat_text_gets_a_fixed_note(start, store):
+    start([propose(text=NEW_HUSTLE, evidence="fb_002")])
+
+    response = api.chat(USER, THREAD, "fewer money videos please")
+
+    assert response["pending"] is not None and response["error"] is None
+    assert response["reply"] == chat_flow.SUGGESTED_WORDING_NOTE
+    last_turn = records.chat_turns(store, USER)[-1]
+    assert (last_turn["role"], last_turn["text"]) == (
+        "guardian",
+        chat_flow.SUGGESTED_WORDING_NOTE,
+    )
+
+
+def test_card_quoting_the_user_gets_no_note(start):
+    start([propose()])
+
+    response = api.chat(USER, THREAD, MESSAGE)
+
+    assert response["pending"] is not None
+    assert response["reply"] is None
+
+
+def test_model_text_is_kept_when_it_accompanies_a_suggestion_card(start):
+    with_text = propose(text=NEW_HUSTLE, evidence="fb_002")
+    start(
+        [AIMessage(content="My suggestion is below.", tool_calls=with_text.tool_calls)]
+    )
+
+    response = api.chat(USER, THREAD, "fewer money videos please")
+
+    assert response["reply"] == "My suggestion is below."

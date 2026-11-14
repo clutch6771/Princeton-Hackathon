@@ -252,14 +252,18 @@ def _wording_error(
 def _carries_over_stored_wording(
     entry: formats.ValueEntry, current: values.StoredValue | None
 ) -> bool:
-    """A change may keep the stored value's wording line exactly as it is."""
+    """A change may keep the stored value's wording line, but only if it is identical.
+
+    Any difference, even in case or spacing, makes it new wording, which must pass
+    the quote check or be offered as a suggestion.
+    """
     if current is None:
         return False
     stored = formats.parse_entry(current.text).entry
     return (
         stored is not None
         and stored.wording_label == entry.wording_label
-        and formats.same_text(stored.wording_text, entry.wording_text)
+        and stored.wording_text == entry.wording_text
     )
 
 
