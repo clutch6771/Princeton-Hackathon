@@ -21,7 +21,11 @@ ONBOARDING_EVIDENCE = "said at onboarding"
 
 
 def install_initial_values(
-    store: BaseStore, datasource: DataSource, user_id: str, now: datetime, seed_dir: Path = SEED_DIR
+    store: BaseStore,
+    datasource: DataSource,
+    user_id: str,
+    now: datetime,
+    seed_dir: Path = SEED_DIR,
 ) -> list[str]:
     """Approve the persona's three onboarding values for a user who has none.
 
@@ -32,7 +36,9 @@ def install_initial_values(
 
     documents = json.loads((seed_dir / "initial_values.json").read_text())
     for index, document in enumerate(documents):
-        records.append_chat_turn(store, user_id, records.ROLE_USER, document["statement"], now)
+        records.append_chat_turn(
+            store, user_id, records.ROLE_USER, document["statement"], now
+        )
         created = proposals.create_proposal(
             store,
             datasource,
@@ -45,5 +51,12 @@ def install_initial_values(
         )
         if created.proposal is None:
             raise ValueError(f"seed value {index} was refused: {created.error}")
-        proposals.decide(store, user_id, created.proposal.id, action=proposals.ACTION_APPROVE, edited_text=None, now=now)
+        proposals.decide(
+            store,
+            user_id,
+            created.proposal.id,
+            action=proposals.ACTION_APPROVE,
+            edited_text=None,
+            now=now,
+        )
     return [value.id for value in values.list_values(store, user_id)]

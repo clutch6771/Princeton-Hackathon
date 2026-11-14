@@ -5,7 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain.agents.middleware import ModelCallLimitMiddleware, ModelRequest, ModelRetryMiddleware, dynamic_prompt
+from langchain.agents.middleware import (
+    ModelCallLimitMiddleware,
+    ModelRequest,
+    ModelRetryMiddleware,
+    dynamic_prompt,
+)
 
 from guardian import prompts
 from guardian.deps import ChatRunContext, Deps
@@ -25,15 +30,21 @@ def build_chat_agent(deps: Deps, model: Any) -> Any:
         user_id = request.runtime.context.user_id
         return prompts.render_guardian_prompt(
             values_md=values.render_values(deps.store, user_id),
-            brief_md=reflector_files.read_file(deps.store, user_id, reflector_files.BRIEF),
+            brief_md=reflector_files.read_file(
+                deps.store, user_id, reflector_files.BRIEF
+            ),
         )
 
     middleware = [
         guardian_prompt,
         ModelRetryMiddleware(
-            max_retries=MODEL_RETRIES, on_failure="error", initial_delay=RETRY_INITIAL_DELAY_SECONDS
+            max_retries=MODEL_RETRIES,
+            on_failure="error",
+            initial_delay=RETRY_INITIAL_DELAY_SECONDS,
         ),
-        ModelCallLimitMiddleware(run_limit=CHAT_MODEL_CALL_LIMIT, exit_behavior="error"),
+        ModelCallLimitMiddleware(
+            run_limit=CHAT_MODEL_CALL_LIMIT, exit_behavior="error"
+        ),
     ]
     return create_agent(
         model=model,

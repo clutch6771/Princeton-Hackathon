@@ -12,7 +12,9 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 from guardian import config
 
 REQUESTS_PER_MINUTE_VAR = "GUARDIAN_REQUESTS_PER_MINUTE"
-DEFAULT_REQUESTS_PER_MINUTE = 12.0  # kept below the free-tier limit; both agents share it
+DEFAULT_REQUESTS_PER_MINUTE = (
+    12.0  # kept below the free-tier limit; both agents share it
+)
 REQUEST_TIMEOUT_SECONDS = 60
 PROVIDER_MAX_RETRIES = 2
 SECONDS_PER_MINUTE = 60.0
@@ -23,7 +25,9 @@ def requests_per_minute() -> float:
     try:
         value = float(raw) if raw else DEFAULT_REQUESTS_PER_MINUTE
     except ValueError as error:
-        raise config.ConfigError(f"{REQUESTS_PER_MINUTE_VAR} must be a number, got {raw!r}") from error
+        raise config.ConfigError(
+            f"{REQUESTS_PER_MINUTE_VAR} must be a number, got {raw!r}"
+        ) from error
     if value <= 0:
         raise config.ConfigError(f"{REQUESTS_PER_MINUTE_VAR} must be greater than zero")
     return value

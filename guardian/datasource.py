@@ -16,7 +16,9 @@ from pathlib import Path
 from typing import Any, Literal, Protocol, TypedDict
 
 SEED_DIR = Path(__file__).resolve().parent / "seed"
-UNLISTED_SEED_SESSIONS = frozenset({"s_heldout"})  # scoring only; never reviewed or searched
+UNLISTED_SEED_SESSIONS = frozenset(
+    {"s_heldout"}
+)  # scoring only; never reviewed or searched
 
 FEEDBACK_LABELS = ("agree", "disagree", "not_for_me", "fine")
 FEEDBACK_SOURCES = ("app", "chat", "rerate", "share")
@@ -94,15 +96,23 @@ class DataSource(Protocol):
     def list_sessions(self, user_id: str) -> list[Session]: ...
     def get_session_reels(self, user_id: str, session_id: str) -> list[Reel]: ...
     def search_reels(self, user_id: str, query: str, k: int) -> list[ReelSummary]: ...
-    def find_similar_feedback(self, user_id: str, text: str, k: int) -> list[FeedbackExample]: ...
+    def find_similar_feedback(
+        self, user_id: str, text: str, k: int
+    ) -> list[FeedbackExample]: ...
     def get_feedback(self, user_id: str, since: datetime) -> list[Feedback]: ...
-    def feed_profile(self, user_id: str, session_id: str | None, since: datetime | None) -> FeedProfile: ...
+    def feed_profile(
+        self, user_id: str, session_id: str | None, since: datetime | None
+    ) -> FeedProfile: ...
     def record_feedback(self, user_id: str, feedback: NewFeedback) -> str: ...
 
 
 def parse_time(value: datetime | str) -> datetime:
     """Accept a datetime or an ISO 8601 string; always return an aware datetime."""
-    moment = value if isinstance(value, datetime) else datetime.fromisoformat(value.replace("Z", "+00:00"))
+    moment = (
+        value
+        if isinstance(value, datetime)
+        else datetime.fromisoformat(value.replace("Z", "+00:00"))
+    )
     return moment if moment.tzinfo is not None else moment.replace(tzinfo=UTC)
 
 
@@ -125,7 +135,9 @@ def to_reel(record: dict[str, Any]) -> Reel:
             reason=str(record.get("reason") or ""),
         )
     except KeyError as missing:
-        raise ValueError(f"reel record is missing required field {missing}") from missing
+        raise ValueError(
+            f"reel record is missing required field {missing}"
+        ) from missing
 
 
 def to_feedback(record: dict[str, Any]) -> Feedback:
@@ -142,7 +154,10 @@ def to_feedback(record: dict[str, Any]) -> Feedback:
 
 def summarize(reel: Reel) -> ReelSummary:
     return ReelSummary(
-        id=reel["id"], one_line=reel["description"], verdict=reel["verdict"], confidence=reel["confidence"]
+        id=reel["id"],
+        one_line=reel["description"],
+        verdict=reel["verdict"],
+        confidence=reel["confidence"],
     )
 
 
@@ -152,7 +167,9 @@ def tokens(text: str) -> frozenset[str]:
 
 def reel_text(reel: Reel) -> str:
     topics = " ".join(str(topic) for topic in reel["features"].get("topics", []))
-    return " ".join((reel["description"], reel["transcript"], reel["on_screen_text"], topics))
+    return " ".join(
+        (reel["description"], reel["transcript"], reel["on_screen_text"], topics)
+    )
 
 
 def top_counts(values: Iterable[str]) -> list[tuple[str, int]]:
@@ -180,7 +197,10 @@ class FakeDataSource:
 
     @classmethod
     def from_seed(
-        cls, user_id: str, seed_dir: Path = SEED_DIR, clock: Callable[[], datetime] | None = None
+        cls,
+        user_id: str,
+        seed_dir: Path = SEED_DIR,
+        clock: Callable[[], datetime] | None = None,
     ) -> FakeDataSource:
         reels = json.loads((seed_dir / "reels.json").read_text())
         feedback = json.loads((seed_dir / "feedback.json").read_text())
@@ -218,22 +238,40 @@ class FakeDataSource:
             current = sessions.get(reel["session_id"])
             sessions[reel["session_id"]] = Session(
                 id=reel["session_id"],
-                start=min(current["start"], reel["start"]) if current else reel["start"],
-                last_reel_at=max(current["last_reel_at"], reel["end"]) if current else reel["end"],
+                start=(
+                    min(current["start"], reel["start"]) if current else reel["start"]
+                ),
+                last_reel_at=(
+                    max(current["last_reel_at"], reel["end"])
+                    if current
+                    else reel["end"]
+                ),
                 stopped=reel["session_id"] not in self._open_sessions,
             )
         return sorted(sessions.values(), key=lambda session: session["start"])
 
     def get_session_reels(self, user_id: str, session_id: str) -> list[Reel]:
-        return [Reel(**reel) for reel in self._all_reels(user_id) if reel["session_id"] == session_id]
+        return [
+            Reel(**reel)
+            for reel in self._all_reels(user_id)
+            if reel["session_id"] == session_id
+        ]
 
     def search_reels(self, user_id: str, query: str, k: int) -> list[ReelSummary]:
         wanted = tokens(query)
-        scored = [(len(wanted & tokens(reel_text(reel))), reel) for reel in self._listed_reels(user_id)]
-        ranked = sorted((pair for pair in scored if pair[0] > 0), key=lambda pair: (-pair[0], pair[1]["id"]))
+        scored = [
+            (len(wanted & tokens(reel_text(reel))), reel)
+            for reel in self._listed_reels(user_id)
+        ]
+        ranked = sorted(
+            (pair for pair in scored if pair[0] > 0),
+            key=lambda pair: (-pair[0], pair[1]["id"]),
+        )
         return [summarize(reel) for _, reel in ranked[: max(k, 0)]]
 
-    def find_similar_feedback(self, user_id: str, text: str, k: int) -> list[FeedbackExample]:
+    def find_similar_feedback(
+        self, user_id: str, text: str, k: int
+    ) -> list[FeedbackExample]:
         wanted = tokens(text)
         by_id = {reel["id"]: reel for reel in self._listed_reels(user_id)}
         scored = []
@@ -246,14 +284,22 @@ class FakeDataSource:
                 scored.append((score, item, reel))
         ranked = sorted(scored, key=lambda triple: (-triple[0], triple[1]["id"]))
         return [
-            FeedbackExample(reel=summarize(reel), label=item["label"], comment=item["comment"])
+            FeedbackExample(
+                reel=summarize(reel), label=item["label"], comment=item["comment"]
+            )
             for _, item, reel in ranked[: max(k, 0)]
         ]
 
     def get_feedback(self, user_id: str, since: datetime) -> list[Feedback]:
-        return [Feedback(**item) for item in self._user_feedback(user_id) if item["ts"] >= since]
+        return [
+            Feedback(**item)
+            for item in self._user_feedback(user_id)
+            if item["ts"] >= since
+        ]
 
-    def feed_profile(self, user_id: str, session_id: str | None, since: datetime | None) -> FeedProfile:
+    def feed_profile(
+        self, user_id: str, session_id: str | None, since: datetime | None
+    ) -> FeedProfile:
         reels = [
             reel
             for reel in self._listed_reels(user_id)
@@ -263,11 +309,17 @@ class FakeDataSource:
         features = [reel["features"] for reel in reels]
         return FeedProfile(
             reel_count=len(reels),
-            conflict_count=len([reel for reel in reels if reel["verdict"] == "conflict"]),
-            top_topics=top_counts(str(topic) for f in features for topic in f.get("topics", [])),
+            conflict_count=len(
+                [reel for reel in reels if reel["verdict"] == "conflict"]
+            ),
+            top_topics=top_counts(
+                str(topic) for f in features for topic in f.get("topics", [])
+            ),
             top_tones=top_counts(str(f.get("tone", "")) for f in features),
             top_formats=top_counts(str(f.get("format", "")) for f in features),
-            top_emotional_pulls=top_counts(str(f.get("emotional_pull", "")) for f in features),
+            top_emotional_pulls=top_counts(
+                str(f.get("emotional_pull", "")) for f in features
+            ),
         )
 
     # --- write ---------------------------------------------------------------------
@@ -304,7 +356,11 @@ class FakeDataSource:
         return self._reels if user_id == self._user_id else ()
 
     def _listed_reels(self, user_id: str) -> list[Reel]:
-        return [reel for reel in self._all_reels(user_id) if reel["session_id"] not in self._unlisted_sessions]
+        return [
+            reel
+            for reel in self._all_reels(user_id)
+            if reel["session_id"] not in self._unlisted_sessions
+        ]
 
     def _user_feedback(self, user_id: str) -> tuple[Feedback, ...]:
         return self._feedback if user_id == self._user_id else ()

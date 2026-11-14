@@ -36,10 +36,14 @@ def quote_found(quote: str, sources: Iterable[str]) -> bool:
     return any(wanted in normalize(source) for source in sources)
 
 
-def user_statements(store: BaseStore, datasource: DataSource, user_id: str) -> list[str]:
+def user_statements(
+    store: BaseStore, datasource: DataSource, user_id: str
+) -> list[str]:
     """Everything this user wrote: chat messages and feedback comments."""
     comments = [
-        item["comment"] for item in datasource.get_feedback(user_id, BEGINNING_OF_TIME) if item["comment"]
+        item["comment"]
+        for item in datasource.get_feedback(user_id, BEGINNING_OF_TIME)
+        if item["comment"]
     ]
     return [*records.user_chat_messages(store, user_id), *comments]
 

@@ -12,7 +12,9 @@ from typing import Literal, TypedDict
 
 class ChatContext(TypedDict, total=False):
     entry: Literal["onboarding", "chat", "drift_notification", "reel", "learned"]
-    reel_ids: list[str]  # drift_notification: the conflicting reels; reel: one reel from the Timeline
+    reel_ids: list[
+        str
+    ]  # drift_notification: the conflicting reels; reel: one reel from the Timeline
     session_id: str  # learned: open the chat on a session's "What I learned"
 
 
@@ -31,7 +33,9 @@ class Interrupt(TypedDict):
 class GuardianResponse(TypedDict):
     reply: str | None
     pending: Interrupt | None  # set when the run is paused for approval
-    error: str | None  # for display, e.g. an edited value that does not match the format
+    error: (
+        str | None
+    )  # for display, e.g. an edited value that does not match the format
 
 
 class AnswerResult(TypedDict):

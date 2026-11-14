@@ -31,7 +31,10 @@ def build_chat_tools(deps: Deps) -> list[Any]:
 
     @tool
     def propose_value_change(
-        value_id: str, new_text: str, evidence: str, runtime: ToolRuntime[ChatRunContext]
+        value_id: str,
+        new_text: str,
+        evidence: str,
+        runtime: ToolRuntime[ChatRunContext],
     ) -> str:
         """Propose adding a value (value_id="new") or changing one (e.g. "V3"). The user
         sees a card and approves, edits or rejects it; nothing changes until they approve.

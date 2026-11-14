@@ -42,13 +42,20 @@ def live_api() -> InMemoryStore:
     return store
 
 
-def test_interview_produces_a_value_card_and_approval_writes_a_valid_entry(live_api: InMemoryStore):
+def test_interview_produces_a_value_card_and_approval_writes_a_valid_entry(
+    live_api: InMemoryStore,
+):
     card = None
     for turn, message in enumerate(USER_TURNS[:MAX_TURNS_BEFORE_A_CARD], start=1):
         response = api.chat(USER, THREAD, message)
         logger.info("turn %d user: %s", turn, message)
-        logger.info("turn %d guardian: %s | card: %s | error: %s", turn, response["reply"],
-                    bool(response["pending"]), response["error"])
+        logger.info(
+            "turn %d guardian: %s | card: %s | error: %s",
+            turn,
+            response["reply"],
+            bool(response["pending"]),
+            response["error"],
+        )
         assert response["error"] is None
         if response["pending"]:
             card = response["pending"]["value_change"]
