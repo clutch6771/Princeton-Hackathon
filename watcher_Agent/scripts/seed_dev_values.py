@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from langgraph.store.postgres import PostgresStore  # noqa: E402
 
 from judge.contracts.examples import example_values_store_item  # noqa: E402
-from judge.contracts.values import MEMORY_NAMESPACE_SUFFIX, VALUES_KEY  # noqa: E402
+from judge.values.markdown_parser import parse_values_markdown  # noqa: E402
 
 logger = logging.getLogger("seed_dev_values")
 
@@ -37,12 +37,14 @@ def main() -> int:
         return 1
     with PostgresStore.from_conn_string(url) as store:
         store.setup()
-        store.put(
-            (owner_id, MEMORY_NAMESPACE_SUFFIX),
-            VALUES_KEY,
-            example_values_store_item().model_dump(mode="json"),
-        )
-    logger.info("seeded synthetic approved values (revision 7) for the demo user")
+        content = example_values_store_item().canonical_content()
+        for entry in parse_values_markdown(content):
+            store.put(
+                (owner_id, "guardian", "values"),
+                entry.value_id,
+                {"text": entry.raw_markdown, "updated": "2026-11-14T12:00:00+00:00"},
+            )
+    logger.info("seeded synthetic approved values (Guardian layout) for the demo user")
     return 0
 
 

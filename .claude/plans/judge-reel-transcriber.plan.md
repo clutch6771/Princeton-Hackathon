@@ -1,3 +1,7 @@
+> HISTORICAL PLAN, superseded by watcher_Agent/README.txt and current docs.
+> Judge notification ownership and the default values Store layout below
+> describe the previous branch implementation, not current requirements.
+
 # Plan: Judge and Reel Transcriber (Python backend, Tiger Data PostgreSQL)
 
 **Source**: Claude Code prompt "Judge and Reel Transcriber" (PRD baseline: Values-Aligned

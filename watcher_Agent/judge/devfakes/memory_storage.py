@@ -20,13 +20,6 @@ from uuid import UUID
 
 from judge.contracts.base import ms_to_datetime
 from judge.contracts.feedback import FeedbackRecord
-from judge.contracts.notification import (
-    BatchStatus,
-    NotificationBatch,
-    NotificationPolicy,
-    OutboxItem,
-    UserNotificationState,
-)
 from judge.contracts.record import (
     EmbeddingInfo,
     EmbeddingStatus,
@@ -56,7 +49,6 @@ from judge.contracts.storage import (
     ThumbnailRecord,
     TimelineCursor,
 )
-from judge.contracts.understanding import Verdict
 from judge.errors import EmbeddingDimensionError
 
 EmbeddingKey = tuple[UUID, str]
@@ -69,15 +61,10 @@ class _Tables:
     receipts: dict[UUID, IngestReceipt] = field(default_factory=dict)
     reels: dict[UUID, ReelRecord] = field(default_factory=dict)
     reel_start_ms: dict[UUID, int] = field(default_factory=dict)
-    reel_batch: dict[UUID, tuple[UUID, int]] = field(default_factory=dict)
     thumbnails: dict[UUID, ThumbnailRecord] = field(default_factory=dict)
     embeddings: dict[EmbeddingKey, EmbeddingRecord] = field(default_factory=dict)
     vectors: dict[EmbeddingKey, tuple[float, ...]] = field(default_factory=dict)
     feedback: dict[UUID, FeedbackRecord] = field(default_factory=dict)
-    policies: dict[str, tuple[NotificationPolicy, ...]] = field(default_factory=dict)
-    batches: dict[UUID, NotificationBatch] = field(default_factory=dict)
-    outbox: dict[UUID, OutboxItem] = field(default_factory=dict)
-    user_state: dict[str, UserNotificationState] = field(default_factory=dict)
 
     def snapshot(self) -> _Tables:
         return _Tables(**{name: dict(getattr(self, name)) for name in vars(self)})
@@ -85,7 +72,6 @@ class _Tables:
     def drop_reel(self, reel_id: UUID) -> None:
         self.reels.pop(reel_id, None)
         self.reel_start_ms.pop(reel_id, None)
-        self.reel_batch.pop(reel_id, None)
         self.thumbnails.pop(reel_id, None)
         for key in [k for k in self.embeddings if k[0] == reel_id]:
             self.embeddings.pop(key)
@@ -98,7 +84,7 @@ class _Tables:
         self.sessions.pop(session_id, None)
         for reel_id in [k for k, r in self.reels.items() if r.session_id == session_id]:
             self.drop_reel(reel_id)
-        for table in (self.events, self.receipts, self.batches, self.outbox):
+        for table in (self.events, self.receipts):
             for key in [k for k, v in table.items() if v.session_id == session_id]:
                 table.pop(key)
 
@@ -316,21 +302,6 @@ class _Reels:
             evaluation_status=record.evaluation_status,
             verdict=record.verdict,
         )
-
-    async def assign_batch(self, reel_id: UUID, batch_id: UUID, position: int) -> None:
-        self._t.reel_batch[reel_id] = (batch_id, position)
-
-    async def list_batch_conflict_ids(self, batch_id: UUID) -> list[UUID]:
-        members = sorted(
-            (position, reel_id)
-            for reel_id, (batch, position) in self._t.reel_batch.items()
-            if batch == batch_id
-        )
-        return [
-            reel_id
-            for _, reel_id in members
-            if self._t.reels[reel_id].verdict is Verdict.CONFLICT
-        ]
 
     async def list_timeline(
         self,
@@ -578,106 +549,6 @@ class _Feedback:
         return sorted(owned, key=lambda f: f.created_at, reverse=True)[:limit]
 
 
-class _Policy:
-    def __init__(self, tables: _Tables) -> None:
-        self._t = tables
-
-    async def get_current(self, owner_id: str) -> NotificationPolicy | None:
-        versions = self._t.policies.get(owner_id, ())
-        return versions[-1] if versions else None
-
-    async def insert_next(
-        self,
-        owner_id: str,
-        *,
-        batch_size: int,
-        minimum_conflicts: int,
-        cooldown_seconds: int,
-        updated_at: datetime,
-    ) -> NotificationPolicy:
-        versions = self._t.policies.get(owner_id, ())
-        policy = NotificationPolicy(
-            version=len(versions) + 1,
-            batch_size=batch_size,
-            minimum_conflicts=minimum_conflicts,
-            cooldown_seconds=cooldown_seconds,
-            updated_at=updated_at,
-        )
-        self._t.policies[owner_id] = (*versions, policy)
-        return policy
-
-    async def delete_all(self, owner_id: str) -> None:
-        self._t.policies.pop(owner_id, None)
-
-
-class _Notifications:
-    def __init__(self, tables: _Tables) -> None:
-        self._t = tables
-
-    async def get_open_batch(self, session_id: UUID) -> NotificationBatch | None:
-        for batch in self._t.batches.values():
-            if batch.session_id == session_id and batch.status is BatchStatus.OPEN:
-                return batch
-        return None
-
-    async def count_batches(self, session_id: UUID) -> int:
-        return sum(b.session_id == session_id for b in self._t.batches.values())
-
-    async def insert_batch(self, batch: NotificationBatch) -> None:
-        self._t.batches[batch.batch_id] = batch
-
-    async def save_batch(self, batch: NotificationBatch) -> None:
-        self._t.batches[batch.batch_id] = batch
-
-    async def list_batches(
-        self, owner_id: str, session_id: UUID
-    ) -> list[NotificationBatch]:
-        owned = [
-            b
-            for b in self._t.batches.values()
-            if b.owner_id == owner_id and b.session_id == session_id
-        ]
-        return sorted(owned, key=lambda b: b.batch_index)
-
-    async def lock_user_state(self, owner_id: str) -> UserNotificationState:
-        state = self._t.user_state.get(owner_id)
-        if state is None:
-            state = UserNotificationState(owner_id=owner_id)
-            self._t.user_state[owner_id] = state
-        return state
-
-    async def set_last_dispatch(self, owner_id: str, at: datetime) -> None:
-        self._t.user_state[owner_id] = UserNotificationState(
-            owner_id=owner_id, last_dispatch_at=at
-        )
-
-    async def insert_outbox(self, item: OutboxItem) -> None:
-        self._t.outbox[item.notification_id] = item
-
-    async def save_outbox(self, item: OutboxItem) -> None:
-        self._t.outbox[item.notification_id] = item
-
-    async def get_outbox(
-        self, owner_id: str, notification_id: UUID
-    ) -> OutboxItem | None:
-        item = self._t.outbox.get(notification_id)
-        if item is None or item.owner_id != owner_id:
-            return None
-        return item
-
-    async def list_outbox(self, owner_id: str) -> list[OutboxItem]:
-        owned = [i for i in self._t.outbox.values() if i.owner_id == owner_id]
-        return sorted(owned, key=lambda i: i.created_at)
-
-    async def list_undelivered(self, owner_id: str) -> list[OutboxItem]:
-        return [i for i in await self.list_outbox(owner_id) if i.status.is_undelivered]
-
-    async def delete_all(self, owner_id: str) -> None:
-        self._t.user_state.pop(owner_id, None)
-        for key in [k for k, i in self._t.outbox.items() if i.owner_id == owner_id]:
-            self._t.outbox.pop(key)
-
-
 class _MemoryTx:
     """Repositories bound to the working copy of the tables."""
 
@@ -688,8 +559,6 @@ class _MemoryTx:
         self.thumbnails = _Thumbnails(tables)
         self.embeddings = _Embeddings(tables)
         self.feedback = _Feedback(tables)
-        self.policy = _Policy(tables)
-        self.notifications = _Notifications(tables)
 
 
 class MemoryStorage:

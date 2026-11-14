@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from judge.contracts.notification import AckStatus
+from judge.contracts.ingest import AckStatus
 from judge.contracts.record import EvaluationStatus
 from judge.contracts.session import (
     SessionEndReason,

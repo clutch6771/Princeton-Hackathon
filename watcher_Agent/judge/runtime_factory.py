@@ -1,7 +1,7 @@
 """Create the runtime with real adapters, selected by configuration.
 
 Production: PostgreSQL (Tiger Data) storage, the SELECT-only values reader
-and the Gemini adapters. Fakes and in-memory storage are wired only when
+and the selected Grok/Gemini adapters. Fakes and in-memory storage are wired only when
 configuration asks for them in development; ``validate_for_startup`` refuses
 them in production, so missing configuration fails clearly instead of
 producing mock judgments.
@@ -27,6 +27,7 @@ from judge.understanding.gemini import (
     GeminiEmbeddingProvider,
     GeminiUnderstandingProvider,
 )
+from judge.understanding.grok import GrokUnderstandingProvider
 from judge.understanding.local_openai import (
     LocalEmbeddingProvider,
     LocalUnderstandingProvider,
@@ -49,7 +50,25 @@ class SyntheticValuesSource:
 
 def _providers(
     settings: Settings, profile: EmbeddingProfile
-) -> tuple[UnderstandingProvider, EmbeddingProvider]:
+) -> tuple[UnderstandingProvider, EmbeddingProvider | None]:
+    if settings.provider_mode is ProviderMode.GROK:
+        if (
+            settings.xai_api_key is None
+            or not settings.xai_api_key.get_secret_value().strip()
+        ):
+            raise ConfigurationError("XAI_API_KEY is required when PROVIDER_MODE=grok")
+        if settings.embedding_indexing_enabled:
+            raise ConfigurationError("Set EMBEDDING_INDEXING_ENABLED=false for Grok")
+        return (
+            GrokUnderstandingProvider(
+                api_key=settings.xai_api_key.get_secret_value(),
+                model_id=settings.grok_model_id,
+                transcription_model=settings.grok_transcription_model,
+                timeout_seconds=settings.provider_timeout_seconds,
+                transcript_max_chars=settings.transcript_max_chars,
+            ),
+            None,
+        )
     if settings.provider_mode is ProviderMode.FAKE:
         logger.warning("PROVIDER_MODE=fake: judgments are synthetic")
         return (
@@ -104,7 +123,9 @@ async def create_runtime(settings: Settings) -> JudgeRuntime:
             indexing = False
         storage = postgres
         source = PostgresMemoryItemSource(
-            postgres.pool, schema=settings.values_store_schema
+            postgres.pool,
+            schema=settings.values_store_schema,
+            layout=settings.values_store_layout,
         )
     clock = SystemClock()
     return build_runtime(

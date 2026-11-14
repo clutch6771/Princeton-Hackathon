@@ -1,6 +1,7 @@
 """Read-only access to the approved values in the shared memory Store.
 
-Logical location: namespace ``(user_id, "memories")``, key ``values.md``.
+Default source: Guardian entries in ``(user_id, "guardian", "values")``.
+The legacy document layout is explicit configuration, never a fallback.
 The Judge never writes there. Missing, invalid, unapproved, deleted or
 over-cap values yield an explicit ``ValuesUnavailable``; nothing is truncated
 and nothing is invented.

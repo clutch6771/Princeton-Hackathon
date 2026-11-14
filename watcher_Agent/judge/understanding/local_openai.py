@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from judge.contracts.storage import EmbeddingProfile
 from judge.contracts.understanding import ModelJudgment
 from judge.errors import EmbeddingDimensionError, ProviderError, ProviderErrorKind
-from judge.understanding.gemini import classify_provider_error
+from judge.understanding.http_transport import request_json
 from judge.understanding.prompt import ImagePart, TextPart, UnderstandingRequest
 
 
@@ -34,26 +34,21 @@ def _content(request: UnderstandingRequest) -> list[dict[str, Any]]:
     return blocks
 
 
-async def _post(client: httpx.AsyncClient, path: str, payload: dict[str, Any]) -> Any:
-    try:
-        response = await client.post(path, json=payload)
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPStatusError as error:
-        error.code = error.response.status_code  # type: ignore[attr-defined]
-        raise classify_provider_error(error) from error
-    except (httpx.HTTPError, ValueError) as error:
-        raise classify_provider_error(error) from error
-
-
 class LocalUnderstandingProvider:
     """Frames-and-text judgment through ``/chat/completions``."""
 
     supports_audio = False
 
-    def __init__(self, *, client: httpx.AsyncClient, model: str) -> None:
+    def __init__(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        model: str,
+        reasoning_effort: str | None = None,
+    ) -> None:
         self._client = client
         self._model = model
+        self._reasoning_effort = reasoning_effort
 
     @property
     def model_id(self) -> str:
@@ -75,7 +70,9 @@ class LocalUnderstandingProvider:
                 },
             },
         }
-        body = await _post(self._client, "/chat/completions", payload)
+        if self._reasoning_effort is not None:
+            payload["reasoning_effort"] = self._reasoning_effort
+        body = await request_json(self._client, "/chat/completions", json=payload)
         try:
             text = body["choices"][0]["message"]["content"]
             return ModelJudgment.model_validate(json.loads(text))
@@ -98,7 +95,7 @@ class LocalEmbeddingProvider:
 
     async def embed(self, text: str) -> tuple[float, ...]:
         payload = {"model": self._profile.model_id, "input": text}
-        body = await _post(self._client, "/embeddings", payload)
+        body = await request_json(self._client, "/embeddings", json=payload)
         try:
             vector = tuple(float(value) for value in body["data"][0]["embedding"])
         except (KeyError, IndexError, TypeError, ValueError) as error:

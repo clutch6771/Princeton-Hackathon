@@ -171,7 +171,7 @@ class ReelCompletion(Contract):
 
 
 class ReelAccountingView(Contract):
-    """The few fields ordered notification accounting needs."""
+    """The fields capture-ordered session accounting needs."""
 
     reel_id: UUID
     order_seq: int

@@ -33,6 +33,7 @@ class JudgeJob:
     observed_end_at: datetime | None
     closed_monotonic: float
     ready_monotonic: float
+    native_transcript: str | None = None
 
     @property
     def reserved_bytes(self) -> int:

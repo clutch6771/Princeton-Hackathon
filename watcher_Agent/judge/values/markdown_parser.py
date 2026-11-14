@@ -45,6 +45,7 @@ _FIELD_BY_KEY: Final = {
     "want less": "want_less",
     "unless": "unless",
     "in my words": "in_my_words",
+    "agreed wording": "in_my_words",
     "evidence": "evidence",
     "approved": "approved_at",
     "status": "status_text",

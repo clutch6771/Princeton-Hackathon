@@ -2,8 +2,7 @@
 
 Storing feedback is storage only: it starts no scheduler, no conversation and
 never edits approved values. Deletion is owner-scoped and removes dependent
-thumbnails, vectors and feedback, cancels warnings that mention deleted reels,
-and clears caches and volatile media.
+thumbnails, vectors and feedback, and clears caches and volatile media.
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ from judge.contracts.storage import ThumbnailRecord, TimelineCursor
 from judge.errors import NotFoundError, ValidationFailure
 from judge.feedback.retriever import FeedbackRetriever
 from judge.ingest.volatile import VolatileSessions
-from judge.notifications.outbox import cancel_for_reels
 from judge.persistence.interfaces import Storage
 from judge.pipeline.judge_pipeline import ValuesGate
 from judge.runtime.clock import Clock
@@ -124,11 +122,8 @@ class DeletionService:
             if reel is None:
                 msg = "reel not found"
                 raise NotFoundError(msg)
-            # Same lock order as completion and dispatch (session row, then
-            # the user's notification state), so deletion cannot deadlock.
+            # Serialize deletion with completion on the session row.
             await tx.sessions.get(reel.session_id, for_update=True)
-            await tx.notifications.lock_user_state(owner_id)
-            await cancel_for_reels(tx, owner_id, [reel_id])
             await tx.reels.delete(owner_id, reel_id)
         self._invalidate(owner_id)
 
@@ -150,8 +145,6 @@ class DeletionService:
         """
         async with self._storage.transaction() as tx:
             await tx.sessions.delete_all(owner_id)
-            await tx.notifications.delete_all(owner_id)
-            await tx.policy.delete_all(owner_id)
         for session_id in self._volatile.owned_by(owner_id):
             self._volatile.drop(session_id)
         self._invalidate(owner_id)

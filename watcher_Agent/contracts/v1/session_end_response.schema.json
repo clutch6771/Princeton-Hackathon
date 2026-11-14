@@ -1,47 +1,5 @@
 {
   "$defs": {
-    "NotificationEnvelope": {
-      "additionalProperties": false,
-      "description": "The ``notify`` object returned at the root of ingest responses.",
-      "properties": {
-        "body": {
-          "title": "Body",
-          "type": "string"
-        },
-        "expires_at": {
-          "format": "date-time",
-          "title": "Expires At",
-          "type": "string"
-        },
-        "notification_id": {
-          "description": "Stable across redelivery.",
-          "format": "uuid",
-          "title": "Notification Id",
-          "type": "string"
-        },
-        "reel_ids": {
-          "items": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "title": "Reel Ids",
-          "type": "array"
-        },
-        "title": {
-          "title": "Title",
-          "type": "string"
-        }
-      },
-      "required": [
-        "title",
-        "body",
-        "reel_ids",
-        "notification_id",
-        "expires_at"
-      ],
-      "title": "NotificationEnvelope",
-      "type": "object"
-    },
     "SessionStatus": {
       "description": "Lifecycle of a capture session.",
       "enum": [
@@ -55,24 +13,13 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Response of ``POST /session/end``. ``notify`` stays at the root.",
+  "description": "Response of ``POST /session/end``.",
   "properties": {
     "contract_version": {
       "const": "1",
       "default": "1",
       "title": "Contract Version",
       "type": "string"
-    },
-    "notify": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/NotificationEnvelope"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
     },
     "session_id": {
       "format": "uuid",

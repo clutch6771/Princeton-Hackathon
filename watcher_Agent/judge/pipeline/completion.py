@@ -1,7 +1,7 @@
 """Commit one terminal outcome per reel, with everything that depends on it.
 
 One transaction holds: the reel outcome, its single thumbnail, the pending
-embedding marker, ordered batch accounting, any resulting outbox item, and
+embedding marker, ordered session counts and
 session completion. Either all of it is stored or none of it is.
 
 Guarantee: exactly one committed judgment per reel. This is not exactly-once
@@ -23,13 +23,8 @@ from judge.contracts.session import (
     SessionStatus,
 )
 from judge.contracts.storage import EmbeddingProfile, ThumbnailRecord
-from judge.notifications.accounting import (
-    AccountingConfig,
-    advance_accounting,
-    close_incomplete_batch,
-)
-from judge.notifications.policy import default_policy
 from judge.persistence.interfaces import Storage, StorageTx
+from judge.pipeline.accounting import advance_accounting
 from judge.runtime.clock import Clock
 
 logger = logging.getLogger(__name__)
@@ -49,7 +44,6 @@ async def complete_session_if_done(
         return False
     if await tx.reels.count_pending(session_id) > 0:
         return False
-    await close_incomplete_batch(tx, session_id, now)
     await tx.sessions.set_status(session_id, SessionStatus.ENDED)
     await tx.sessions.add_event(
         SessionEvent(
@@ -72,7 +66,7 @@ async def complete_session_if_done(
 
 
 class ReelCompletionService:
-    """Stores a reel's single terminal outcome and advances accounting."""
+    """Stores a reel's single terminal outcome and updates session counts."""
 
     def __init__(self, *, settings: Settings, storage: Storage, clock: Clock) -> None:
         self._storage = storage
@@ -80,11 +74,6 @@ class ReelCompletionService:
         self._profile = EmbeddingProfile.from_settings(settings)
         self._index = settings.embedding_indexing_enabled
         self._target_ms = settings.reel_end_to_verdict_target_seconds * _MS
-        self._accounting = AccountingConfig(
-            default_policy=default_policy(settings),
-            notification_ttl_seconds=settings.notification_ttl_seconds,
-            max_dispatch_attempts=settings.notification_max_dispatch_attempts,
-        )
 
     async def complete(
         self,
@@ -107,7 +96,7 @@ class ReelCompletionService:
                 await tx.embeddings.create_pending(
                     completion.reel_id, completion.owner_id, self._profile, now=now
                 )
-            session = await advance_accounting(tx, session, self._accounting, now)
+            session = await advance_accounting(tx, session)
             await complete_session_if_done(tx, session.session_id, now)
             if timings is not None:
                 await self._store_timings(tx, completion.reel_id, timings, started)

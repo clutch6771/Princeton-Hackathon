@@ -27,7 +27,7 @@ from judge.contracts.capture import (
     FrameObservation,
     TimeInterval,
 )
-from judge.contracts.notification import AckStatus, IngestResponse, NotificationEnvelope
+from judge.contracts.ingest import AckStatus, IngestResponse
 from judge.contracts.record import PendingReel
 from judge.contracts.session import (
     IngestKind,
@@ -56,7 +56,6 @@ from judge.ingest.session_state import (
     with_order_seqs,
 )
 from judge.ingest.volatile import VolatileSessions
-from judge.notifications.outbox import NotificationDispatcher
 from judge.persistence.interfaces import Storage, StorageTx
 from judge.pipeline.finalizer import CandidateFinalizer
 from judge.privacy.eligibility import BackendEligibilityGate, GateDecision
@@ -188,7 +187,6 @@ class IngestService:
         decoder: AacDecoder,
         volatile: VolatileSessions,
         budget: MediaBudget,
-        dispatcher: NotificationDispatcher,
         finalizer: CandidateFinalizer,
         process_epoch: UUID,
     ) -> None:
@@ -202,7 +200,6 @@ class IngestService:
         self._decoder = decoder
         self._volatile = volatile
         self._budget = budget
-        self._dispatcher = dispatcher
         self._finalizer = finalizer
         self._epoch = process_epoch
 
@@ -241,12 +238,12 @@ class IngestService:
                 state = await self._admit_session(tx, owner_id, meta, now)
                 result = self._apply_frame(state, meta, jpeg, inspected, reservation)
                 state = await store_pending(tx, result.state, result.closed, now)
-                notify = await self._record(
+                await self._record(
                     tx, owner_id, meta, IngestKind.FRAME, len(jpeg), result.status, now
                 )
         self._volatile.put(state)
         self._budget.release(meta.session_id, sum(f.nbytes for f in result.released))
-        return self._response(meta, result.status, notify)
+        return self._response(meta, result.status)
 
     def _apply_frame(
         self,
@@ -328,12 +325,12 @@ class IngestService:
                 status = result.status
                 if status is AckStatus.ACCEPTED:
                     status = decoded.status
-                notify = await self._record(
+                await self._record(
                     tx, owner_id, meta, IngestKind.AUDIO, byte_length, status, now
                 )
         self._volatile.put(result.state)
         self._budget.release(meta.session_id, result.released_bytes)
-        return self._response(meta, status, notify)
+        return self._response(meta, status)
 
     # --- shared -------------------------------------------------------------
 
@@ -364,16 +361,12 @@ class IngestService:
         if prior.owner_id != owner_id or prior.session_id != meta.session_id:
             msg = "event_id was already used for a different upload"
             raise ValidationFailure(msg)
-        notify = await self._dispatcher.acknowledge_and_dispatch(
-            tx, owner_id, meta.acknowledged_notification_ids, now
-        )
         return IngestResponse(
             event_id=meta.event_id,
             session_id=meta.session_id,
             status=AckStatus.DUPLICATE,
             prior_outcome=prior.outcome,
             admitted_by_current_process=prior.process_epoch == self._epoch,
-            notify=notify,
         )
 
     async def _admit_session(
@@ -420,7 +413,7 @@ class IngestService:
         byte_length: int,
         status: AckStatus,
         now: datetime,
-    ) -> NotificationEnvelope | None:
+    ) -> None:
         if isinstance(meta, FrameObservation):
             start = end = meta.capture_ts_ms
         elif isinstance(meta, AudioChunk):
@@ -444,17 +437,11 @@ class IngestService:
                 process_epoch=self._epoch,
             )
         )
-        return await self._dispatcher.acknowledge_and_dispatch(
-            tx, owner_id, meta.acknowledged_notification_ids, now
-        )
 
     @staticmethod
-    def _response(
-        meta: CaptureEvent, status: AckStatus, notify: NotificationEnvelope | None
-    ) -> IngestResponse:
+    def _response(meta: CaptureEvent, status: AckStatus) -> IngestResponse:
         return IngestResponse(
             event_id=meta.event_id,
             session_id=meta.session_id,
             status=status,
-            notify=notify,
         )

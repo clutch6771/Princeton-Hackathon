@@ -68,6 +68,7 @@ class ProviderMode(StrEnum):
     """Which understanding and embedding adapters are wired."""
 
     GEMINI = "gemini"
+    GROK = "grok"
     LOCAL = "local"
     FAKE = "fake"
 
@@ -93,7 +94,7 @@ class Settings(BaseSettings):
     # --- Modes and identity -------------------------------------------------
     app_env: AppEnv = AppEnv.PRODUCTION
     privacy_mode: PrivacyMode = PrivacyMode.ENFORCE
-    provider_mode: ProviderMode = ProviderMode.GEMINI
+    provider_mode: ProviderMode = ProviderMode.GROK
     storage_mode: StorageMode = StorageMode.POSTGRES
     demo_user_id: str | None = None
     demo_user_header: str = "X-Demo-User-Id"
@@ -101,13 +102,17 @@ class Settings(BaseSettings):
     # --- Secrets (environment or secret store only) -------------------------
     database_url: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
+    xai_api_key: SecretStr | None = None
 
     # --- Shared memory Store (read-only for the Judge) ----------------------
     values_store_schema: str = Field(default="public", pattern=r"^[a-z_][a-z0-9_]*$")
     values_require_approval_metadata: bool = True
+    values_store_layout: Literal["guardian", "document"] = "guardian"
 
     # --- Models -------------------------------------------------------------
     understanding_model_id: str = "gemini-3.5-flash-lite"
+    grok_model_id: str = "grok-4.7"
+    grok_transcription_model: str = "grok-voice-transcribe-2.0"
     understanding_prompt_version: str = "judge-v1"
     embedding_model_id: str = "gemini-embedding-001"
     embedding_dimension: int = Field(default=EMBEDDING_COLUMN_DIMENSION, gt=0)
@@ -127,12 +132,9 @@ class Settings(BaseSettings):
     audio_channels: Literal[1] = 1
     audio_chunk_seconds: float = Field(default=5.0, gt=0)
 
-    # --- PRD defaults: judgment and policy ----------------------------------
+    # --- PRD defaults: judgment ----------------------------------
     max_feedback_examples: int = Field(default=3, ge=0, le=3)
     reel_end_to_verdict_target_seconds: float = Field(default=10.0, gt=0)
-    notification_batch_size: int = Field(default=15, ge=1, le=100)
-    notification_min_conflicts: int = Field(default=3, ge=1)
-    notification_cooldown_seconds: int = Field(default=600, ge=0)
     session_idle_timeout_seconds: int = Field(default=600, gt=0)
 
     # --- Engineering: payload limits ----------------------------------------
@@ -185,10 +187,7 @@ class Settings(BaseSettings):
     embedding_max_attempts: int = Field(default=5, ge=1)
     embedding_retry_base_seconds: float = Field(default=2.0, gt=0)
 
-    # --- Engineering: notifications, values wait, retention -----------------
-    notification_ttl_seconds: int = Field(default=120, gt=0)
-    notification_lease_seconds: int = Field(default=30, gt=0)
-    notification_max_dispatch_attempts: int = Field(default=3, ge=1)
+    # --- Engineering: values wait, retention -----------------
     values_wait_seconds: float = Field(default=20.0, ge=0)
     values_poll_seconds: float = Field(default=5.0, gt=0)
     values_cache_ttl_seconds: float = Field(default=5.0, ge=0)
@@ -198,10 +197,7 @@ class Settings(BaseSettings):
     api_requests_per_minute: int = Field(default=120, gt=0)
 
     @model_validator(mode="after")
-    def _check_policy_bounds(self) -> Self:
-        if self.notification_min_conflicts > self.notification_batch_size:
-            msg = "NOTIFICATION_MIN_CONFLICTS must be <= NOTIFICATION_BATCH_SIZE"
-            raise ValueError(msg)
+    def _check_bounds(self) -> Self:
         if self.final_audio_wait_seconds >= self.job_deadline_seconds:
             msg = "FINAL_AUDIO_WAIT_SECONDS must be < JOB_DEADLINE_SECONDS"
             raise ValueError(msg)
@@ -251,6 +247,15 @@ def _production_problems(settings: Settings) -> list[str]:
 
 def _provider_problems(settings: Settings) -> list[str]:
     problems: list[str] = []
+    if settings.provider_mode is ProviderMode.GROK:
+        if settings.xai_api_key is None or _is_blank(
+            settings.xai_api_key.get_secret_value()
+        ):
+            problems.append("XAI_API_KEY is required when PROVIDER_MODE=grok")
+        if settings.embedding_indexing_enabled:
+            problems.append(
+                "Set EMBEDDING_INDEXING_ENABLED=false for Grok; no Gemini key is needed"
+            )
     if settings.provider_mode is ProviderMode.GEMINI and (
         settings.gemini_api_key is None
         or _is_blank(settings.gemini_api_key.get_secret_value())

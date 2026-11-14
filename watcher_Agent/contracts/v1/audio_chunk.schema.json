@@ -119,16 +119,6 @@
   "additionalProperties": false,
   "description": "Metadata for one app-audio chunk: 16 kHz mono AAC, nominally 5 seconds.",
   "properties": {
-    "acknowledged_notification_ids": {
-      "default": [],
-      "items": {
-        "format": "uuid",
-        "type": "string"
-      },
-      "maxItems": 16,
-      "title": "Acknowledged Notification Ids",
-      "type": "array"
-    },
     "capture_end_ms": {
       "exclusiveMinimum": 0,
       "title": "Capture End Ms",

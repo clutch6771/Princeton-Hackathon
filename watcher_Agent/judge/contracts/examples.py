@@ -37,12 +37,7 @@ from judge.contracts.feedback import (
     FeedbackRequest,
     RetrievalMode,
 )
-from judge.contracts.notification import (
-    AckStatus,
-    IngestResponse,
-    NotificationEnvelope,
-    NotificationPolicyUpdate,
-)
+from judge.contracts.ingest import AckStatus, IngestResponse
 from judge.contracts.record import (
     EmbeddingInfo,
     EmbeddingStatus,
@@ -185,16 +180,6 @@ def _coverage() -> CoverageMetadata:
     )
 
 
-def _envelope() -> NotificationEnvelope:
-    return NotificationEnvelope(
-        title="A check-in on your feed",
-        body="3 of your last 15 reels went against what you told me you wanted.",
-        reel_ids=(_REEL_A, _REEL_B, _REEL_C),
-        notification_id=_NOTIFICATION_ID,
-        expires_at=datetime(2026, 11, 14, 12, 2, 0, tzinfo=UTC),
-    )
-
-
 def _judged_record() -> ReelRecord:
     return ReelRecord(
         id=_REEL_A,
@@ -325,7 +310,6 @@ def build_examples() -> dict[str, BaseModel]:
         ),
         "session_end_request.json": SessionEndRequest(
             session_id=EXAMPLE_SESSION_ID,
-            acknowledged_notification_ids=(_NOTIFICATION_ID,),
         ),
         "feedback_request.json": FeedbackRequest(
             reel_id=_REEL_A,
@@ -352,15 +336,6 @@ def build_examples() -> dict[str, BaseModel]:
             event_id=UUID("aaaaaaa1-0000-4000-8000-000000000001"),
             session_id=EXAMPLE_SESSION_ID,
             status=AckStatus.ACCEPTED,
-        ),
-        "ingest_response_with_notify.json": IngestResponse(
-            event_id=UUID("aaaaaaa1-0000-4000-8000-000000000008"),
-            session_id=EXAMPLE_SESSION_ID,
-            status=AckStatus.ACCEPTED,
-            notify=_envelope(),
-        ),
-        "notification_policy_update.json": NotificationPolicyUpdate(
-            batch_size=15, minimum_conflicts=3, cooldown_seconds=600
         ),
         "reel_understanding_result.json": ReelUnderstandingResult(
             transcript="Keep your chest up and push the floor away.",

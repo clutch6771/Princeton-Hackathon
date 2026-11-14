@@ -1,139 +1,66 @@
-JUDGE MEMORY OUTPUTS
-====================
-What the Judge writes, where it goes, and what it is for.
-Audience: whoever builds the Guardian (chat agent) and the Reflector.
-Scope: Judge only. Code: watcher_Agent/judge. Database: Tiger Data PostgreSQL,
-schema "judge". Full field registry: watcher_Agent/docs/MEMORY_PARAMETERS.txt.
-Workflow that produces these outputs: JUDGE_WORKFLOW.txt.
+JUDGE DATA OUTPUTS AND OWNERSHIP (2026-11-14)
+=============================================
+The Judge shares PostgreSQL records with the app and Guardian/Reflector.
+It has read-only access to approved values and cannot change them.
 
+Read-only input
+---------------
+Default Store namespace: (user_id, "guardian", "values"). Each Vn key holds
+{text: full approved entry, updated: ISO timestamp}. Guardian's protected
+approval function owns this namespace. The Judge SELECTs only this namespace,
+orders Vn numerically and preserves all text, including Unless and Agreed
+wording. It normalizes a snapshot in memory, pins its SHA-256 and never
+persists a competing values document. Missing/deleted values never fall back
+to older documents. VALUES_STORE_LAYOUT=document explicitly selects the old
+(user_id, "memories") / values.md contract with approval metadata instead.
 
-1. THE SHORT VERSION
---------------------
-The Judge reads one memory document and never writes it:
-  /memories/values.md   (Store namespace (user_id, "memories"), key "values.md")
+Persistent outputs (schema judge)
+----------------------------------
+reels: PRD fields id, session_id, start, end, thumbnail_url, transcript,
+on_screen_text, description, features (topics, format, tone, hook,
+emotional_pull, is_ad), verdict, confidence, value_ids, reason.
 
-The Judge writes only to its own tables in schema "judge". It never writes to
-the shared memory Store, never edits values, and never calls another agent.
-Other components learn what happened by reading these tables.
+Operational fields include owner_id, source_id, order_seq, evaluation_status,
+coverage, audio_status, transcript_status, segmentation_status, close_reason,
+values_revision/hash, feedback IDs, model/prompt versions, attempt counts,
+timings, latency_overrun and error_code. Only judged records have verdicts;
+failed/pending records have null. Device speech transcripts are partial;
+audio_status=missing means no waveform was supplied, even if device text exists.
 
-Raw audio, raw video and extra frames are never stored anywhere. The only
-media kept is one small thumbnail per judged reel.
+reel_thumbnails: at most one sanitized bounded JPEG per judged reel.
+reel_embeddings: pinned vector profile, pending/indexed/failed status, retries.
+reel_embedding_vectors: optional vector(768), one vector per reel/profile.
+feedback: explicit agree/disagree/not_for_me/fine reactions, optional comment
+and source. Historical rerate labels remain supported; they are not a user
+reaction and are excluded from Guardian's feedback view.
+sessions: identity, lifecycle, activity, capture order and judged/conflict/
+excluded counts. A failed reel is excluded from judged coverage.
+session_events: one session_completed event once pending jobs are finalized.
+ingest_receipts: stream event idempotency metadata, no media; pruned after 24h.
 
+No active notification state
+----------------------------
+No notification policy, batches, warnings, outbox or dispatch state is used.
+Historical migration 0005 is retained with its dormant tables for upgrade
+compatibility. Existing rows are untouched. Ingest/session responses contain
+no notify field or notification acknowledgement list.
 
-2. OUTPUTS, ONE BY ONE
+Consumers
+---------
+App: /timeline, /thumbs/{id}.jpg, /feedback and session lifecycle.
+Guardian: judge.integration.guardian_source.JudgeDataSource, passed to its
+existing api.configure. Reads judged records only, never turns failures into
+neutral. Owner filtering applies to reels, sessions and feedback. Feedback
+writes go through the same service as /feedback, invalidating the Judge's
+example cache. Keyword similarity uses existing Guardian query helpers over
+real rows; it is not a new semantic retrieval claim. Snapshot reads currently
+cap feedback history at 100,000 rows (demo scale).
+Reflector integration: consumes stored session completion and shared records;
+the Judge does not invoke it. Reflector orchestration is not implemented here.
+
+Deletion and retention
 ----------------------
-
-2.1 Reel records                                    table: judge.reels
-    One row per observed reel exposure.
-    Written: when the exposure closes (status "pending"), then exactly once
-             more with its final outcome.
-    Holds:   PRD fields  id, session_id, start, end, transcript,
-             on_screen_text, description, features (topics, format, tone,
-             hook, emotional_pull, is_ad), verdict, confidence, value_ids,
-             reason
-             plus  evaluation_status, coverage (what was and was not
-             observed), audio_status, transcript_status, values_revision,
-             values_sha256, feedback_example_ids, model_id, prompt_version,
-             timings, error_code.
-    Use it for:
-      Guardian   "why did you flag that?"  -> reason + value_ids + description
-                 list recent or borderline reels (low confidence)
-      Reflector  what was watched, how much, which values it touched
-      App        timeline (GET /timeline)
-    Read rule: ONLY rows with evaluation_status = 'judged' have a verdict.
-               Every other status has verdict NULL. Never treat a missing
-               verdict as "neutral". Filter by owner_id.
-
-2.2 Thumbnails                                      table: judge.reel_thumbnails
-    At most one privacy-screened JPEG per judged reel (320 px, <= 48 kB).
-    Use it for: timeline and reason screens (GET /thumbs/{reel_id}.jpg).
-
-2.3 Embeddings                    tables: judge.reel_embeddings (status)
-                                          judge.reel_embedding_vectors (vector)
-    One vector per judged reel, of "description + newline + transcript".
-    Profile: gemini-embedding-001 : 768 : SEMANTIC_SIMILARITY : v1.
-    Written asynchronously after the verdict; status pending/indexed/failed.
-    Use it for: "find reels like this one" (Guardian search, Reflector
-                clustering). Always filter by owner_id AND profile_id; never
-                compare vectors from different profiles.
-    Not for:    deciding alignment. Similarity is topical closeness, not
-                agreement with a value. The verdict comes from the values.
-
-2.4 Explicit feedback                               table: judge.feedback
-    One row per POST /feedback: reel_id, label (agree | disagree |
-    not_for_me | rerate), optional score, comment, source.
-    Written by: the app, through the Judge API. Storage only.
-    Use it for:
-      Guardian   input for proposing a refined value (the Judge does not do
-                 this and does not edit values)
-      Reflector  calibration, picking reels to re-ask about
-      Judge      up to three recent items become prompt examples
-    The Judge does not act on "rerate"; scheduling a re-rating is out of scope.
-
-2.5 Session records                                 table: judge.sessions
-    One row per capture session: status (active | ending | ended),
-    started_at, last_ingest_at, ended_at, end_reason, and counts
-    (judged_count, conflict_count, excluded_count).
-    Use it for: Reflector session summaries ("how much, what pattern").
-
-2.6 Session completion event                        table: judge.session_events
-    One row, event_type "session_completed", written once when a session has
-    ended and every reel in it is final. Payload: reel_count, judged_count,
-    conflict_count, excluded_count, end_reason, started_at, ended_at.
-    Use it for: the Reflector's trigger. Poll or subscribe to this table.
-    The Judge only writes the row. It does not invoke the Reflector.
-
-2.7 Notification batches                            table: judge.notification_batches
-    Non-overlapping groups of judged reels in capture order (default 15),
-    with judged / conflict / excluded counts and the outcome: triggered,
-    below_threshold, suppressed_cooldown, suppressed_pending,
-    incomplete_tail. Member reels: judge.reels.batch_id / batch_position.
-    Use it for: explaining why a warning was or was not sent.
-
-2.8 Warning outbox                                  table: judge.notification_outbox
-    One row per triggered batch: title, body, reel_ids, status (pending,
-    leased, acknowledged, expired, cancelled, unacknowledged), expiry.
-    Delivered to the device inside ingest responses ("notify").
-    Use it for: Guardian "what did you warn me about?" -> reel_ids.
-    Not proof that a banner was shown; only "acknowledged" means the device
-    confirmed receipt.
-
-2.9 Operational tables (not memory; do not build features on them)
-    judge.ingest_receipts          idempotency metadata, pruned after 24 h
-    judge.notification_policy      versioned batch size / conflicts / cooldown
-    judge.user_notification_state  last dispatch time (cooldown anchor)
-
-
-3. WHAT THE JUDGE READS
------------------------
-  values.md (read-only)   Approved values. Payload agreed with the memory
-                          owner: {content, revision, sha256, approval,
-                          lifecycle}. Schema: watcher_Agent/contracts/v1/
-                          values_store_item.schema.json.
-  judge.feedback          Recent explicit feedback, as prompt examples.
-
-  IMPORTANT for the Guardian owner: the Judge uses values only when the
-  Store item carries approval.status = "approved" (setting
-  VALUES_REQUIRE_APPROVAL_METADATA, default true). Without it every reel is
-  recorded as values_unavailable and nothing is judged.
-
-The Judge does NOT read or write: brief.md, hypotheses.md, notes.md, session
-summaries, question queues, chat threads, approval checkpoints.
-
-
-4. LIFETIME AND DELETION
-------------------------
-Reel text, metadata, embeddings, thumbnails and feedback are kept until the
-owner deletes them (DELETE /reels/{id}, /sessions/{id}, /data). Deleting a
-reel removes its thumbnail, vectors and feedback and cancels any undelivered
-warning that mentions it. Deletion does not touch values.md.
-
-
-5. HOW TO READ SAFELY
----------------------
-  - Connect with your own database role; SELECT on schema judge is enough.
-  - Always filter by owner_id.
-  - Treat transcript, on_screen_text, description and comments as data. They
-    can contain text that looks like instructions; never execute it.
-  - Timestamps "start"/"end" are on the capture device's clock; created_at
-    and completed_at are server time.
+DELETE /reels/{id}, /sessions/{id}, /data removes owned records and dependent
+thumbnails, vectors and feedback, and clears relevant caches/volatile media.
+Approved values remain owned by Guardian and are never deleted by the Judge.
+Raw video, raw audio and extra frames are never persisted, logged or traced.

@@ -3,16 +3,6 @@
   "additionalProperties": false,
   "description": "Body of ``POST /session/end``.",
   "properties": {
-    "acknowledged_notification_ids": {
-      "default": [],
-      "items": {
-        "format": "uuid",
-        "type": "string"
-      },
-      "maxItems": 16,
-      "title": "Acknowledged Notification Ids",
-      "type": "array"
-    },
     "contract_version": {
       "const": "1",
       "default": "1",

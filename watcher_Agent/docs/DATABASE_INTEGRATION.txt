@@ -51,8 +51,10 @@ has no checkpointer.
 
 7. The PostgreSQL memory adapter
    "setup-store" creates the LangGraph Store tables (owner role). The memory
-   owner (Guardian) writes namespace (user_id, "memories"), key "values.md"
-   with payload {content, revision, sha256, approval, lifecycle}.
+   owner (Guardian) writes namespace (user_id, "guardian", "values"),
+   one Vn key with {text, updated} per approved value.
+   VALUES_STORE_LAYOUT=guardian is the default. Select document explicitly
+   only for the legacy (user_id, "memories")/values.md deployment; no fallback.
    The Judge reads it with one parameterized SELECT
    (judge/values/postgres_source.py). It does not use AsyncPostgresStore.aget
    because that statement includes a TTL-refresh UPDATE, which PostgreSQL
@@ -63,12 +65,12 @@ has no checkpointer.
        .venv/bin/python watcher_Agent/scripts/seed_dev_values.py
 
 9. Start the API and workers (one process)
-     .venv/bin/uvicorn judge.api.app_api:create_app --factory \
+     .venv/bin/python -m uvicorn judge.api.app_api:create_app --factory \
          --app-dir watcher_Agent --host 0.0.0.0 --port 8000 --workers 1
    Workers and the maintenance tick run inside this process. Check
    GET /readyz. Use exactly one worker: media buffers are in process memory.
 
-10. Inspect records, vectors, batches and outbox
+10. Inspect records, vectors and session completion
      SELECT order_seq, evaluation_status, verdict, value_ids, reason
        FROM judge.reels WHERE owner_id = 'demo-user' ORDER BY start_ms DESC;
      SELECT reel_id, status, attempts FROM judge.reel_embeddings;
@@ -77,9 +79,6 @@ has no checkpointer.
        FROM judge.reel_embedding_vectors
        WHERE profile_id = 'gemini-embedding-001:768:SEMANTIC_SIMILARITY:v1'
        ORDER BY distance LIMIT 5;
-     SELECT batch_index, judged_count, conflict_count, excluded_count, outcome
-       FROM judge.notification_batches ORDER BY opened_at;
-     SELECT status, dispatch_attempts, expires_at FROM judge.notification_outbox;
      SELECT event_type, payload FROM judge.session_events;
 
 11. Deletion and rollback
@@ -95,3 +94,9 @@ has no checkpointer.
    The tests rebuild schema "judge" in that database and create a role
    judge_runtime_test. Use a disposable database. Without TEST_DATABASE_URL
    they skip with a stated reason; without pgvector the vector tests skip.
+
+Migration compatibility: never edit already applied migrations 0001-0005.
+0005 notification tables/columns are dormant and preserved; runtime has no
+notification repository. 0006 adds fine to the feedback label constraint.
+Its rollback intentionally fails if fine rows exist: migrate/export those
+explicit user responses before downgrading; they are never silently relabeled.

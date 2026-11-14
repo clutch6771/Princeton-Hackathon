@@ -13,11 +13,6 @@ from judge.contracts.candidate import (
     SegmentationStatus,
 )
 from judge.contracts.feedback import FeedbackLabel, FeedbackRecord, RetrievalMode
-from judge.contracts.notification import (
-    BatchStatus,
-    NotificationBatch,
-    OutboxItem,
-)
 from judge.contracts.record import EvaluationStatus, PendingReel, ReelCompletion
 from judge.contracts.session import (
     IngestKind,
@@ -200,38 +195,6 @@ def make_feedback(pending: PendingReel, **overrides: Any) -> FeedbackRecord:
         "created_at": NOW,
     }
     return FeedbackRecord(**{**base, **overrides})
-
-
-def make_batch(session: SessionRecord, **overrides: Any) -> NotificationBatch:
-    base: dict[str, Any] = {
-        "batch_id": uuid4(),
-        "owner_id": session.owner_id,
-        "session_id": session.session_id,
-        "batch_index": 1,
-        "policy_version": 0,
-        "batch_size": 15,
-        "minimum_conflicts": 3,
-        "cooldown_seconds": 600,
-        "status": BatchStatus.OPEN,
-        "opened_at": NOW,
-    }
-    return NotificationBatch(**{**base, **overrides})
-
-
-def make_outbox(batch: NotificationBatch, **overrides: Any) -> OutboxItem:
-    base: dict[str, Any] = {
-        "notification_id": uuid4(),
-        "owner_id": batch.owner_id,
-        "session_id": batch.session_id,
-        "batch_id": batch.batch_id,
-        "title": "A check-in on your feed",
-        "body": "3 of your last 15 reels went against what you told me you wanted.",
-        "reel_ids": (uuid4(), uuid4(), uuid4()),
-        "cooldown_seconds": 600,
-        "created_at": NOW,
-        "expires_at": at(120),
-    }
-    return OutboxItem(**{**base, **overrides})
 
 
 def make_session_event(session: SessionRecord) -> SessionEvent:

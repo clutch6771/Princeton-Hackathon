@@ -18,7 +18,6 @@ from pydantic import Field, model_validator
 
 from judge.contracts.base import CONTRACT_VERSION, Contract, ContractVersion
 
-MAX_ACKS_PER_REQUEST = 16
 MAX_INTERVALS_PER_CHUNK = 16
 
 
@@ -100,9 +99,6 @@ class CaptureEvent(Contract):
     source_id: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9._:-]+$")
     source_seq: int = Field(ge=0)
     privacy: PrivacyProvenance
-    acknowledged_notification_ids: tuple[UUID, ...] = Field(
-        default=(), max_length=MAX_ACKS_PER_REQUEST
-    )
 
 
 class FrameObservation(CaptureEvent):

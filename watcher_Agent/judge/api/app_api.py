@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from judge import __version__
 from judge.api.deps import DemoHeaderResolver, describe_validation
+from judge.api.native_api import router as native_router
 from judge.api.routes_api import router
 from judge.bootstrap import JudgeRuntime
 from judge.config import Settings, load_settings, validate_for_startup
@@ -30,8 +31,9 @@ _DESCRIPTION = """\
 Judge backend of the Values-Aligned Attention Companion.
 
 Receives sampled JPEG frames and app-audio chunks, judges each observed reel
-against the user's approved values, and returns batched warnings through
-ingest responses. Raw media is held in volatile memory only.
+against the user's approved values, and stores verdicts for the app and
+Guardian. Capture and notifications belong to the native app. Raw media is
+held in volatile memory only.
 
 Identity: every request must carry the `X-Demo-User-Id` header equal to the
 one configured demo identity.
@@ -91,7 +93,10 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        from judge.integration.guardian_source import JudgeDataSource
+
         if runtime is not None:
+            app.state.guardian_datasource = JudgeDataSource(runtime)
             yield
             return
         from judge.runtime_factory import create_runtime
@@ -100,6 +105,7 @@ def create_app(
         created = await create_runtime(config)
         app.state.runtime = created
         await created.start(run_ticker=True)
+        app.state.guardian_datasource = JudgeDataSource(created)
         logger.info("judge runtime started (single process required)")
         try:
             yield
@@ -121,4 +127,5 @@ def create_app(
     app.add_exception_handler(ValidationError, _model_validation)
     app.add_exception_handler(Exception, _unexpected)
     app.include_router(router)
+    app.include_router(native_router)
     return app

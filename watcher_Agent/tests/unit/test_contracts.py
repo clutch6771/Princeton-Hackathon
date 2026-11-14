@@ -15,13 +15,7 @@ from judge.contracts.base import CONTRACT_VERSION
 from judge.contracts.candidate import AudioStatus, CloseReason, SegmentationStatus
 from judge.contracts.capture import AudioChunk, FrameObservation, TimeInterval
 from judge.contracts.feedback import FeedbackExample, FeedbackRequest
-from judge.contracts.notification import (
-    AckStatus,
-    IngestResponse,
-    NotificationEnvelope,
-    NotificationPolicy,
-    NotificationPolicyUpdate,
-)
+from judge.contracts.ingest import IngestResponse
 from judge.contracts.record import (
     EvaluationStatus,
     ReelCompletion,
@@ -55,8 +49,6 @@ FIXTURE_MODELS: dict[str, type[BaseModel]] = {
     "feedback_request.json": FeedbackRequest,
     "feedback_example.json": FeedbackExample,
     "ingest_response_no_notify.json": IngestResponse,
-    "ingest_response_with_notify.json": IngestResponse,
-    "notification_policy_update.json": NotificationPolicyUpdate,
     "reel_understanding_result.json": ReelUnderstandingResult,
     "reel_record_judged.json": ReelRecord,
     "reel_record_values_unavailable.json": ReelRecord,
@@ -98,7 +90,6 @@ def test_schema_export_covers_every_required_contract() -> None:
         "feedback_example.schema.json",
         "reel_understanding_result.schema.json",
         "reel_record.schema.json",
-        "notification_envelope.schema.json",
     } <= names
 
 
@@ -320,59 +311,6 @@ def test_failed_completion_has_null_verdict_not_neutral() -> None:
 def test_evaluation_status_terminal_flags() -> None:
     assert EvaluationStatus.PENDING.is_terminal is False
     assert all(s.is_terminal for s in EvaluationStatus if s is not s.PENDING)
-
-
-@pytest.mark.parametrize(
-    ("batch_size", "minimum_conflicts"), [(15, 16), (15, 0), (0, 0), (5, 6)]
-)
-def test_policy_requires_one_to_batch_size_conflicts(
-    batch_size: int, minimum_conflicts: int
-) -> None:
-    with pytest.raises(ValidationError):
-        NotificationPolicyUpdate(
-            contract_version="1",
-            batch_size=batch_size,
-            minimum_conflicts=minimum_conflicts,
-            cooldown_seconds=600,
-        )
-    with pytest.raises(ValidationError):
-        NotificationPolicy(
-            version=1,
-            batch_size=batch_size,
-            minimum_conflicts=minimum_conflicts,
-            cooldown_seconds=600,
-        )
-
-
-def test_ingest_response_keeps_notify_at_the_response_root() -> None:
-    event_id, session_id = uuid4(), uuid4()
-
-    silent = IngestResponse(
-        event_id=event_id, session_id=session_id, status=AckStatus.ACCEPTED
-    ).model_dump(mode="json")
-    envelope = NotificationEnvelope(
-        title="A check-in on your feed",
-        body="3 of your last 15 reels went against what you told me you wanted.",
-        reel_ids=(uuid4(), uuid4(), uuid4()),
-        notification_id=uuid4(),
-        expires_at=datetime(2026, 11, 14, 12, 2, tzinfo=UTC),
-    )
-    loud = IngestResponse(
-        event_id=event_id,
-        session_id=session_id,
-        status=AckStatus.ACCEPTED,
-        notify=envelope,
-    ).model_dump(mode="json")
-
-    assert "notify" in silent and silent["notify"] is None
-    assert set(loud["notify"]) == {
-        "title",
-        "body",
-        "reel_ids",
-        "notification_id",
-        "expires_at",
-    }
-    assert "data" not in loud and "success" not in loud
 
 
 def _entry(value_id: str, status: ValueStatus) -> ValueEntry:

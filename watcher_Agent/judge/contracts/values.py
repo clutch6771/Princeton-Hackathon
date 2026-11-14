@@ -1,8 +1,9 @@
 """Approved values: the Judge's only semantic memory, read-only.
 
-The authoritative representation is one item in the shared memory Store:
-namespace ``(user_id, "memories")``, key ``values.md``. ``ValuesStoreItem`` is
-the payload agreed with the memory owner. ``ApprovedValuesSnapshot`` is the
+The default source is Guardian's protected per-value records.
+``ValuesStoreItem`` normalizes them in memory and also supports the explicit
+legacy document layout in ``(user_id, "memories")``, key ``values.md``.
+``ApprovedValuesSnapshot`` is the
 immutable, parsed view pinned to each judgment.
 """
 

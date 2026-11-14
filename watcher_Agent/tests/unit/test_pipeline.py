@@ -10,7 +10,7 @@ import pytest
 
 from judge.contracts.candidate import AudioStatus, CloseReason, SegmentationStatus
 from judge.contracts.feedback import RetrievalMode
-from judge.contracts.notification import AckStatus
+from judge.contracts.ingest import AckStatus
 from judge.contracts.record import EmbeddingStatus, EvaluationStatus
 from judge.contracts.understanding import ModelJudgment, TranscriptStatus, Verdict
 from judge.contracts.values import (
@@ -424,15 +424,12 @@ async def test_injected_instructions_in_model_output_change_nothing(
         )
 
     h.script = injected
-    policy_before = await h.runtime.policy.get(h.owner)
     await h.play_feed(["conflict"])
 
     record = (await h.reels())[0]
     assert record.on_screen_text == hostile
     assert record.verdict is Verdict.CONFLICT
-    assert await h.runtime.policy.get(h.owner) == policy_before
     assert h.values.result == snapshot()
-    assert h.runtime.settings.notification_batch_size == 15
 
 
 @pytest.mark.parametrize("failure", ["none", "provider", "validation"])

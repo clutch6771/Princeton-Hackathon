@@ -1,144 +1,61 @@
-JUDGE WORKFLOW
-==============
-How the Judge turns uploaded frames and audio into stored, value-relative
-verdicts and batched warnings. Code: watcher_Agent/judge.
-What it writes and who reads it: JUDGE_MEMORY_OUTPUTS.txt.
+JUDGE EXECUTION FLOW (2026-11-14)
+=================================
+Input comes from native capture; the Judge never captures a screen or audio.
+Output is a persisted verdict with reasons; the Judge never sends a warning.
 
-The Judge analyses the exposure it observed (sampled frames and the audio it
-was allowed to keep). It does not claim to have watched the whole video.
+1. Admit external evidence and authenticate the demo user.
+   Stream: /ingest/frame and /ingest/audio validate metadata, cap body/media
+   sizes and screen privacy provenance before provider use. Receipts give
+   idempotency; capture clocks align independently of the server clock.
+   Completed reel: /agent1/ingest accepts the current Swift payload, gates its
+   provenance, validates JPEG bytes and uses session + reel_index as stable
+   identity. Native boundaries are preserved; no second segmentation pass.
 
+2. Prepare one exposure, in RAM only.
+   Stream path segments frames using whole-frame changes plus supporting
+   evidence, aligns permitted PCM intervals and waits a bounded final-audio
+   deadline. Select up to 3 frames and assemble a WAV clip.
+   Completed-reel path uses its one sampled frame and optional native speech
+   transcript. Its raw audio is missing; transcript coverage remains partial.
+   Both paths enqueue the same JudgeJob. Queue and media memory are bounded.
 
-OVERVIEW
---------
-  device adapter                      Judge backend (one process)
-  --------------                      ---------------------------
-  JPEG every 2 s   -> POST /ingest/frame -+
-  AAC chunk ~5 s   -> POST /ingest/audio -+-> 1 admit   2 privacy gate
-                                              3 segment 4 finalize candidate
-  response: ack + notify|null  <------------- 11 dispatch
-                                              5 assemble audio (worker)
-                                              6 load approved values + examples
-                                              7 ONE Gemini call: transcribe,
-                                                describe, judge
-                                              8 validate + persist (one outcome)
-                                              9 embed (async, separate)
-                                              10 ordered batch accounting
-  POST /session/end  ------------------------> 12 end session, flush tail
+3. Read approved values, pin their content hash and revision.
+   Default: Guardian's protected (user_id, guardian, values) Store namespace.
+   Explicit document compatibility: (user_id, memories), key values.md.
+   Never infer values from stated_goals, sensitivity, captions or behaviour.
+   Unavailable/invalid values are a distinct failure, not neutral.
 
-Requests return promptly. Steps 5 to 10 run in a bounded worker queue.
-A maintenance tick (every 0.5 s) drives everything that depends on time.
+4. Retrieve at most 3 recent explicit feedback examples for this revision.
+   This is a labeled recency fallback, not semantic nearest-neighbour lookup.
 
+5. Make one joint understanding/judgment call on the normal path.
+   Grok receives frames and approved values/examples. Supplied waveforms go
+   first to xAI STT; their speech text is untrusted input to Grok. Thus Grok
+   audio uses two HTTP requests (one judgment). Gemini can perform the joint
+   multimodal call. Native transcripts skip STT. No model tools, capture,
+   notification decision or repair call. Bounded provider retries remain.
+   Treat visible text and speech as untrusted evidence, never instructions.
 
-STEP BY STEP
-------------
-1. Admit            judge/ingest/service.py, judge/api/deps.py
-   Check the demo identity, size limits (400 kB request) and the metadata
-   contract. First valid upload creates the session from the client's UUID
-   and binds one capture source. Duplicate event_id -> "duplicate", no work.
-   A second source or an ended session -> 409.
-   An acknowledgment means "admitted to in-memory processing", not stored.
+6. Validate value IDs, finite confidence, reason, features and evidence.
+   Without audio, model-invented speech is rejected. Native transcript text
+   is retained verbatim as partial, distinct from missing waveform coverage.
+   Failed judgments have verdict=null with an explicit evaluation_status.
 
-2. Privacy gate     judge/privacy/eligibility.py
-   Keep media only if the native gate says: eligible, Instagram Reels.
-   Anything else is dropped at once ("privacy_excluded") and closes the
-   current reel. Audio is kept only inside natively certified intervals;
-   uncertified chunks are not even decoded. No media reaches a model here.
+7. Atomically persist one terminal outcome, one sanitized thumbnail, optional
+   embedding work and session counts. The capture-order cursor counts each
+   finalized reel once and tolerates deleted sequence gaps. No batching,
+   cooldown, notification text, outbox or delivery exists in this transaction.
+   Release volatile media on success, failure, overload and shutdown.
 
-3. Segment          judge/segmentation, judge/ingest/session_state.py
-   A new reel needs a sharp whole-frame change PLUS evidence: a native
-   transition hint, a change of the overlay text layout, or a frame gap
-   over 8 s. A frame change alone is treated as a cut inside the same reel.
-   Also closes on: left the feed, 90 s cap, session end.
+8. Embed stored description + transcript asynchronously, with bounded retries.
+   The app reads /timeline and /thumbs. Guardian reads the same real records
+   through JudgeDataSource; feedback writes use the shared FeedbackService.
 
-4. Finalize         judge/pipeline/finalizer.py
-   On close, a "pending" reel row is stored with its capture-order number.
-   The candidate then waits for its last permitted audio: until the audio
-   watermark passes its window, or 6 s, whichever is first. No request is
-   held open for this.
+9. End the session explicitly (/session/end) or after 600 idle seconds.
+   Flush the stream tail, finish pending jobs, write one session_completed
+   event with counts. No direct Guardian/Reflector call. Backend integration
+   consumes that event. Restart loss and stuck jobs are explicit outcomes.
 
-5. Assemble audio   judge/audio, judge/transcriber/prepare.py
-   Each AAC chunk was decoded on its own. PCM is cut by capture timestamps
-   to the reel's window and joined into one in-memory WAV. The uncertain
-   interval between two reels (up to 2 s) goes to neither reel.
-
-6. Load context     judge/values/reader.py, judge/feedback/retriever.py
-   Read one immutable snapshot of approved values (read-only) and up to
-   three recent explicit feedback examples. Values missing, invalid,
-   unapproved, deleted or over the size cap -> wait at most 20 s, then the
-   reel is recorded as values_unavailable. Never neutral, never truncated.
-
-7. Understand       judge/understanding
-   One Gemini call with 1-3 frames, the audio clip, the values and the
-   examples. It returns transcript, on-screen text, description, features,
-   verdict (aligned | neutral | conflict), confidence, value ids, reason.
-   No separate speech-recognition call, no repair call. One retry only for
-   timeouts, 429 and 5xx. Values, feedback, captions and speech are data,
-   wrapped in nonce delimiters; the model has no tools.
-
-8. Validate, persist judge/understanding/validation.py, judge/pipeline/completion.py
-   Check value ids against the pinned snapshot, confidence range, reason,
-   and that the transcript matches the audio evidence. Then commit, in one
-   transaction: the outcome, the single thumbnail, the pending-embedding
-   marker, batch accounting and any warning.
-
-9. Embed            judge/embedding/indexer.py
-   Separately and later: one embedding of description + transcript. A
-   failure retries from stored text and never affects the verdict.
-
-10. Account         judge/notifications/accounting.py
-    Count judged reels once, in capture order, into non-overlapping batches
-    (default 15). Failed reels are counted as "excluded". When a batch is
-    full: conflicts >= 3 and no cooldown and nothing pending -> create one
-    warning. Otherwise record why not. Suppressed batches are never sent later.
-
-11. Dispatch        judge/notifications/outbox.py
-    The next ingest (or session-end) response returns the warning as
-    "notify". It is leased for 30 s; without an acknowledgment the same id
-    is returned again, at most 3 times, until it expires (120 s).
-    Cooldown: 600 s per user, across sessions.
-
-12. End session     judge/pipeline/lifecycle.py
-    POST /session/end, or 600 s without an accepted upload. The open reel is
-    closed and flushed. When every reel is final the session becomes "ended"
-    and one session_completed event is written. Nobody is invoked.
-
-
-WHAT A REEL CAN END AS
-----------------------
-  judged                 verdict stored (aligned | neutral | conflict)
-  insufficient_evidence  too few frames
-  values_unavailable     no usable approved values
-  failed_provider        timeout, quota, outage, local rate limit
-  failed_validation      model output failed the checks
-  failed_timeout         job deadline (30 s) passed
-  skipped_overload       queue or memory budget full
-  lost_on_restart        process restarted while media was only in RAM
-Only "judged" has a verdict. The others have verdict null and an error code,
-are excluded from batches, and are still counted as coverage.
-
-
-TIME AND ORDER
---------------
-  Capture clock   aligns frames with audio and reels with each other.
-  Server clock    receipt, 600 s idle, 600 s cooldown, leases, deadlines.
-  Order           (capture time, sequence). Late frames are acknowledged and
-                  dropped; they never move a boundary.
-  Latency target  about 10 s from observed reel end to stored verdict,
-                  measured per reel (timings, latency_overrun). A target,
-                  not a guarantee.
-
-
-MEMORY
-------
-Raw frames and audio live only in RAM, inside a fixed budget (256 MB process,
-24 MB per session). Over budget -> HTTP 503 and the upload is dropped. Media
-is released on success, failure, timeout, cancellation and shutdown. A
-restart loses in-flight media; those reels become lost_on_restart.
-The service must run as ONE process.
-
-
-WHAT IS NOT VERIFIED BY THE TESTS
----------------------------------
-Real Instagram frames and audio, native capture memory, Gemini's judgment
-quality and quotas, and notification banners. See
-watcher_Agent/docs/PRD_TRACEABILITY.txt.
+Notifications remain owned by AttentionAgent/SampleHandler.swift,
+Shared/AgentBridge.swift and App/CheckpointNotifier.swift. They consume
+verdicts; they are not generated by the Judge.

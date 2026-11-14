@@ -24,7 +24,6 @@ from judge.errors import NotFoundError, ReelErrorCode
 from judge.ingest.service import store_pending
 from judge.ingest.session_state import StateConfig, close_for_end
 from judge.ingest.volatile import VolatileSessions
-from judge.notifications.outbox import NotificationDispatcher
 from judge.persistence.interfaces import Storage
 from judge.pipeline.completion import ReelCompletionService, complete_session_if_done
 from judge.pipeline.finalizer import CandidateFinalizer
@@ -46,7 +45,6 @@ class SessionLifecycle:
         storage: Storage,
         volatile: VolatileSessions,
         finalizer: CandidateFinalizer,
-        dispatcher: NotificationDispatcher,
     ) -> None:
         self._config = StateConfig.from_settings(settings)
         self._idle = timedelta(seconds=settings.session_idle_timeout_seconds)
@@ -54,7 +52,6 @@ class SessionLifecycle:
         self._storage = storage
         self._volatile = volatile
         self._finalizer = finalizer
-        self._dispatcher = dispatcher
 
     async def end_session(
         self,
@@ -73,9 +70,6 @@ class SessionLifecycle:
                 if session is None or session.owner_id != owner_id:
                     msg = "session not found"
                     raise NotFoundError(msg)
-                notify = await self._dispatcher.acknowledge_and_dispatch(
-                    tx, owner_id, request.acknowledged_notification_ids, now
-                )
                 status = session.status
                 if status is SessionStatus.ACTIVE:
                     if state is not None:
@@ -95,7 +89,7 @@ class SessionLifecycle:
                 self._volatile.put(state)
         await self._finalizer.process(session_id)
         self._volatile.drop(session_id)
-        return SessionEndResponse(session_id=session_id, status=status, notify=notify)
+        return SessionEndResponse(session_id=session_id, status=status)
 
     async def expire_idle(self) -> int:
         """End sessions with no accepted ingest for the idle timeout."""

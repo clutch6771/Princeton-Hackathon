@@ -1,0 +1,180 @@
+{
+  "provider": "replay",
+  "recognition_test": false,
+  "limitation": "Replay verifies plumbing/scoring, not model recognition.",
+  "storage": "postgres",
+  "guardian_values": "## V1: Fitness without body comparison (strength: high)\n- Want more: form tutorials, training plans, recovery\n- Want less: before/after transformations, physique rating\n- Unless: none\n- In my words: \"gym stuff is great, comparing bodies is not\"\n- Evidence: said at onboarding; approved 2026-11-14\n\n## V2: News without outrage (strength: medium)\n- Want more: calm explainers, local news, science\n- Want less: rage-bait politics, people shouting at each other\n- Unless: none\n- In my words: \"I want to know what happened, not be told who to be angry at\"\n- Evidence: said at onboarding; approved 2026-11-14\n\n## V3: Cooking I can actually make (strength: low)\n- Want more: simple recipes, budget meals, meal prep\n- Want less: extreme food challenges, mukbang\n- Unless: none\n- In my words: \"show me dinner I can cook on a Tuesday\"\n- Evidence: said at onboarding; approved 2026-11-14",
+  "confirmed": 7,
+  "denied": 0,
+  "inconclusive": 0,
+  "arbitrary_decisions_confirmed": 7,
+  "deliberately_wrong_decisions_denied": 14,
+  "executions": [
+    {
+      "sample_id": "rl_013",
+      "expected_verdict": "aligned",
+      "actual_verdict": "aligned",
+      "confirmed": true,
+      "explanation": "Verdict and cited values match the independently supplied reference.",
+      "description": "Fifteen-minute tomato pasta recipe made in one pot",
+      "reason": "A simple recipe, which V3 says you want more of.",
+      "value_ids": [
+        "V3"
+      ],
+      "transcript": "one pot, one tin of tomatoes, fifteen minutes. this is the dinner I make when I can't be bothered.",
+      "evaluation_status": "judged",
+      "audio_status": "complete",
+      "video_frames_selected": 3,
+      "model_id": "fake-understanding",
+      "stored_reel_id": "1bfedeb8-d7af-528b-9f31-7603ccec4703",
+      "database_roundtrip": true,
+      "arbitrary_decision_checks": {
+        "aligned": true,
+        "neutral": false,
+        "conflict": false
+      }
+    },
+    {
+      "sample_id": "rl_014",
+      "expected_verdict": "conflict",
+      "actual_verdict": "conflict",
+      "confirmed": true,
+      "explanation": "Verdict and cited values match the independently supplied reference.",
+      "description": "Before-and-after body transformation montage with voice-over",
+      "reason": "Shows body comparison, which V1 says you want less of.",
+      "value_ids": [
+        "V1"
+      ],
+      "transcript": "okay so here's why you're never going to look like this unless you stop making excuses. ninety days. that's all it took me.",
+      "evaluation_status": "judged",
+      "audio_status": "complete",
+      "video_frames_selected": 3,
+      "model_id": "fake-understanding",
+      "stored_reel_id": "19c4bd6b-90f4-55b4-a117-157c2a0b86cb",
+      "database_roundtrip": true,
+      "arbitrary_decision_checks": {
+        "aligned": false,
+        "neutral": false,
+        "conflict": true
+      }
+    },
+    {
+      "sample_id": "rl_015",
+      "expected_verdict": "conflict",
+      "actual_verdict": "conflict",
+      "confirmed": true,
+      "explanation": "Verdict and cited values match the independently supplied reference.",
+      "description": "Person talking to camera in a gym locker room",
+      "reason": "Rates people's physiques, which V1 says you want less of.",
+      "value_ids": [
+        "V1"
+      ],
+      "transcript": "I'm going to rate these five physiques from the comments. first one, soft, no shoulders, four out of ten. be honest with yourself about where you'd land.",
+      "evaluation_status": "judged",
+      "audio_status": "complete",
+      "video_frames_selected": 3,
+      "model_id": "fake-understanding",
+      "stored_reel_id": "7eececa4-b9d5-5c11-94f7-b17bfb2224cb",
+      "database_roundtrip": true,
+      "arbitrary_decision_checks": {
+        "aligned": false,
+        "neutral": false,
+        "conflict": true
+      }
+    },
+    {
+      "sample_id": "rl_016",
+      "expected_verdict": "conflict",
+      "actual_verdict": "conflict",
+      "confirmed": true,
+      "explanation": "Verdict and cited values match the independently supplied reference.",
+      "description": "Clip of a TV panel where four commentators shout over each other about immigration",
+      "reason": "People shouting at each other about politics, which V2 says you want less of.",
+      "value_ids": [
+        "V2"
+      ],
+      "transcript": "you people are destroying this country. no, let me finish. you never let anyone finish.",
+      "evaluation_status": "judged",
+      "audio_status": "complete",
+      "video_frames_selected": 3,
+      "model_id": "fake-understanding",
+      "stored_reel_id": "41c5c6fb-e243-55c6-956f-a0f9554f6d8e",
+      "database_roundtrip": true,
+      "arbitrary_decision_checks": {
+        "aligned": false,
+        "neutral": false,
+        "conflict": true
+      }
+    },
+    {
+      "sample_id": "rl_017",
+      "expected_verdict": "neutral",
+      "actual_verdict": "neutral",
+      "confirmed": true,
+      "explanation": "Verdict and cited values match the independently supplied reference.",
+      "description": "Drone shots of a coastal hike in Portugal with music",
+      "reason": "Doesn't touch any of your values.",
+      "value_ids": [],
+      "transcript": "",
+      "evaluation_status": "judged",
+      "audio_status": "complete",
+      "video_frames_selected": 3,
+      "model_id": "fake-understanding",
+      "stored_reel_id": "8be74a29-126e-55e6-9c56-175165857155",
+      "database_roundtrip": true,
+      "arbitrary_decision_checks": {
+        "aligned": false,
+        "neutral": true,
+        "conflict": false
+      }
+    },
+    {
+      "sample_id": "rl_019",
+      "expected_verdict": "aligned",
+      "actual_verdict": "aligned",
+      "confirmed": true,
+      "explanation": "Verdict and cited values match the independently supplied reference.",
+      "description": "Person talking to camera at a desk with a bookshelf",
+      "reason": "A calm science explainer, which V2 says you want more of.",
+      "value_ids": [
+        "V2"
+      ],
+      "transcript": "why does the moon look bigger near the horizon? it isn't. your brain compares it with trees and buildings, and here's a way to check tonight.",
+      "evaluation_status": "judged",
+      "audio_status": "complete",
+      "video_frames_selected": 3,
+      "model_id": "fake-understanding",
+      "stored_reel_id": "c87dfa42-5fbb-56ae-aa3c-aa1aaa1328cc",
+      "database_roundtrip": true,
+      "arbitrary_decision_checks": {
+        "aligned": true,
+        "neutral": false,
+        "conflict": false
+      }
+    },
+    {
+      "sample_id": "rl_020",
+      "expected_verdict": "conflict",
+      "actual_verdict": "conflict",
+      "confirmed": true,
+      "explanation": "Verdict and cited values match the independently supplied reference.",
+      "description": "Creator attempts to eat a ten-thousand-calorie burger tower in ten minutes",
+      "reason": "An extreme food challenge, which V3 says you want less of.",
+      "value_ids": [
+        "V3"
+      ],
+      "transcript": "ten thousand calories, ten minutes. if I fail I do it again tomorrow.",
+      "evaluation_status": "judged",
+      "audio_status": "complete",
+      "video_frames_selected": 3,
+      "model_id": "fake-understanding",
+      "stored_reel_id": "f82661e8-d136-5de6-be44-6403fbda6007",
+      "database_roundtrip": true,
+      "arbitrary_decision_checks": {
+        "aligned": false,
+        "neutral": false,
+        "conflict": true
+      }
+    }
+  ]
+}

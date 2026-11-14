@@ -6,7 +6,7 @@ scripted providers, generated JPEG frames and AAC chunks.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Any
@@ -14,7 +14,7 @@ from uuid import UUID
 
 from judge.bootstrap import JudgeRuntime, build_runtime
 from judge.contracts.capture import AudioChunk, FrameObservation
-from judge.contracts.notification import IngestResponse
+from judge.contracts.ingest import IngestResponse
 from judge.contracts.record import ReelRecord
 from judge.contracts.session import SessionEndRequest, SessionEndResponse
 from judge.contracts.storage import EmbeddingProfile
@@ -30,6 +30,7 @@ from judge.devfakes.providers import (
 )
 from judge.persistence.interfaces import Storage
 from judge.understanding.prompt import ImagePart, UnderstandingRequest
+from judge.understanding.provider import UnderstandingProvider
 from tests.support.builders import SESSION_ID, T0_MS, audio_meta, frame_meta
 from tests.support.media import encode_aac, make_frame_jpeg, sine
 from tests.support.samples import snapshot
@@ -83,6 +84,7 @@ class Harness:
         *,
         values: ValuesReadResult | None = None,
         storage: Storage | None = None,
+        provider: UnderstandingProvider | None = None,
         **settings_overrides: Any,
     ) -> Harness:
         settings = make_settings(**{"worker_concurrency": 1, **settings_overrides})
@@ -94,7 +96,7 @@ class Harness:
             settings,
             clock=clock,
             storage=storage or MemoryStorage(),
-            understanding=understanding,
+            understanding=provider or understanding,
             embedding=embedding,
             values=reader,
         )
@@ -147,7 +149,6 @@ class Harness:
         *,
         overlay: int | None = None,
         session_id: UUID = SESSION_ID,
-        acks: Iterable[UUID] = (),
         jpeg: bytes | None = None,
         **meta: Any,
     ) -> IngestResponse:
@@ -159,7 +160,6 @@ class Harness:
                 ts_ms=T0_MS + offset_ms,
                 seq=self._next_seq(),
                 session_id=session_id,
-                acknowledged_notification_ids=[str(a) for a in acks],
                 **meta,
             )
         )
@@ -174,7 +174,6 @@ class Harness:
         eligible: list[tuple[int, int]] | None = None,
         payload: bytes | None = None,
         session_id: UUID = SESSION_ID,
-        acks: Iterable[UUID] = (),
         **meta: Any,
     ) -> IngestResponse:
         """Upload one audio chunk starting ``offset_ms`` after the origin."""
@@ -192,7 +191,6 @@ class Harness:
                 seq=self._next_seq(),
                 session_id=session_id,
                 eligible=intervals,
-                acknowledged_notification_ids=[str(a) for a in acks],
                 **meta,
             )
         )
@@ -249,14 +247,10 @@ class Harness:
         await self.runtime.queue.join()
         await self.runtime.maintenance.tick()
 
-    async def end_session(
-        self, session_id: UUID = SESSION_ID, acks: Iterable[UUID] = ()
-    ) -> SessionEndResponse:
+    async def end_session(self, session_id: UUID = SESSION_ID) -> SessionEndResponse:
         response = await self.runtime.lifecycle.end_session(
             self.owner,
-            SessionEndRequest(
-                session_id=session_id, acknowledged_notification_ids=tuple(acks)
-            ),
+            SessionEndRequest(session_id=session_id),
         )
         await self.runtime.queue.join()
         return response

@@ -31,9 +31,6 @@ def test_prd_defaults_match_the_documented_values() -> None:
     assert settings.audio_chunk_seconds == 5
     assert settings.max_feedback_examples == 3
     assert settings.reel_end_to_verdict_target_seconds == 10
-    assert settings.notification_batch_size == 15
-    assert settings.notification_min_conflicts == 3
-    assert settings.notification_cooldown_seconds == 600
     assert settings.session_idle_timeout_seconds == 600
 
 
@@ -56,7 +53,7 @@ def test_defaults_are_fail_safe_production_values() -> None:
 
     assert settings.app_env is AppEnv.PRODUCTION
     assert settings.privacy_mode is PrivacyMode.ENFORCE
-    assert settings.provider_mode is ProviderMode.GEMINI
+    assert settings.provider_mode is ProviderMode.GROK
     assert settings.storage_mode is StorageMode.POSTGRES
 
 
@@ -64,27 +61,7 @@ def test_settings_are_immutable() -> None:
     settings = make_settings()
 
     with pytest.raises(ValidationError):
-        settings.notification_batch_size = 99
-
-
-@pytest.mark.parametrize(
-    ("batch_size", "min_conflicts"),
-    [(15, 16), (5, 0), (0, 0), (3, -1)],
-)
-def test_rejects_policy_outside_one_to_batch_size(
-    batch_size: int, min_conflicts: int
-) -> None:
-    with pytest.raises(ValidationError):
-        make_settings(
-            notification_batch_size=batch_size,
-            notification_min_conflicts=min_conflicts,
-        )
-
-
-def test_accepts_min_conflicts_equal_to_batch_size() -> None:
-    settings = make_settings(notification_batch_size=4, notification_min_conflicts=4)
-
-    assert settings.notification_min_conflicts == 4
+        settings.worker_concurrency = 99
 
 
 def test_more_than_three_feedback_examples_is_rejected() -> None:
@@ -104,14 +81,10 @@ def test_secrets_never_appear_in_repr() -> None:
 def test_environment_variables_use_the_documented_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("NOTIFICATION_BATCH_SIZE", "20")
-    monkeypatch.setenv("NOTIFICATION_MIN_CONFLICTS", "4")
     monkeypatch.setenv("DEMO_USER_ID", "env-user")
 
     settings = Settings(_env_file=None)  # type: ignore[call-arg]
 
-    assert settings.notification_batch_size == 20
-    assert settings.notification_min_conflicts == 4
     assert settings.demo_user_id == "env-user"
 
 

@@ -9,7 +9,12 @@ below are the environment variable names. The model cannot alter any of them.
 
 A. SEMANTIC MEMORY  (shared Store; written by the approval owner, read by Judge)
 -------------------------------------------------------------------------------
-Location   Store table "store": prefix "<user_id>.memories", key "values.md"
+Location   Default Store prefix "<user_id>.guardian.values", keys Vn.
+           Protected Guardian entries: {text: full Markdown, updated: timestamp}.
+           Rendered in memory; approval derives from protected namespace.
+           VALUES_STORE_LAYOUT=guardian (default) | document.
+           document explicitly selects "<user_id>.memories" / "values.md".
+           The fields below describe the normalized snapshot/document contract.
 Writer     Guardian / approval owner (owner role).   Reader: Judge (SELECT only)
 Lifetime   Until the owner replaces or deletes it. Judge never writes.
 
@@ -21,7 +26,7 @@ approval.status       str             Must be "approved" to be used         PRD
 approval.approved_at  datetime        Approval time                         PRD
 lifecycle.status      active|deleted  "deleted" -> unavailable              PRD
 Per entry (Markdown)  value id, title, strength, Want more, Want less,
-                      Unless, In my words, Evidence, Approved, Status
+                      Unless, In my words OR Agreed wording, Evidence, Approved, Status
                       (superseded by Vn | deleted). Wording kept verbatim.  PRD
 VALUES_ACCESS_MODE = read_only (constant)                                   PRD
 VALUES_REQUIRE_APPROVAL_METADATA  bool, default true                        INT
@@ -61,10 +66,6 @@ C. OPERATIONAL STATE  (schema judge; written by Judge)
 judge.sessions               lifecycle, last_ingest_at, order cursor, counts
 judge.session_events         one "session_completed" row per session
 judge.ingest_receipts        idempotency metadata; pruned after 24 h; no media
-judge.notification_policy    versioned policy per owner
-judge.notification_batches   ordered membership counts and outcome
-judge.notification_outbox    stable ids, lease, dispatch, ack, expiry
-judge.user_notification_state  last_dispatch_at (cooldown anchor)
 public.judge_schema_migrations migration ledger
 
 
@@ -73,7 +74,7 @@ D. VOLATILE STATE  (RAM only; bounded; released on every exit path)
 Safe frame reservoir   first, last, <= 4 thinned frames per open reel
 Audio buffer           decoded PCM16 segments with capture timestamps
 Candidate intervals    open and closed exposures awaiting final audio
-Provider payloads      frames + WAV clip of a queued or running job
+Provider payloads      frames + WAV clip, or supplied device transcript (partial)
 Context caches         values snapshot (5 s), feedback examples
 Lost on restart; affected reels become lost_on_restart. Never written to
 PostgreSQL, files, logs, traces or queues.
@@ -91,8 +92,8 @@ MAX_UPLOADS_IN_FLIGHT = 1             (the three above bind the native adapter)
 NORMAL_UNDERSTANDING_CALLS_PER_REEL = 1
 NORMAL_NEW_REEL_EMBEDDINGS_PER_REEL = 1
 MAX_FEEDBACK_EXAMPLES = 3             REEL_END_TO_VERDICT_TARGET_SECONDS = ~10
-NOTIFICATION_BATCH_SIZE = 15          NOTIFICATION_MIN_CONFLICTS = 3
-NOTIFICATION_COOLDOWN_SECONDS = 600   SESSION_IDLE_TIMEOUT_SECONDS = 600
+SESSION_IDLE_TIMEOUT_SECONDS = 600
+Notification policy is native-owned, not a Judge setting.
 VALUES_ACCESS_MODE = read_only        PERSIST_RAW_AUDIO = false
 PERSIST_RAW_VIDEO = false             PERSIST_EXTRA_FRAMES = false
 PERSISTED_THUMBNAILS_PER_ACCEPTED_REEL = at most 1
@@ -130,8 +131,6 @@ Providers   PROVIDER_TIMEOUT_SECONDS=8  PROVIDER_MAX_ATTEMPTS=2
             EMBEDDING_REQUESTS_PER_MINUTE=60  EMBEDDING_MAX_ATTEMPTS=5
             EMBEDDING_RETRY_BASE_SECONDS=2 (doubles per attempt)
 Database    DB_STATEMENT_TIMEOUT_MS=5000  DB_POOL_MIN_SIZE=1  DB_POOL_MAX_SIZE=8
-Notify      NOTIFICATION_TTL_SECONDS=120  NOTIFICATION_LEASE_SECONDS=30
-            NOTIFICATION_MAX_DISPATCH_ATTEMPTS=3
 Values wait VALUES_WAIT_SECONDS=20  VALUES_POLL_SECONDS=5
             VALUES_CACHE_TTL_SECONDS=5
 Retention   RECEIPT_RETENTION_SECONDS=86400; reel text and metadata are kept
@@ -139,7 +138,7 @@ Retention   RECEIPT_RETENTION_SECONDS=86400; reel text and metadata are kept
 API limits  INGEST_REQUESTS_PER_MINUTE=240  API_REQUESTS_PER_MINUTE=120
 Runtime     TICK_INTERVAL_SECONDS=0.5
 Modes       APP_ENV=production|development  PRIVACY_MODE=enforce|dev_permissive
-            PROVIDER_MODE=gemini|local|fake  STORAGE_MODE=postgres|memory
+            PROVIDER_MODE=grok|gemini|local|fake (default grok)  STORAGE_MODE=postgres|memory
             (fake, memory, dev_permissive are refused in production)
 Identity    DEMO_USER_ID (required)  DEMO_USER_HEADER=X-Demo-User-Id
 
@@ -148,6 +147,15 @@ F. SECRETS  (environment or secret store only)
 -------------------------------------------------------------------------------
 DATABASE_URL            runtime role; TLS required in production
 MIGRATION_DATABASE_URL  owner role; migrations and seeding only
-GEMINI_API_KEY          provider key
+XAI_API_KEY             Grok provider key (SecretStr)
+GROK_MODEL_ID           grok-4.7 (vision judgment)
+GROK_TRANSCRIPTION_MODEL grok-voice-transcribe-2.0 (waveform to text)
+GEMINI_API_KEY          optional Gemini-mode provider key
 Never placed in memory documents, model prompts, logs, fixtures or the repo.
 Separate API keys do not by themselves give separate quota pools.
+
+Grok mode requires EMBEDDING_INDEXING_ENABLED=false and uses no Gemini key.
+The local .env example raises provider timeout to 30s, job deadline to 90s,
+output budget to 2048 and limits attempts to one for initial live testing.
+Grok audio: one STT call + one vision judgment per normal attempt. Quota
+settings currently count provider attempts, not individual HTTP requests.

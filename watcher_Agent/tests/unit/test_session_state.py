@@ -11,7 +11,7 @@ import pytest
 
 from judge.contracts.candidate import CloseReason, SegmentationStatus
 from judge.contracts.capture import AudioChunk
-from judge.contracts.notification import AckStatus
+from judge.contracts.ingest import AckStatus
 from judge.ingest.session_state import (
     AudioNote,
     AudioNoteKind,

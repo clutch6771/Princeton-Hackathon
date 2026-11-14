@@ -67,8 +67,9 @@ SDK tracing     LangSmith / LangChain tracing would export prompts (frames,
                 audio, values). Startup refuses to run when
                 LANGSMITH_TRACING, LANGCHAIN_TRACING_V2 or LANGCHAIN_TRACING
                 is enabled. Model calls pass no callbacks.
-Provider side   Frames, audio and values are sent to Google's Gemini API for
-                each judged reel. What Google retains or logs is governed by
+Provider side   Grok mode sends permitted audio to xAI STT, then frames,
+                transcript and values to xAI's vision judgment API. Gemini
+                mode sends them to Google. Provider retention is governed by
                 the API terms for your project and tier. Deleting media
                 locally does NOT establish provider-side zero retention.
                 Check the data-use terms before using real user data.
@@ -87,8 +88,8 @@ run SQL or reveal secrets.
 6. DELETION
 -----------
 DELETE /reels/{id}, /sessions/{id}, /data are owner-scoped. They remove
-dependent thumbnails, vectors and feedback, cancel undelivered warnings that
-mention deleted reels, drop volatile state and clear caches. The approved
+dependent thumbnails, vectors and feedback, drop volatile state and clear
+caches. The approved
 values are not the Judge's to delete. Embeddings are never re-used across
 model or profile changes.
 
@@ -98,3 +99,16 @@ model or profile changes.
 The demo identity header is not authentication. There is no encryption at
 rest beyond what the database service provides. There is no retention timer
 for text and metadata; deletion is explicit.
+
+8. CURRENT NATIVE COMPATIBILITY PATH
+------------------------------------
+/agent1/ingest receives one device-segmented frame and optional speech text.
+The same backend provenance check runs before either reaches the provider.
+Legacy requests are explicitly dev_fake; production refuses them until a
+trusted native gate exists. A supplied device transcript is untrusted partial
+evidence; it never certifies raw audio coverage, silence or music. No Judge
+capture API, notification policy or notification delivery exists.
+
+The generated media in docs/examples and /tmp sample executions is invented
+test material, never a real screen/audio recording. Production raw-media
+retention rules are unchanged. Never use sample scripts for real user media.

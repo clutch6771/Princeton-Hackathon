@@ -1,7 +1,7 @@
 """Typed repository interfaces behind which storage is swappable.
 
-Repositories are deliberately primitive (load, insert, save). Ordering,
-batching and delivery rules live in services, so the in-memory development
+Repositories are deliberately primitive (load, insert, save). Ordering and
+lifecycle rules live in services, so the in-memory development
 storage and the PostgreSQL adapter cannot drift apart in behaviour.
 
 Every method runs inside the transaction that produced the ``StorageTx``.
@@ -19,12 +19,6 @@ from typing import Protocol
 from uuid import UUID
 
 from judge.contracts.feedback import FeedbackRecord
-from judge.contracts.notification import (
-    NotificationBatch,
-    NotificationPolicy,
-    OutboxItem,
-    UserNotificationState,
-)
 from judge.contracts.record import (
     PendingReel,
     PendingReelRef,
@@ -142,12 +136,6 @@ class ReelRepository(Protocol):
         """The session's first reel, in capture order, after a sequence number."""
         ...
 
-    async def assign_batch(
-        self, reel_id: UUID, batch_id: UUID, position: int
-    ) -> None: ...
-
-    async def list_batch_conflict_ids(self, batch_id: UUID) -> list[UUID]: ...
-
     async def list_timeline(
         self,
         owner_id: str,
@@ -242,62 +230,6 @@ class FeedbackRepository(Protocol):
     ) -> list[FeedbackRecord]: ...
 
 
-class PolicyRepository(Protocol):
-    """Versioned notification policy per owner."""
-
-    async def get_current(self, owner_id: str) -> NotificationPolicy | None: ...
-
-    async def insert_next(
-        self,
-        owner_id: str,
-        *,
-        batch_size: int,
-        minimum_conflicts: int,
-        cooldown_seconds: int,
-        updated_at: datetime,
-    ) -> NotificationPolicy: ...
-
-    async def delete_all(self, owner_id: str) -> None: ...
-
-
-class NotificationRepository(Protocol):
-    """Batches, the outbox and the per-user cooldown anchor."""
-
-    async def get_open_batch(self, session_id: UUID) -> NotificationBatch | None: ...
-
-    async def count_batches(self, session_id: UUID) -> int: ...
-
-    async def insert_batch(self, batch: NotificationBatch) -> None: ...
-
-    async def save_batch(self, batch: NotificationBatch) -> None: ...
-
-    async def list_batches(
-        self, owner_id: str, session_id: UUID
-    ) -> list[NotificationBatch]: ...
-
-    async def lock_user_state(self, owner_id: str) -> UserNotificationState:
-        """Create if absent, then lock the row for this transaction."""
-        ...
-
-    async def set_last_dispatch(self, owner_id: str, at: datetime) -> None: ...
-
-    async def insert_outbox(self, item: OutboxItem) -> None: ...
-
-    async def save_outbox(self, item: OutboxItem) -> None: ...
-
-    async def get_outbox(
-        self, owner_id: str, notification_id: UUID
-    ) -> OutboxItem | None: ...
-
-    async def list_undelivered(self, owner_id: str) -> list[OutboxItem]:
-        """Pending or leased items, oldest first."""
-        ...
-
-    async def list_outbox(self, owner_id: str) -> list[OutboxItem]: ...
-
-    async def delete_all(self, owner_id: str) -> None: ...
-
-
 class StorageTx(Protocol):
     """Repositories bound to one open transaction."""
 
@@ -318,12 +250,6 @@ class StorageTx(Protocol):
 
     @property
     def feedback(self) -> FeedbackRepository: ...
-
-    @property
-    def policy(self) -> PolicyRepository: ...
-
-    @property
-    def notifications(self) -> NotificationRepository: ...
 
 
 class Storage(Protocol):

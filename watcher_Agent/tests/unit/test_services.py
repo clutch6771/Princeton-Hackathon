@@ -8,7 +8,6 @@ from uuid import uuid4
 import pytest
 
 from judge.contracts.feedback import FeedbackLabel, FeedbackRequest, RetrievalMode
-from judge.contracts.notification import OutboxStatus
 from judge.contracts.record import EmbeddingStatus, EvaluationStatus
 from judge.contracts.storage import EmbeddingProfile
 from judge.contracts.understanding import Verdict
@@ -297,7 +296,7 @@ async def test_thumbnail_access_is_owner_scoped(h: Harness) -> None:
 # --- deletion ---------------------------------------------------------------
 
 
-async def test_deleting_a_reel_removes_dependents_and_cancels_its_warning(
+async def test_deleting_a_reel_removes_dependents(
     h: Harness,
 ) -> None:
     verdicts = ["conflict", "neutral", "neutral", "neutral", "neutral"] * 3
@@ -308,11 +307,9 @@ async def test_deleting_a_reel_removes_dependents_and_cancels_its_warning(
     await h.runtime.deletion.delete_reel(h.owner, conflict.id)
 
     async with h.runtime.storage.transaction() as tx:
-        outbox = await tx.notifications.list_outbox(h.owner)
         feedback = await tx.feedback.list_for_owner(h.owner, 10)
         thumbnail = await tx.thumbnails.get(h.owner, conflict.id)
     assert conflict.id not in {r.id for r in await h.reels()}
-    assert [i.status for i in outbox] == [OutboxStatus.CANCELLED]
     assert feedback == [] and thumbnail is None
     with pytest.raises(NotFoundError):
         await h.runtime.deletion.delete_reel(h.owner, conflict.id)
@@ -332,7 +329,6 @@ async def test_deleting_all_owner_data_clears_storage_and_volatile_media(
     async with h.runtime.storage.transaction() as tx:
         assert await tx.sessions.get(SESSION_ID) is None
         assert await tx.feedback.list_for_owner(h.owner, 10) == []
-        assert await tx.notifications.list_outbox(h.owner) == []
     assert await h.reels() == []
     assert h.runtime.budget.used == 0
     assert len(h.runtime.volatile) == 0

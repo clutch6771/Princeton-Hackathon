@@ -15,6 +15,7 @@ from judge.contracts.understanding import (
     ModelJudgment,
     ReelFeatures,
     ReelUnderstandingResult,
+    TranscriptStatus,
     Verdict,
 )
 from judge.contracts.values import ApprovedValuesSnapshot
@@ -65,14 +66,14 @@ def _check_value_ids(
 
 
 def _check_evidence(
-    judgment: ModelJudgment, audio: PreparedAudio
+    judgment: ModelJudgment, audio: PreparedAudio, native_transcript: str | None = None
 ) -> tuple[EvidenceModality, ...]:
     basis = _unique(tuple(EvidenceModality(item) for item in judgment.evidence_basis))
     if not basis:
         raise OutputValidationError(
             ReelErrorCode.EVIDENCE_BASIS_EMPTY, "the verdict names no evidence"
         )
-    if EvidenceModality.AUDIO in basis and not audio.supplied:
+    if EvidenceModality.AUDIO in basis and not audio.supplied and not native_transcript:
         raise OutputValidationError(
             ReelErrorCode.SPEECH_EVIDENCE_UNSUPPORTED,
             "the verdict relies on audio that was not supplied",
@@ -106,6 +107,7 @@ def validate_judgment(
     audio: PreparedAudio,
     first_second_observed: bool,
     transcript_max_chars: int,
+    native_transcript: str | None = None,
 ) -> ReelUnderstandingResult:
     """Return the accepted result or raise ``OutputValidationError``."""
     if not judgment.description.strip():
@@ -130,8 +132,10 @@ def validate_judgment(
             ReelErrorCode.REASON_MISSING, "the verdict has no explanation"
         )
     return ReelUnderstandingResult(
-        transcript=transcript.text,
-        transcript_status=transcript.status,
+        transcript=(native_transcript if native_transcript else transcript.text),
+        transcript_status=(
+            TranscriptStatus.PARTIAL if native_transcript else transcript.status
+        ),
         on_screen_text=_bounded(judgment.on_screen_text, _MAX_ON_SCREEN_CHARS),
         description=_bounded(judgment.description, _MAX_DESCRIPTION_CHARS),
         features=_features(judgment, first_second_observed=first_second_observed),
@@ -139,5 +143,5 @@ def validate_judgment(
         confidence=confidence,
         value_ids=value_ids,
         reason=_bounded(judgment.reason, _MAX_REASON_CHARS),
-        evidence_basis=_check_evidence(judgment, audio),
+        evidence_basis=_check_evidence(judgment, audio, native_transcript),
     )

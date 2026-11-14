@@ -15,12 +15,8 @@ from judge.contracts.base import CONTRACT_VERSION
 from judge.contracts.candidate import ReelCandidate
 from judge.contracts.capture import AudioChunk, FrameObservation
 from judge.contracts.feedback import FeedbackExample, FeedbackRequest
-from judge.contracts.notification import (
-    IngestResponse,
-    NotificationEnvelope,
-    NotificationPolicy,
-    NotificationPolicyUpdate,
-)
+from judge.contracts.ingest import IngestResponse
+from judge.contracts.native import NativeReelUpload
 from judge.contracts.record import ReelRecord
 from judge.contracts.session import (
     SessionEndRequest,
@@ -36,11 +32,11 @@ JSON_SCHEMA_DIALECT: Final = "https://json-schema.org/draft/2020-12/schema"
 
 # name -> (model, mode). "validation" for inputs, "serialization" for outputs.
 SCHEMA_MODELS: Final[dict[str, tuple[type[BaseModel], SchemaMode]]] = {
+    "native_reel_upload": (NativeReelUpload, "validation"),
     "frame_observation": (FrameObservation, "validation"),
     "audio_chunk": (AudioChunk, "validation"),
     "session_end_request": (SessionEndRequest, "validation"),
     "feedback_request": (FeedbackRequest, "validation"),
-    "notification_policy_update": (NotificationPolicyUpdate, "validation"),
     "values_store_item": (ValuesStoreItem, "validation"),
     "reel_candidate": (ReelCandidate, "serialization"),
     "approved_values_snapshot": (ApprovedValuesSnapshot, "serialization"),
@@ -48,10 +44,8 @@ SCHEMA_MODELS: Final[dict[str, tuple[type[BaseModel], SchemaMode]]] = {
     "model_judgment": (ModelJudgment, "serialization"),
     "reel_understanding_result": (ReelUnderstandingResult, "serialization"),
     "reel_record": (ReelRecord, "serialization"),
-    "notification_envelope": (NotificationEnvelope, "serialization"),
     "ingest_response": (IngestResponse, "serialization"),
     "session_end_response": (SessionEndResponse, "serialization"),
-    "notification_policy": (NotificationPolicy, "serialization"),
     "session_event": (SessionEvent, "serialization"),
 }
 

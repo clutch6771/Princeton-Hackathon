@@ -22,7 +22,7 @@ from judge.audio.pcm import AudioNote, AudioNoteKind, PcmSegment
 from judge.config import Settings
 from judge.contracts.candidate import CloseReason, SegmentationStatus
 from judge.contracts.capture import AudioChunk
-from judge.contracts.notification import AckStatus
+from judge.contracts.ingest import AckStatus
 from judge.ingest.clock_mapping import ClockMapping
 from judge.segmentation.frame_selector import FrameSelection, KeptFrame
 from judge.segmentation.segmenter import (

@@ -24,8 +24,6 @@ from judge.feedback.retriever import RecentFeedbackRetriever
 from judge.feedback.service import DeletionService, FeedbackService, TimelineService
 from judge.ingest.service import IngestService
 from judge.ingest.volatile import VolatileSessions
-from judge.notifications.outbox import NotificationDispatcher
-from judge.notifications.policy import PolicyService
 from judge.persistence.interfaces import Storage
 from judge.pipeline.completion import ReelCompletionService
 from judge.pipeline.finalizer import CandidateFinalizer
@@ -61,7 +59,6 @@ class JudgeRuntime:
     maintenance: Maintenance
     pipeline: JudgePipeline
     completion: ReelCompletionService
-    policy: PolicyService
     feedback: FeedbackService
     timeline: TimelineService
     deletion: DeletionService
@@ -133,7 +130,6 @@ def build_runtime(
         queue=queue,
         completion=completion,
     )
-    dispatcher = NotificationDispatcher(settings)
     retriever = RecentFeedbackRetriever(
         storage=storage,
         max_examples=settings.max_feedback_examples,
@@ -174,7 +170,6 @@ def build_runtime(
         decoder=decoder or PyAvAacDecoder(),
         volatile=volatile,
         budget=budget,
-        dispatcher=dispatcher,
         finalizer=finalizer,
         process_epoch=uuid4(),
     )
@@ -184,7 +179,6 @@ def build_runtime(
         storage=storage,
         volatile=volatile,
         finalizer=finalizer,
-        dispatcher=dispatcher,
     )
     indexer = EmbeddingIndexer(
         settings=settings,
@@ -214,7 +208,6 @@ def build_runtime(
         ),
         pipeline=pipeline,
         completion=completion,
-        policy=PolicyService(settings=settings, storage=storage, clock=clock),
         feedback=FeedbackService(storage=storage, clock=clock, retriever=retriever),
         timeline=TimelineService(storage=storage),
         deletion=DeletionService(

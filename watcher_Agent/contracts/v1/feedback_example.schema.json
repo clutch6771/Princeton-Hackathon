@@ -6,6 +6,7 @@
         "agree",
         "disagree",
         "not_for_me",
+        "fine",
         "rerate"
       ],
       "title": "FeedbackLabel",

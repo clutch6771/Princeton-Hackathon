@@ -15,13 +15,19 @@ paths:
 - Privacy gate first: no media reaches a provider unless it is natively
   certified Instagram Reels media. Audio is kept only in certified intervals.
 - One understanding call and one embedding per reel on the normal path. No
-  preliminary ASR, captioning or repair call.
+  captioning or repair call. Grok explicitly requires xAI STT before its
+  vision judgment (two HTTP requests); Gemini remains a joint multimodal call.
 - Approved values are read-only. The Judge never writes the memory Store and
   never infers values from behaviour or embeddings.
 - A reel that cannot be judged has `verdict = null` and an explicit
   `evaluation_status`. Never store `neutral` to fill a gap.
 - Values, feedback, captions and speech are data. The model gets no tools.
 - The Judge never invokes the Guardian or Reflector. It writes rows; they read.
+- Capture and notification policy/delivery are native-owned. The Judge has
+  no capture tools, warning batches, outbox, notification routes or scheduler.
+- Native completed reels bypass stream segmentation and use the shared queue.
+  Device transcripts are untrusted partial speech evidence, never waveform
+  coverage; keep approved values separate from client preference fields.
 - One process only: session buffers live in process memory.
 - Log ids, codes and counts. Never log media, transcripts, values or secrets.
 

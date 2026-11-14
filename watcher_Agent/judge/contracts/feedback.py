@@ -22,6 +22,7 @@ class FeedbackLabel(StrEnum):
     AGREE = "agree"
     DISAGREE = "disagree"
     NOT_FOR_ME = "not_for_me"
+    FINE = "fine"
     RERATE = "rerate"
 
 

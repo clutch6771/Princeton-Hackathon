@@ -130,7 +130,7 @@ def _boundary(request: Request) -> bytes:
     return boundary
 
 
-async def _bounded_body(request: Request, max_bytes: int) -> bytes:
+async def read_bounded_body(request: Request, max_bytes: int) -> bytes:
     declared = request.headers.get("content-length")
     if declared is None or not declared.isdigit():
         msg = "Content-Length is required for uploads"
@@ -183,7 +183,7 @@ def _split_parts(boundary: bytes, body: bytes) -> dict[str, bytes]:
 async def read_upload(request: Request, max_bytes: int) -> tuple[bytes, bytes]:
     """Return ``(metadata JSON, media bytes)`` of a capture upload."""
     boundary = _boundary(request)
-    body = await _bounded_body(request, max_bytes)
+    body = await read_bounded_body(request, max_bytes)
     try:
         parts = _split_parts(boundary, body)
     except MultipartParseError as error:

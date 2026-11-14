@@ -8,11 +8,6 @@ from uuid import uuid4
 
 import pytest
 
-from judge.contracts.notification import (
-    BatchOutcome,
-    BatchStatus,
-    OutboxStatus,
-)
 from judge.contracts.record import (
     EmbeddingStatus,
     EvaluationStatus,
@@ -34,11 +29,9 @@ from tests.support.records import (
     PROFILE,
     VALUES_SHA,
     at,
-    make_batch,
     make_failed,
     make_feedback,
     make_judged,
-    make_outbox,
     make_pending,
     make_receipt,
     make_session,
@@ -178,16 +171,12 @@ async def test_failed_transaction_rolls_everything_back(storage: Storage) -> Non
 async def test_deleting_a_session_removes_all_dependent_rows(storage: Storage) -> None:
     seeded = await seed(storage, reels=1)
     reel = seeded.reels[0]
-    batch = make_batch(seeded.session)
-    item = make_outbox(batch)
     receipt = make_receipt(seeded.session)
     async with storage.transaction() as tx:
         await tx.reels.complete(make_judged(reel, Verdict.CONFLICT))
         await tx.thumbnails.put(make_thumbnail(reel))
         await tx.embeddings.create_pending(reel.reel_id, OWNER, PROFILE, now=NOW)
         await tx.feedback.insert(make_feedback(reel))
-        await tx.notifications.insert_batch(batch)
-        await tx.notifications.insert_outbox(item)
         await tx.receipts.insert(receipt)
         await tx.sessions.add_event(make_session_event(seeded.session))
 
@@ -202,7 +191,6 @@ async def test_deleting_a_session_removes_all_dependent_rows(storage: Storage) -
         assert await tx.thumbnails.get(OWNER, reel.reel_id) is None
         assert await tx.embeddings.get(reel.reel_id, PROFILE.profile_id) is None
         assert await tx.feedback.list_for_owner(OWNER, 10) == []
-        assert await tx.notifications.list_outbox(OWNER) == []
         assert await tx.receipts.get(receipt.event_id) is None
 
 
@@ -362,25 +350,6 @@ async def test_accounting_view_is_looked_up_by_capture_order(storage: Storage) -
     assert third is None
     # A deleted reel leaves a gap in the numbering; the next reel is found.
     assert after_gap is not None and after_gap.order_seq == 2
-
-
-async def test_batch_membership_lists_conflicts_in_position_order(
-    storage: Storage,
-) -> None:
-    seeded = await seed(storage, reels=3)
-    batch = make_batch(seeded.session)
-    verdicts = [Verdict.CONFLICT, Verdict.ALIGNED, Verdict.CONFLICT]
-
-    async with storage.transaction() as tx:
-        await tx.notifications.insert_batch(batch)
-        for position, (reel, verdict) in enumerate(
-            zip(seeded.reels, verdicts, strict=True), start=1
-        ):
-            await tx.reels.complete(make_judged(reel, verdict))
-            await tx.reels.assign_batch(reel.reel_id, batch.batch_id, position)
-        conflicts = await tx.reels.list_batch_conflict_ids(batch.batch_id)
-
-    assert conflicts == [seeded.reels[0].reel_id, seeded.reels[2].reel_id]
 
 
 async def test_timeline_is_newest_first_paged_and_owner_scoped(
@@ -645,153 +614,6 @@ async def test_feedback_examples_are_recent_per_reel_and_revision_bound(
     assert rows[0].reel_description == "A trainer demonstrates squat form."
     assert rows[0].values_sha256 == VALUES_SHA
     assert len(limited) == 1 and foreign == []
-
-
-# --- policy -----------------------------------------------------------------
-
-
-async def test_policy_versions_increase_and_latest_wins(storage: Storage) -> None:
-    async with storage.transaction() as tx:
-        nothing = await tx.policy.get_current(OWNER)
-        first = await tx.policy.insert_next(
-            OWNER,
-            batch_size=15,
-            minimum_conflicts=3,
-            cooldown_seconds=600,
-            updated_at=NOW,
-        )
-        second = await tx.policy.insert_next(
-            OWNER,
-            batch_size=10,
-            minimum_conflicts=2,
-            cooldown_seconds=300,
-            updated_at=at(5),
-        )
-        current = await tx.policy.get_current(OWNER)
-        foreign = await tx.policy.get_current(OTHER_OWNER)
-
-    assert nothing is None and foreign is None
-    assert (first.version, second.version) == (1, 2)
-    assert current == second
-
-
-# --- notifications ----------------------------------------------------------
-
-
-async def test_batch_lifecycle(storage: Storage) -> None:
-    seeded = await seed(storage)
-    session_id = seeded.session.session_id
-    batch = make_batch(seeded.session)
-
-    async with storage.transaction() as tx:
-        assert await tx.notifications.get_open_batch(session_id) is None
-        await tx.notifications.insert_batch(batch)
-        opened = await tx.notifications.get_open_batch(session_id)
-        closed = batch.model_copy(
-            update={
-                "status": BatchStatus.EVALUATED,
-                "judged_count": 15,
-                "conflict_count": 3,
-                "excluded_count": 1,
-                "outcome": BatchOutcome.TRIGGERED,
-                "evaluated_at": at(9),
-            }
-        )
-        await tx.notifications.save_batch(closed)
-        after = await tx.notifications.get_open_batch(session_id)
-        count = await tx.notifications.count_batches(session_id)
-        listed = await tx.notifications.list_batches(OWNER, session_id)
-
-    assert opened == batch
-    assert after is None
-    assert count == 1
-    assert listed == [closed]
-
-
-async def test_user_state_is_created_on_first_lock_and_updated(
-    storage: Storage,
-) -> None:
-    async with storage.transaction() as tx:
-        fresh = await tx.notifications.lock_user_state(OWNER)
-        await tx.notifications.set_last_dispatch(OWNER, at(7))
-        updated = await tx.notifications.lock_user_state(OWNER)
-
-    assert fresh.last_dispatch_at is None
-    assert updated.last_dispatch_at == at(7)
-
-
-async def test_outbox_items_are_saved_listed_oldest_first_and_owner_scoped(
-    storage: Storage,
-) -> None:
-    seeded = await seed(storage)
-    older = make_outbox(make_batch(seeded.session, batch_index=1), created_at=at(1))
-    newer = make_outbox(make_batch(seeded.session, batch_index=2), created_at=at(2))
-
-    async with storage.transaction() as tx:
-        for index, item in enumerate((newer, older), start=1):
-            batch = make_batch(
-                seeded.session,
-                batch_id=item.batch_id,
-                batch_index=index,
-                status=BatchStatus.EVALUATED,
-                outcome=BatchOutcome.TRIGGERED,
-                evaluated_at=NOW,
-            )
-            await tx.notifications.insert_batch(batch)
-            await tx.notifications.insert_outbox(item)
-        undelivered = await tx.notifications.list_undelivered(OWNER)
-        leased = older.model_copy(
-            update={
-                "status": OutboxStatus.LEASED,
-                "lease_until": at(30),
-                "dispatch_attempts": 1,
-                "dispatched_at": at(3),
-            }
-        )
-        await tx.notifications.save_outbox(leased)
-        acked = newer.model_copy(
-            update={"status": OutboxStatus.ACKNOWLEDGED, "acknowledged_at": at(4)}
-        )
-        await tx.notifications.save_outbox(acked)
-        still = await tx.notifications.list_undelivered(OWNER)
-        loaded = await tx.notifications.get_outbox(OWNER, older.notification_id)
-        foreign = await tx.notifications.get_outbox(OTHER_OWNER, older.notification_id)
-        everything = await tx.notifications.list_outbox(OWNER)
-
-    assert [i.notification_id for i in undelivered] == [
-        older.notification_id,
-        newer.notification_id,
-    ]
-    assert still == [leased]
-    assert loaded == leased and foreign is None
-    assert {i.status for i in everything} == {
-        OutboxStatus.LEASED,
-        OutboxStatus.ACKNOWLEDGED,
-    }
-
-
-async def test_owner_deletion_clears_policy_and_notification_state(
-    storage: Storage,
-) -> None:
-    async with storage.transaction() as tx:
-        await tx.policy.insert_next(
-            OWNER,
-            batch_size=15,
-            minimum_conflicts=3,
-            cooldown_seconds=600,
-            updated_at=NOW,
-        )
-        await tx.notifications.lock_user_state(OWNER)
-        await tx.notifications.set_last_dispatch(OWNER, at(1))
-
-    async with storage.transaction() as tx:
-        await tx.policy.delete_all(OWNER)
-        await tx.notifications.delete_all(OWNER)
-        policy = await tx.policy.get_current(OWNER)
-        state = await tx.notifications.lock_user_state(OWNER)
-
-    assert policy is None
-    assert state.last_dispatch_at is None
 
 
 async def test_health_reports_the_backend(storage: Storage) -> None:

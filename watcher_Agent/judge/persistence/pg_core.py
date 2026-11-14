@@ -457,26 +457,6 @@ class PgReels:
         )
         return ReelAccountingView.model_validate(row) if row else None
 
-    async def assign_batch(self, reel_id: UUID, batch_id: UUID, position: int) -> None:
-        await execute(
-            self._conn,
-            "UPDATE judge.reels SET batch_id = %s, batch_position = %s "
-            "WHERE reel_id = %s",
-            (batch_id, position, reel_id),
-        )
-
-    async def list_batch_conflict_ids(self, batch_id: UUID) -> list[UUID]:
-        rows = await fetch_all(
-            self._conn,
-            """
-            SELECT reel_id FROM judge.reels
-            WHERE batch_id = %s AND verdict = 'conflict'
-            ORDER BY batch_position
-            """,
-            (batch_id,),
-        )
-        return [row["reel_id"] for row in rows]
-
     async def list_timeline(
         self,
         owner_id: str,

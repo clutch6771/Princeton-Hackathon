@@ -1,7 +1,6 @@
 """Judge-owned HTTP routes.
 
-Ingest and session-end responses keep ``notify`` at the response root. The
-other endpoints use the project's ``{success, data, error}`` envelope.
+Media ingest returns acknowledgements; app endpoints use the standard envelope.
 """
 
 from __future__ import annotations
@@ -21,11 +20,7 @@ from judge.api.deps import (
 )
 from judge.contracts.capture import AudioChunk, FrameObservation
 from judge.contracts.feedback import FeedbackRecord, FeedbackRequest
-from judge.contracts.notification import (
-    IngestResponse,
-    NotificationPolicy,
-    NotificationPolicyUpdate,
-)
+from judge.contracts.ingest import IngestResponse
 from judge.contracts.record import ReelRecord
 from judge.contracts.session import SessionEndRequest, SessionEndResponse
 from judge.errors import NotFoundError
@@ -111,7 +106,7 @@ def _reel_id(raw: str) -> UUID:
 async def ingest_frame(
     request: Request, runtime: RuntimeDep, owner_id: IngestOwnerDep
 ) -> IngestResponse:
-    """Acknowledge promptly; judgment is asynchronous. ``notify`` is at the root."""
+    """Acknowledge promptly; judgment is asynchronous."""
     raw, media = await read_upload(request, runtime.settings.ingest_max_body_bytes)
     meta = parse_metadata(FrameObservation, raw)
     return await runtime.ingest.ingest_frame(owner_id, meta, media)
@@ -131,7 +126,7 @@ async def ingest_frame(
 async def ingest_audio(
     request: Request, runtime: RuntimeDep, owner_id: IngestOwnerDep
 ) -> IngestResponse:
-    """Acknowledge promptly; judgment is asynchronous. ``notify`` is at the root."""
+    """Acknowledge promptly; judgment is asynchronous."""
     raw, media = await read_upload(request, runtime.settings.ingest_max_body_bytes)
     meta = parse_metadata(AudioChunk, raw)
     return await runtime.ingest.ingest_audio(owner_id, meta, media)
@@ -194,30 +189,6 @@ async def feedback(
     return Envelope(data=await runtime.feedback.submit(owner_id, body))
 
 
-@router.get(
-    "/config/notification-policy",
-    response_model=Envelope[NotificationPolicy],
-    tags=["config"],
-)
-async def get_policy(
-    runtime: RuntimeDep, owner_id: ApiOwnerDep
-) -> Envelope[NotificationPolicy]:
-    """Current notification policy (default: 15 reels, 3 conflicts, 600 s)."""
-    return Envelope(data=await runtime.policy.get(owner_id))
-
-
-@router.put(
-    "/config/notification-policy",
-    response_model=Envelope[NotificationPolicy],
-    tags=["config"],
-)
-async def put_policy(
-    body: NotificationPolicyUpdate, runtime: RuntimeDep, owner_id: ApiOwnerDep
-) -> Envelope[NotificationPolicy]:
-    """Store a new policy version; it applies when the next batch opens."""
-    return Envelope(data=await runtime.policy.update(owner_id, body))
-
-
 @router.delete("/reels/{reel_id}", response_model=Envelope[Deleted], tags=["data"])
 async def delete_reel(
     reel_id: UUID, runtime: RuntimeDep, owner_id: ApiOwnerDep
@@ -247,6 +218,7 @@ async def delete_owner_data(
     return Envelope(data=Deleted())
 
 
+@router.get("/health", tags=["ops"], include_in_schema=False)
 @router.get("/healthz", tags=["ops"])
 async def healthz() -> dict[str, str]:
     """Liveness."""

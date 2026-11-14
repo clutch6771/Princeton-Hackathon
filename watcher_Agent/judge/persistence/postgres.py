@@ -21,8 +21,6 @@ from judge.errors import ConfigurationError, StorageUnavailableError
 from judge.persistence.pg_aux import (
     PgEmbeddings,
     PgFeedback,
-    PgNotifications,
-    PgPolicy,
 )
 from judge.persistence.pg_core import (
     Conn,
@@ -72,8 +70,6 @@ class PgTx:
         self.thumbnails = PgThumbnails(conn)
         self.embeddings = PgEmbeddings(conn, vector_enabled=vector_enabled)
         self.feedback = PgFeedback(conn)
-        self.policy = PgPolicy(conn)
-        self.notifications = PgNotifications(conn)
 
 
 class PostgresStorage:

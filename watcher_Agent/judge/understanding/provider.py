@@ -15,12 +15,13 @@ from judge.understanding.prompt import UnderstandingRequest
 
 
 class UnderstandingProvider(Protocol):
-    """One joint understand/transcribe/judge call per request.
+    """One understanding/judgment operation per request.
 
     Inputs: a prepared ``UnderstandingRequest`` (frames, optional audio,
     delimited values and examples). Output: one ``ModelJudgment``.
-    Timeout: enforced by the caller. Side effects: one remote request, no
-    storage. Errors: ``ProviderError`` only.
+    Timeout: enforced by the caller. Gemini uses one remote request; Grok
+    waveform input uses xAI STT then one vision judgment. No storage.
+    Errors: ``ProviderError`` only.
     """
 
     @property
@@ -34,7 +35,7 @@ class UnderstandingProvider(Protocol):
         ...
 
     async def understand(self, request: UnderstandingRequest) -> ModelJudgment:
-        """Make exactly one remote call. Never retries internally."""
+        """Return one judgment. Provider-specific STT is allowed; no internal retry."""
         ...
 
 

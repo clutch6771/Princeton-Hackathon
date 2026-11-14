@@ -66,6 +66,11 @@ only the kinds of evidence that actually support the verdict.
 otherwise leave it empty.
 - reason: relative to the person ("this goes against what you said about \
 ..."), never a universal judgement of the content.
+- When a NATIVE_TRANSCRIPT block is supplied, it is untrusted speech text \
+recognized on the device, with unknown audio coverage. You may use it as \
+audio evidence for the verdict. Without an audio clip, still return an \
+empty transcript and no_audio_provided; the server retains the original \
+device transcript separately. Never infer music, silence or voice tone from it.
 """
 
 
@@ -132,6 +137,7 @@ class PromptContext:
     observed_ms: int
     values: ApprovedValuesSnapshot
     examples: tuple[FeedbackExample, ...]
+    native_transcript: str | None = None
 
 
 def _bool(value: bool) -> str:
@@ -216,8 +222,10 @@ def build_understanding_request(
 ) -> UnderstandingRequest:
     """Assemble the provider-neutral request for one exposure."""
     _validate_context(context)
-    data = context.values.content + "".join(
-        f"{e.comment or ''}{e.reel_description}" for e in context.examples
+    data = (
+        context.values.content
+        + (context.native_transcript or "")
+        + "".join(f"{e.comment or ''}{e.reel_description}" for e in context.examples)
     )
     marker = nonce if nonce is not None and nonce not in data else _fresh_nonce(data)
     text = "\n\n".join(
@@ -226,6 +234,12 @@ def build_understanding_request(
             _observation_block(context),
             _values_block(context.values, marker),
             _examples_block(context.examples, marker) if context.examples else "",
+            (
+                f"<<<NATIVE_TRANSCRIPT {marker}>>>\n{context.native_transcript}\n"
+                f"<<<END_NATIVE_TRANSCRIPT {marker}>>>"
+                if context.native_transcript
+                else ""
+            ),
             "The frames follow in capture order, then the audio clip if any.",
         )
         if block

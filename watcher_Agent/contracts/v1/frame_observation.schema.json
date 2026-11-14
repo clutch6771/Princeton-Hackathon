@@ -78,16 +78,6 @@
   "additionalProperties": false,
   "description": "Metadata for one sampled JPEG frame (nominally one every 2 seconds).",
   "properties": {
-    "acknowledged_notification_ids": {
-      "default": [],
-      "items": {
-        "format": "uuid",
-        "type": "string"
-      },
-      "maxItems": 16,
-      "title": "Acknowledged Notification Ids",
-      "type": "array"
-    },
     "capture_ts_ms": {
       "exclusiveMinimum": 0,
       "title": "Capture Ts Ms",

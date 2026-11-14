@@ -1,68 +1,48 @@
-PLATFORM BOUNDARY
-=================
-The Python backend is platform-neutral. Nothing in watcher_Agent/judge imports
-ReplayKit, AVFoundation, Swift/Xcode code, the Android SDK, Kotlin or any
-notification API. Replacing an iOS adapter with an Android one changes no
-Judge policy, transcription logic, repository or model adapter: both speak
-the contracts in watcher_Agent/contracts/v1 (see API_CONTRACT.txt).
+PLATFORM BOUNDARY (2026-11-14)
+==============================
+AttentionAgent/ implements native capture and local notifications. The Python
+Judge only receives evidence, interprets it and persists verdicts. The model
+has no tools and cannot request screenshots, microphone access, capture,
+notifications, SQL or memory changes.
 
-This repository contains NO native code for either platform. Everything in
-sections 1 and 2 is a contract for a future adapter, not an implementation.
+Current native implementation
+-------------------------------
+SampleHandler.swift: user-started ReplayKit Broadcast Upload Extension.
+Shared/ReelTracker.swift: local boundaries, privacy text screening and one
+JPEG sample per exposure; network JPEG longest edge is <=512 pixels.
+Shared/ReelAudioTranscriber.swift: device speech recognition of app audio.
+Shared/LiveAgentBackend.swift: completed-reel JSON uploads to /agent1/ingest,
+identity header, /timeline checkpoint data and /feedback corrections.
+SampleHandler flushes, drains queued uploads and requests /session/end on
+stop; iOS may terminate an extension before a network request finishes, so
+the backend's idle timeout remains required.
+Shared/AgentBridge.swift and App/CheckpointNotifier.swift own notifications.
+App Groups exchange observations/settings. Live backend is opt-in; other
+APIClient/mock demo paths still exist and do not verify the real server.
+Coach chat still points to /agent2/chat, outside Judge ownership.
 
+PRD target path (server implemented; native stream adapter remains pending)
+--------------------------------------------------------------------------
+One 512px JPEG every 2s and independent 5s 16kHz mono AAC chunks to multipart
+/ingest/frame and /ingest/audio. The server handles timestamp alignment,
+segmentation, permitted audio assembly and selection of up to 3 frames.
+The native /agent1 path already segments on device and is not segmented again.
+It sends one JPEG + partial speech text, not the PRD's full multimodal clip.
+Do not claim raw audio interpretation or 2-3 frame coverage for that path.
 
-1. iOS ADAPTER CONTRACT (future)
---------------------------------
-Capture    User-started and user-stopped ReplayKit Broadcast Upload Extension.
-           The system capture indicator stays visible.
-Frames     One JPEG every 2 seconds. Keep the aspect ratio; longest edge
-           512 px. Downscale and compress immediately; never keep every
-           callback frame.
-Audio      App audio only (never the microphone). 16,000 Hz mono AAC,
-           nominal 5-second chunks, each independently decodable, container
-           "adts" or "mp4" declared in metadata, with capture_start_ms,
-           capture_end_ms and priming_samples.
-No video   Nothing but sampled JPEGs and AAC chunks is uploaded.
-Transport  Direct HTTPS, multipart/form-data. One upload in flight across
-           BOTH streams; drop frames when busy. Never await network work
-           inside a sample-buffer callback; copy what is permitted and
-           return, respecting sample-buffer lifetime.
-Memory     Stay under 50 MB for the whole extension process during a
-           10-minute scrolling spike. The budget includes encoder buffers,
-           image conversion, HTTP copies, queues and all other overhead.
-Clock      capture timestamps from a monotonic source anchored once per
-           session (a wall-clock adjustment must not move them).
-Privacy    Native FeedEligibilityGate BEFORE upload (see PRIVACY.txt): send
-           only positively eligible Reels frames; certify audio intervals;
-           re-check through the whole session, not only the first frame.
-           Local screening may inspect callbacks without keeping or
-           uploading them. Optionally report transition_at_ms.
-Session    New UUID per broadcast. POST /session/end on stop. On 409
-           session_ended start a new UUID. On 503 back off (Retry-After).
-Notify     Read "notify" from every ingest response; raise a local
-           notification; deduplicate by notification_id; honour expires_at
-           and a local display cooldown; acknowledge on a later request.
-           The user must enable Settings > Notifications > Screen Sharing >
-           Allow Notifications, or banners are hidden while broadcasting.
-App Groups Do not assume App Groups or shared entitlements work on a free
-           Personal Team. The design here does not need them.
+Privacy capability
+------------------
+Current legacy JSON uploads lack a certified Reels-only gate. The adapter
+labels this dev_fake. They work only in explicit development/dev_permissive.
+Production rejects them until the platform supplies PrivacyProvenance from a
+real gate. Check every interval: DMs/other apps must be discarded BEFORE
+upload, including audio. Never mark the existing text-screening heuristic as
+a trusted feed gate. Microphone audio is not part of the product.
 
-
-2. ANDROID ADAPTER CONTRACT (future)
-------------------------------------
-Same transport, payloads, lifecycle, privacy provenance and notification
-duties (MediaProjection for frames, playback capture for app audio). Only
-source_id and the local notification mechanism differ.
-
-
-3. PHYSICAL-SPIKE RESPONSIBILITIES (platform owner; not done here)
-------------------------------------------------------------------
-  [ ] Broadcast extension uploads frames while Instagram is in front
-  [ ] Instagram app audio is actually delivered (it may be withheld)
-  [ ] Signing and entitlements work with the team's account type
-  [ ] Extension memory stays under 50 MB for 10 minutes of scrolling
-  [ ] A banner appears over Instagram with the Screen Sharing toggle on
-  [ ] The native eligibility gate recognises Reels versus DMs and other apps
-  [ ] Segmentation thresholds tuned on real frames (SEGMENT_* settings)
-
-Python tests in this repository use synthetic frames and audio. They do not
-verify any item above.
+Device verification still required
+-----------------------------------
+Real Instagram app audio availability; accurate per-reel transcript boundaries;
+native eligibility gate; under-50MB extension memory for 10 minutes; signing
+and App Groups; notifications during broadcasting; real frame segmentation;
+notification timing relative to asynchronous completed judgments. Synthetic
+Python tests do not establish any of these device properties.

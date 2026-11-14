@@ -223,6 +223,7 @@ class JudgePipeline:
                 observed_ms=job.candidate.coverage.observed_ms,
                 values=values,
                 examples=examples,
+                native_transcript=job.native_transcript,
             ),
             prompt_version=self._settings.understanding_prompt_version,
             max_output_tokens=self._settings.understanding_max_output_tokens,
@@ -237,6 +238,7 @@ class JudgePipeline:
                 audio=audio,
                 first_second_observed=job.candidate.first_second_observed,
                 transcript_max_chars=self._settings.transcript_max_chars,
+                native_transcript=job.native_transcript,
             )
         except OutputValidationError as error:
             raise _Failed(

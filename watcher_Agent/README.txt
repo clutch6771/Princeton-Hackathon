@@ -1,175 +1,130 @@
-REEL WATCHER AGENT: JUDGE AND REEL TRANSCRIBER
-==============================================
+WATCHER / JUDGE BACKEND
+=======================
+Current integration: 2026-11-14. Product requirements: ../docs/project.prd.md.
+Guardian interfaces: ../docs/GUARDIAN_SPEC_V5.md.
 
-1. SCOPE
---------
-This folder holds the Judge: a platform-neutral Python (FastAPI) backend that
-  - receives sampled JPEG frames and app-audio AAC chunks,
-  - drops anything that is not privacy-certified Instagram Reels media,
-  - splits the stream into observed reel exposures,
-  - makes ONE Gemini call per reel that transcribes, describes and judges it
-    against the user's approved values (aligned | neutral | conflict),
-  - stores the result in Tiger Data PostgreSQL,
-  - returns a warning through ingest responses when 3 of the last 15 judged
-    reels conflict (600-second cooldown).
-Not here: Guardian/chat agent, Reflector, onboarding, value approval, GUI,
-native iOS/Android code, Share Extension, feed blocking or re-ranking.
+Responsibilities
+----------------
+Interpret externally supplied visual and audio evidence against approved
+values, validate the result, and store reel records for the app and Guardian.
+The Judge has no capture tools, notification policy, scheduler, outbox or
+notification delivery. Capture and local notifications live in AttentionAgent/.
+Guardian code is independently owned and unchanged by this integration.
 
-Start with (repository root):
-  JUDGE_WORKFLOW.txt          how the Judge works, step by step
-  JUDGE_MEMORY_OUTPUTS.txt    what it writes and who reads it
+Two input paths share ONE judging pipeline:
+  POST /ingest/frame + /ingest/audio
+    Sampled JPEGs and independent AAC chunks. Server segmentation, bounded
+    audio assembly, one judgment call. Grok uses a separate xAI STT call for the audio;
+    Gemini mode can transcribe/judge jointly.
+  POST /agent1/ingest
+    Current iOS ReelTracker's completed reel: one JPEG and optional device
+    speech transcript. Uses native boundaries without segmenting again.
+    Device transcript coverage is unknown: stored as partial; raw audio is
+    missing, never invented. No extra server ASR call. This compatibility
+    path is less complete than the PRD's 2-3 frames plus AAC path.
 
+Both paths use the same values, feedback examples, provider, queue, output
+validation, persistence, thumbnails, embeddings and session accounting.
+Neither returns notify. Missing values or provider failures produce a null
+verdict and an explicit evaluation_status, never a fabricated neutral verdict.
 
-2. ARCHITECTURE
----------------
-  judge/api            FastAPI routes (thin), identity, upload parsing
-  judge/ingest         admission, clock mapping, volatile session state
-  judge/privacy        backend eligibility gate
-  judge/segmentation   frame signatures, reel boundaries, frame reservoir
-  judge/audio          AAC decode (PyAV), timestamp-based PCM assembly, WAV
-  judge/transcriber    audio preparation, transcript status and validation
-  judge/values         read-only approved values (parser, reader, PG source)
-  judge/feedback       feedback storage, example retrieval, timeline, deletion
-  judge/understanding  prompt, Gemini and local adapters, output validation
-  judge/embedding      asynchronous embedding indexer
-  judge/notifications  policy, ordered batch accounting, outbox
-  judge/pipeline       finalizer, judge pipeline, completion, lifecycle
-  judge/persistence    repository interfaces, PostgreSQL adapter, migrator
-  judge/contracts      typed, versioned data contracts
-  judge/devfakes       explicit development fakes (never used in production)
-  judge/bootstrap.py   wiring from injected capabilities
-  judge/runtime_factory.py  real adapters chosen by configuration
-  migrations/          SQL migrations + migrate.py
-  contracts/v1/        exported JSON Schemas + synthetic fixtures
-  scripts/             verify.sh, dev_check.sh, schema export, dev seeding
-  docs/                the documents listed in section 6
-  tests/               unit/, storage/ (also runs on PostgreSQL), support/
-Raw media lives only in this process's RAM. Run exactly ONE process.
-
-
-3. SETUP
---------
+Run from repository root
+------------------------
   python3 -m venv .venv
-  .venv/bin/pip install -r requirements-dev.txt      (includes runtime deps)
-  cp watcher_Agent/.env.example watcher_Agent/.env   (then fill it in)
-Database: follow docs/DATABASE_INTEGRATION.txt (provision, TLS URL, pgvector,
-migrations, runtime role, seeding).
-
-
-4. CONFIGURATION AND EXECUTION
-------------------------------
-All settings: docs/MEMORY_PARAMETERS.txt. Minimum for production:
-  DEMO_USER_ID, DATABASE_URL (TLS), GEMINI_API_KEY
-Run:
-  .venv/bin/uvicorn judge.api.app_api:create_app --factory \
+  .venv/bin/pip install -r requirements-dev.txt
+  cp watcher_Agent/.env.example watcher_Agent/.env
+  # Fill DATABASE_URL, DEMO_USER_ID, XAI_API_KEY; apply migrations first.
+  .venv/bin/python -m uvicorn judge.api.app_api:create_app --factory \
       --app-dir watcher_Agent --host 0.0.0.0 --port 8000 --workers 1
-Development without Gemini or a database (synthetic judgments, nothing kept):
+
+Explicit synthetic development (no credentials/database):
   APP_ENV=development PRIVACY_MODE=dev_permissive PROVIDER_MODE=fake \
-  STORAGE_MODE=memory DEMO_USER_ID=demo-user  (same uvicorn command)
-Production refuses fake providers, memory storage, the permissive privacy
-gate and enabled SDK tracing. API reference: docs/API_CONTRACT.txt, /docs.
+  STORAGE_MODE=memory DEMO_USER_ID=demo-user \
+  .venv/bin/python -m uvicorn judge.api.app_api:create_app --factory \
+      --app-dir watcher_Agent --host 0.0.0.0 --port 8000 --workers 1
 
+GET /health (alias /healthz), /readyz, /docs. One process is required because
+media and sessions are held in bounded RAM. Every owner request needs
+X-Demo-User-Id matching DEMO_USER_ID. This is demo identity, not authentication.
 
-5. VERIFICATION
----------------
-  watcher_Agent/scripts/verify.sh
-runs ruff, black, isort, mypy, bandit, the contract-drift check and pytest
-with coverage (floor 80%). Add TEST_DATABASE_URL=postgresql://... to include
-the PostgreSQL integration tests; GEMINI_API_KEY=... with "-m live" for the
-opt-in provider smoke tests.
-Last run (2026-11-14): 553 passed, 2 skipped (pgvector not installed),
-coverage 96%, against in-memory storage and local PostgreSQL 17. Not run:
-live Gemini tests, pgvector SQL, Tiger Data cloud, any physical device.
-See docs/PRD_TRACEABILITY.txt for what is and is not verified.
+Application integration
+------------------------
+LiveAgentBackend sends the demo identity, uploads completed reels, reads
+/timeline for checkpoint digests, submits /feedback, and ends broadcasts via
+/session/end after draining uploads. Set SharedStore.demoUserID to match the
+server (default demo-user). Notifications remain in the existing app code.
 
+The current native adapter does NOT certify feed eligibility: legacy uploads
+are explicitly marked dev_fake and accepted only with dev_permissive in
+DEVELOPMENT. Production rejects them until a native Reels eligibility gate
+supplies proper provenance. Do not relax the production gate.
 
-6. DOCUMENTS
-------------
-  ../JUDGE_WORKFLOW.txt            workflow of the Judge
-  ../JUDGE_MEMORY_OUTPUTS.txt      memory outputs for Guardian and Reflector
-  docs/MEMORY_PARAMETERS.txt       authoritative memory/configuration registry
-  docs/API_CONTRACT.txt            HTTP contract, payloads, errors, delivery
-  docs/PLATFORM_BOUNDARY.txt       iOS/Android adapter contract, spike list
-  docs/PRIVACY.txt                 eligibility, audio, retention, tracing
-  docs/DATABASE_INTEGRATION.txt    Tiger Data tutorial (12 steps)
-  docs/PRD_TRACEABILITY.txt        requirement -> module -> tests
+Approved values now default to Guardian's protected Store namespace
+(user_id, "guardian", "values"), one {text, updated} entry per Vn. The Judge
+SELECTs and renders these entries in numeric ID order, preserving wording.
+VALUES_STORE_LAYOUT=document explicitly supports the previous
+(user_id, "memories")/values.md format; no fallback to stale documents occurs.
 
+judge.integration.guardian_source.JudgeDataSource implements Guardian's
+DataSource against the running Judge's real repositories. Startup exposes it as
+app.state.guardian_datasource. Pass that object to
+guardian.api.configure(store, checkpointer, source).
+Run Guardian entry points in a worker thread; they are synchronous. Guardian
+store/checkpointer provisioning and chat route ownership stay with the backend
+integration owner. This package does not implement /agent2/chat, value approval
+UI or the Reflector; the iOS coach chat route still needs that integration.
 
-7. ECC IN THIS PACKAGE
+Verification and docs
 ----------------------
-ECC is development tooling, not a runtime dependency.
-  - Routers are named *_api.py so the ECC FastAPI rule applies to them.
-  - .claude/rules/project/judge-backend.md holds the Judge invariants that
-    reviewers and future sessions must keep.
-  - pyproject.toml carries the pytest, coverage (80%) and mypy settings.
-  - scripts/verify.sh is the verification loop.
-  - The plan is in .claude/plans/judge-reel-transcriber.plan.md.
+  watcher_Agent/scripts/verify.sh
+Add TEST_DATABASE_URL pointing ONLY at a disposable PostgreSQL database for
+migration and repository integration tests. Live Gemini calls are opt-in.
 
+  ../JUDGE_WORKFLOW.txt             current execution flow
+  ../JUDGE_MEMORY_OUTPUTS.txt       stored records and consumers
+  docs/API_CONTRACT.txt             HTTP shapes and integration changes
+  docs/PLATFORM_BOUNDARY.txt        native implementation versus PRD target
+  docs/PRIVACY.txt                  capture provenance and retention
+  docs/DATABASE_INTEGRATION.txt     deployment and limited database role
+  docs/MEMORY_PARAMETERS.txt        settings and memory registry
+  docs/PRD_TRACEABILITY.txt         requirement-to-test mapping and limits
 
+Historical migrations 0001-0005 remain immutable for deployed databases.
+0005's notification tables and old batch columns are dormant: no runtime
+reads/writes them. No existing notification data is destroyed by this change.
+0006 adds the PRD/Guardian feedback label fine (legacy rerate stays readable).
+Generated contracts remain version 1 for this coordinated repo update, but
+removing notify and acknowledgements is a breaking change for older clients.
 
--Packages Used/ Necessary Packages and Extentions
+Verification for this revision: verify.sh passed (496 tests, 91% coverage;
+37 skipped without TEST_DATABASE_URL, 3 live tests deselected). Separate local
+PostgreSQL run: 65 passed, 2 skipped because pgvector is unavailable. Factory
+startup/shutdown and a completed native upload producing a stored verdict are
+covered. Changed Swift files pass SwiftFormat; Xcode build is blocked by the
+unaccepted local Xcode license. Live Gemini and physical-device tests were
+not run. These counts do not imply coach chat or production capture is ready.
 
-  Claude Code plugin
-    - ecc@ecc 2.2.3 (marketplace: https://github.com/affaan-m/ECC.git)
-    - ECC npm runtime deps (js-yaml, ajv, zod, @iarna/toml, sql.js), installed in
-      ~/.claude/plugins/cache/ecc/ecc/2.2.3/node_modules via `npm ci --omit=dev`
-    - Node.js >= 18 (installed: v24)
+Grok configuration and sample executions
+---------------------------------------
+Default judge provider: grok. Put your key ONLY in watcher_Agent/.env:
+  PROVIDER_MODE=grok
+  XAI_API_KEY=<your key>
+  GROK_MODEL_ID=grok-4.7
+  GROK_TRANSCRIPTION_MODEL=grok-voice-transcribe-2.0
+  EMBEDDING_INDEXING_ENABLED=false
+The ignored local file is prepared for development/memory mode. This mode
+uses synthetic values and loses records on restart. PostgreSQL production
+still needs the existing database and eligibility configuration.
 
-  Python (project .venv, pinned in requirements-dev.txt)
-    black 26.10.1, isort 9.0.2, ruff 0.17.5, mypy 2.4.1, bandit 1.9.4,
-    pytest 9.2.0, pytest-cov 7.1.0, python-dotenv 1.2.4
-    Setup: python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+Grok's vision/chat API accepts text and images. Waveforms use xAI /v1/stt,
+then one /v1/chat/completions request with frames, transcribed text and
+approved values. The transcript is retained from STT, not invented by the
+judging model. Empty STT output is unintelligible, not proof of music or
+silence. Native transcript uploads skip STT. A normal audio attempt therefore
+uses TWO xAI requests; one judging call remains. Retries may repeat STT.
+No Gemini key/call is required in Grok mode; embedding indexing is disabled.
+The existing Gemini/local/fake adapters remain available explicitly.
 
-  Swift / iOS (Homebrew)
-    swiftformat 0.64.5, swiftlint 0.65.1
-    Setup: brew install swiftformat swiftlint
-    Xcode (App Store) - NOT INSTALLED YET. Required for iOS builds and for
-    swiftlint. After installing: sudo xcode-select -s /Applications/Xcode.app
-
-
--ECC Configuration Change Log (2026-11-14)
-
-  Plugin installation (user-level, outside the repo)
-    1. Removed duplicate ECC install scoped to the home folder (/Users/gwyi)
-       -> ~/.claude/plugins/installed_plugins.json
-    2. Removed ECC marketplace + enable from user settings so ECC is
-       configured only by this repo -> ~/.claude/settings.json
-    3. Installed ECC's missing npm packages so its hooks can run
-       -> ~/.claude/plugins/cache/ecc/ecc/2.2.3/node_modules
-
-  Project settings
-    4. Marketplace source aligned to the registered git URL form
-       -> .claude/settings.json (extraKnownMarketplaces.ecc)
-    5. Commit attribution set to match ECC git rule: includeCoAuthoredBy=false
-       -> .claude/settings.json
-    6. Added PostToolUse format/lint hook for .py/.ipynb/.swift
-       -> .claude/settings.json (hooks) + .claude/hooks/post-edit-format-lint.sh
-       (ruff/isort/black/mypy for Python, ruff for notebooks, swiftformat and
-       swiftlint for Swift; swiftlint skipped until Xcode is installed)
-
-  Rules
-    7. Python rules now also apply to Jupyter notebooks ("**/*.ipynb")
-       -> .claude/rules/ecc/python/{coding-style,patterns,security,testing,hooks}.md
-    8. FastAPI rule no longer triggers on every "app/" folder
-       -> .claude/rules/ecc/python/fastapi.md (removed "**/app/**/*.py")
-    9. Swift security rule now covers .xcconfig, Info.plist, .entitlements
-       -> .claude/rules/ecc/swift/security.md
-   10. Hook rules point at the project hook instead of ~/.claude/settings.json
-       -> .claude/rules/ecc/python/hooks.md, .claude/rules/ecc/swift/hooks.md
-   11. Attribution note corrected to match the project setting
-       -> .claude/rules/ecc/common/git-workflow.md
-   12. Agents are suggested, not auto-spawned without asking
-       -> .claude/rules/ecc/common/agents.md
-   13. New ML rule (ECC has none): points to mle-workflow / pytorch-patterns
-       skills and ecc:mle-reviewer -> .claude/rules/project/machine-learning.md
-   NOTE: items 7-12 edit vendored ECC rules; re-apply them after updating ECC.
-
-  Tooling config + docs
-   14. Tool config -> pyproject.toml, .swiftlint.yml, .swiftformat
-   15. Pinned Python dev deps -> requirements-dev.txt
-   16. ML artifacts, tool caches, Xcode build/ ignored -> .gitignore
-   17. Tooling section added -> CLAUDE.md
-
-  Still to do manually
-    - Install Xcode, then: sudo xcode-select -s /Applications/Xcode.app
-    - Restart Claude Code so the plugin, rules and hook reload; check with /plugin
+See docs/SAMPLE_EXECUTIONS.txt for generated audio/video examples, Guardian
+approval executions, database tests, deliberately wrong decisions and the
+explicit live Grok test. The replay report is not a recognition benchmark.

@@ -10,8 +10,6 @@ from uuid import UUID
 from pydantic import Field
 
 from judge.contracts.base import CONTRACT_VERSION, Contract, ContractVersion
-from judge.contracts.capture import MAX_ACKS_PER_REQUEST
-from judge.contracts.notification import NotificationEnvelope
 
 SESSION_COMPLETED_EVENT = "session_completed"
 
@@ -105,15 +103,11 @@ class SessionEndRequest(Contract):
 
     contract_version: ContractVersion = CONTRACT_VERSION
     session_id: UUID
-    acknowledged_notification_ids: tuple[UUID, ...] = Field(
-        default=(), max_length=MAX_ACKS_PER_REQUEST
-    )
 
 
 class SessionEndResponse(Contract):
-    """Response of ``POST /session/end``. ``notify`` stays at the root."""
+    """Response of ``POST /session/end``."""
 
     contract_version: ContractVersion = CONTRACT_VERSION
     session_id: UUID
     status: SessionStatus
-    notify: NotificationEnvelope | None = None

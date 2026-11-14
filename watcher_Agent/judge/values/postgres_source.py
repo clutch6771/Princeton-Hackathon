@@ -1,7 +1,9 @@
 """Read the ``values.md`` item from the shared LangGraph Postgres Store.
 
-Logical location: namespace ``(user_id, "memories")``, key ``values.md``. The
-Store table keeps the namespace as dot-joined text in ``prefix``.
+Guardian stores each approved entry in ``(user_id, "guardian", "values")``.
+Only its protected approval path writes this namespace. The Judge renders
+these entries without importing or modifying Guardian. The old document
+layout remains an explicit compatibility option; there is no stale fallback.
 
 Why a direct SELECT instead of ``AsyncPostgresStore.aget``: the library's read
 statement contains a TTL-refresh ``UPDATE`` in a CTE, and PostgreSQL checks
@@ -13,6 +15,7 @@ Store use the library with a separate owner role.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from psycopg import AsyncConnection, sql
@@ -35,20 +38,46 @@ class PostgresMemoryItemSource:
         pool: AsyncConnectionPool[AsyncConnection[dict[str, Any]]],
         *,
         schema: str = "public",
+        layout: str = "guardian",
     ) -> None:
         self._pool = pool
+        self._layout = layout
         self._query = sql.SQL(
-            "SELECT value, updated_at FROM {} "
-            "WHERE prefix = %s AND key = %s "
+            "SELECT key, value, updated_at FROM {} "
+            "WHERE prefix = %s "
             "AND (expires_at IS NULL OR expires_at > now())"
         ).format(sql.Identifier(schema, "store"))
 
     async def fetch(self, owner_id: str) -> StoredMemoryItem | None:
         async with self._pool.connection() as connection:
-            cursor = await connection.execute(
-                self._query, (memory_prefix(owner_id), VALUES_KEY)
+            prefix = (
+                f"{owner_id}.guardian.values"
+                if self._layout == "guardian"
+                else memory_prefix(owner_id)
             )
-            row = await cursor.fetchone()
-        if row is None:
+            cursor = await connection.execute(self._query, (prefix,))
+            rows = await cursor.fetchall()
+        if self._layout != "guardian":
+            row = next((r for r in rows if r["key"] == VALUES_KEY), None)
+            return (
+                StoredMemoryItem(value=row["value"], updated_at=row["updated_at"])
+                if row
+                else None
+            )
+        if not rows:
             return None
-        return StoredMemoryItem(value=row["value"], updated_at=row["updated_at"])
+        if any(
+            re.fullmatch(r"V[1-9][0-9]*", r["key"]) is None
+            or not isinstance(r["value"].get("text"), str)
+            or not r["value"]["text"].startswith(f"## {r['key']}:")
+            for r in rows
+        ):
+            return StoredMemoryItem(value={})  # fail closed on malformed records
+        rows.sort(key=lambda r: int(r["key"][1:]))
+        return StoredMemoryItem(
+            value={
+                "content": "\n\n".join(r["value"]["text"] for r in rows),
+                "approval": {"status": "approved"},
+            },
+            updated_at=max(r["updated_at"] for r in rows),
+        )

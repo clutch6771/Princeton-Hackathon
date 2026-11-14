@@ -58,7 +58,7 @@ async def _post_frame(
     )
 
 
-async def test_frame_ingest_acknowledges_with_notify_at_the_response_root(
+async def test_frame_ingest_returns_only_an_acknowledgement(
     client: httpx.AsyncClient,
 ) -> None:
     response = await _post_frame(client)
@@ -67,18 +67,18 @@ async def test_frame_ingest_acknowledges_with_notify_at_the_response_root(
     assert response.status_code == 200
     assert body["status"] == "accepted"
     assert body["session_id"] == str(SESSION_ID)
-    assert "notify" in body and body["notify"] is None
+    assert "notify" not in body
     assert "data" not in body and "success" not in body
 
 
-async def test_audio_ingest_acknowledges_with_notify_at_the_response_root(
+async def test_audio_ingest_returns_only_an_acknowledgement(
     client: httpx.AsyncClient,
 ) -> None:
     response = await client.post("/ingest/audio", files=_audio_files(), headers=AUTH)
 
     assert response.status_code == 200
     assert response.json()["status"] == "accepted"
-    assert response.json()["notify"] is None
+    assert "notify" not in response.json()
 
 
 async def test_uploads_never_touch_a_temporary_file(
@@ -186,7 +186,7 @@ async def test_session_end_is_idempotent_and_unknown_sessions_are_404(
     reuse = await _post_frame(client, ts_ms=T0_MS + 2000)
 
     assert first.status_code == second.status_code == 200
-    assert second.json()["status"] == "ended" and "notify" in second.json()
+    assert second.json()["status"] == "ended" and "notify" not in second.json()
     assert missing.status_code == 404
     assert reuse.status_code == 409
     assert reuse.json()["error"]["code"] == "session_ended"
@@ -240,32 +240,6 @@ async def test_feedback_validation_and_unknown_reel(client: httpx.AsyncClient) -
 
     assert bad_label.status_code == 422
     assert unknown.status_code == 404
-
-
-async def test_policy_can_be_read_and_updated_with_validation(
-    client: httpx.AsyncClient,
-) -> None:
-    default = await client.get("/config/notification-policy", headers=AUTH)
-    updated = await client.put(
-        "/config/notification-policy",
-        json={"batch_size": 10, "minimum_conflicts": 2, "cooldown_seconds": 300},
-        headers=AUTH,
-    )
-    invalid = await client.put(
-        "/config/notification-policy",
-        json={"batch_size": 5, "minimum_conflicts": 6, "cooldown_seconds": 300},
-        headers=AUTH,
-    )
-
-    assert default.json()["data"] == {
-        "batch_size": 15,
-        "minimum_conflicts": 3,
-        "cooldown_seconds": 600,
-        "version": 0,
-        "updated_at": None,
-    }
-    assert updated.json()["data"]["version"] == 1
-    assert invalid.status_code == 422
 
 
 async def test_owner_data_can_be_deleted(h: Harness, client: httpx.AsyncClient) -> None:
@@ -336,10 +310,10 @@ async def test_openapi_documents_the_judge_owned_contracts(
         "/timeline",
         "/thumbs/{reel_id}.jpg",
         "/feedback",
-        "/config/notification-policy",
     } <= set(spec["paths"])
     assert "/share" not in spec["paths"] and "/chat" not in spec["paths"]
     frame_body = spec["paths"]["/ingest/frame"]["post"]["requestBody"]["content"]
     assert "multipart/form-data" in frame_body
-    assert "notify" in spec["components"]["schemas"]["IngestResponse"]["properties"]
+    assert "notify" not in spec["components"]["schemas"]["IngestResponse"]["properties"]
+    assert "/config/notification-policy" not in spec["paths"]
     assert "not production authentication" in spec["info"]["description"]

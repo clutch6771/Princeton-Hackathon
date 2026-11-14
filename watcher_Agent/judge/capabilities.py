@@ -16,7 +16,7 @@ FeedbackRetriever     judge.feedback.retriever            unit/test_services.py
 UnderstandingProvider judge.understanding.provider        unit/test_adapters.py
 EmbeddingProvider     judge.understanding.provider        unit/test_adapters.py
 Reel/Session/Feedback judge.persistence.interfaces        storage/test_repositories.py
-  repositories, NotificationRepository (policy and outbox), Storage
+  repositories, Storage
 RateLimiter           judge.runtime.rate_limiter          unit/test_runtime.py
 Clock                 judge.runtime.clock                 unit/test_runtime.py
 WorkerQueue           judge.runtime.worker_queue          unit/test_runtime.py
@@ -32,8 +32,6 @@ from judge.audio.codec import AacDecoder
 from judge.feedback.retriever import FeedbackRetriever
 from judge.persistence.interfaces import (
     FeedbackRepository,
-    NotificationRepository,
-    PolicyRepository,
     ReelRepository,
     SessionRepository,
     Storage,
@@ -54,8 +52,6 @@ __all__ = [
     "FeedEligibilityGate",
     "FeedbackRepository",
     "FeedbackRetriever",
-    "NotificationRepository",
-    "PolicyRepository",
     "RateLimiter",
     "ReelRepository",
     "ReelSegmenter",
