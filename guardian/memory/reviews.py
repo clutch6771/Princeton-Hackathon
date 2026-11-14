@@ -50,7 +50,7 @@ class Review:
 @dataclass(frozen=True)
 class Summary:
     bullets: tuple[str, ...]  # "What I learned", one to three
-    question: str  # the closing question for the user
+    question: str | None  # the closing question for the user, if the run wrote one
 
 
 # --- Records -----------------------------------------------------------------------
@@ -192,8 +192,8 @@ def feedback_cursor(store: BaseStore, user_id: str) -> datetime:
 def parse_summary(text: str, missing_ids: Callable[[str], list[str]]) -> Summary:
     """Read the "What I learned" bullets and the closing question from a session summary.
 
-    Raises ReviewError unless there is at least one bullet, every bullet cites
-    evidence that exists, and the summary ends with one question.
+    Raises ReviewError unless there is at least one bullet and every bullet cites
+    evidence that exists. The closing question is optional.
     """
     bullets: list[str] = []
     question: str | None = None
@@ -220,17 +220,15 @@ def parse_summary(text: str, missing_ids: Callable[[str], list[str]]) -> Summary
         missing = missing_ids(bullet)
         if missing:
             raise ReviewError(f"a bullet cites evidence that does not exist: {missing}")
-    if question is None or not question.endswith("?"):
-        raise ReviewError(
-            "the session summary does not end with a question for the user"
-        )
-    return Summary(bullets=kept, question=question)
+    # A missing closing question does not fail the run: the card is added without one.
+    closing = question if question and question.endswith("?") else None
+    return Summary(bullets=kept, question=closing)
 
 
 def learned_prompt(summary: Summary) -> str:
-    """The text of a "What I learned" card: the bullets, then the closing question."""
+    """The text of a "What I learned" card: the bullets, then the closing question if any."""
     listed = "\n".join(f"- {bullet}" for bullet in summary.bullets)
-    return f"{listed}\n\n{summary.question}"
+    return f"{listed}\n\n{summary.question}" if summary.question else listed
 
 
 def normalize_hypotheses(text: str) -> str:

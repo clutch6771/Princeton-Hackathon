@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Saturday Nov 14, 5:15 pm. Branch: `guardian`.
+Last updated: Saturday Nov 14, 5:12 pm. Branch: `guardian`.
 
 ## Where things stand
 
@@ -12,12 +12,13 @@ Last updated: Saturday Nov 14, 5:15 pm. Branch: `guardian`.
 | 1. Interview and value approval | Done | `e5d897a`, `5fbb82f` |
 | 2. Reel explanation and feedback in chat | Done | `b2fc5ea` |
 | Integration checkpoint 1 | Ready on the Guardian side; waiting for the owner to confirm the chat from the app or the dev server | `86e0a5f` and the dev-server commit |
-| 3. Reflector | Done | this commit |
-| 4. Inbox approval (`get_questions`, `answer_question`) | Not started | |
+| 3. Reflector | Done | `5caef44` |
+| 4. Inbox approval (`get_questions`, `answer_question`) | Done; integration checkpoint 2 waiting on the owner | this commit |
+| 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) | Not started; the closing question on the "What I learned" card is already in | |
 | 5. Learning evaluation | Not started | |
 | Optional items | Not started | |
 
-Offline tests: 267 passing in `guardian/` and 9 in `dev_server/`. They use a scripted model and make no API calls.
+Offline tests: 298 passing in `guardian/` and 9 in `dev_server/`. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -128,7 +129,7 @@ Order followed: the tool restrictions were built and tested first, before any te
 - **Cards.** `queue_question` stages a value-change card with the same quote, evidence and duplicate checks as chat proposals. Limits: 2 per run, 5 open in the inbox. Re-rate cards are refused (optional feature not built).
 - **All or nothing.** Before a run the three files are saved. On any failure they are restored and staged cards and proposals are dropped. On success staged cards become pending, the "What I learned" card is added under one fixed ID per session, and the feedback cursor moves to when the run began.
 - **One run at a time.** A per-user lock in the process plus the `running` review record; a run left running for 10 minutes is rolled back and retried; a session is skipped after 3 failed attempts.
-- **What a run must produce.** A session summary with 1 to 3 "What I learned" bullets, each citing evidence that exists, and one closing question (from the reflection addendum). Otherwise the run fails and is rolled back. More than 3 bullets are cut to 3.
+- **What a run must produce.** A session summary with 1 to 3 "What I learned" bullets, each citing evidence that exists. Otherwise the run fails and is rolled back. More than 3 bullets are cut to 3. The closing question (from the reflection addendum) is asked for by the skill but is optional: if it is missing, the run is accepted and the card is added without a question.
 - **Sessions seen** in hypotheses.md is recomputed in code from the distinct session IDs in each hypothesis's evidence.
 
 Results: 25 tests on the agent and its tools, 25 on `reflect_pending` (success, repeat calls, failure and restore, retry limit, crashed runs, concurrent calls, unfinished sessions, caps across five sessions).
@@ -139,6 +140,31 @@ Live (Flash-Lite), the seeded feedback session, two runs of about 85 seconds eac
 - The skill's step 5 was made explicit about counting marks per group. Run 2 queued both cards: the V1 refinement, and a new value for hustle content with `Suggested wording`, citing the three marks and telling the user the wording is a suggestion.
 
 Decision: the Reflector stays on `gemini-3.5-flash-lite`. It followed the session-review skill.
+
+### Caveat for the learning evaluation: the skill was adjusted after a run on the feedback session
+
+The learning evaluation runs the Reflector on the feedback session (`s_001`). The skill was changed after seeing the Reflector's output on that same session, so the evaluation is not a blind test of the skill. Say so when presenting the result. What changed, in order:
+
+1. **After live run 1** (which proposed the V1 refinement but nothing for the three "not for me" marks), step 5 was reworded to say: group the disagree and not_for_me marks by what the reels have in common, count each group, and give every group with three or more marks its own proposal, up to two; a not_for_me mark counts even with no comment. The wording is general. It names no topic, value or ID from the seed data.
+2. **A leak found and removed before the evaluation.** The format examples at the bottom of the skill, written before any live run, used IDs that happened to match the seed data: `V1` with evidence `fb_001, fb_003, fb_005` (three of the rehab disagreements) and a summary bullet citing `fb_002, fb_004` (two of the hustle marks). They now use IDs that do not exist in the seed (`V7`, `fb_101`, `s_020`), with a line saying they are made up. Live runs 1 and 2 were made with the old examples; run 3 was made after the change and again produced both cards.
+3. The two example sentences in step 8 are the spec's and addendum's own text ("gym-comparison reels", "comparison reels hard to scroll past") and are unchanged.
+
+The held-out reels and their labels were never shown to the Reflector or used to adjust anything.
+
+## Step 4: inbox approval
+
+Built: `get_questions` and `answer_question` (`inbox_flow.py`).
+
+- `get_questions` returns the user's pending cards, oldest first, in the spec's `Question` shape. Staged and answered cards, another user's cards, and value cards whose proposal is no longer pending are left out. A card waiting in chat is not in the inbox.
+- `answer_question` checks the action against the card kind: `approve`, `edit` or `reject` for a value card; `dismiss` for a "What I learned" card. Anything else, a card already answered, or another user's card returns `ok: false` and changes nothing.
+- A value card is decided through the same single write path as a chat card, so the same checks apply. An invalid edit or a full value list leaves the card pending. A stale card (its target value changed since the card was made) is refused and closed.
+- Re-rate cards are refused: that optional feature is not built.
+
+Results: 25 tests. Live (Flash-Lite): the Reflector reviewed the feedback session and queued two value cards; both were approved through `answer_question`, and `get_values` then returned the refined V1 and a new V4 stored as `Agreed wording`.
+
+Also fixed: an Evidence line could end up with two "approved" stamps when an agent added new evidence after the old stamp. An earlier stamp is now removed wherever it sits.
+
+The terminal chat gained `/reflect`, `/inbox` and `/answer`, so the whole loop can be run by hand.
 
 ## Conventions
 

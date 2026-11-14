@@ -17,12 +17,19 @@ from typing import Any
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 
-from guardian import chat_flow, config, models, reflect_flow
+from guardian import chat_flow, config, inbox_flow, models, reflect_flow
 from guardian.chat_agent import build_chat_agent
 from guardian.datasource import DataSource
 from guardian.deps import Deps
 from guardian.memory import notes, reflector_files, values
-from guardian.types import ChatContext, Decision, GuardianResponse
+from guardian.types import (
+    Answer,
+    AnswerResult,
+    ChatContext,
+    Decision,
+    GuardianResponse,
+    Question,
+)
 
 _deps: Deps | None = None
 _chat_agent: Any | None = None
@@ -102,6 +109,21 @@ def reflect_pending(user_id: str) -> int:
         return deps.reflector_model or models.build_model(config.reflector_model_name())
 
     return reflect_flow.reflect_pending(deps, user_id, build_model)
+
+
+def get_questions(user_id: str) -> list[Question]:
+    """The inbox: "What I learned" cards and value-change cards waiting for the user."""
+    return inbox_flow.get_questions(_require_deps(), user_id)
+
+
+def answer_question(user_id: str, question_id: str, answer: Answer) -> AnswerResult:
+    """Apply the user's answer to an inbox card.
+
+    A value-change card takes approve, edit (with edited_text) or reject; a "What I
+    learned" card takes dismiss. Anything else, a card already answered, or another
+    user's card returns ok=False with an error and changes nothing.
+    """
+    return inbox_flow.answer_question(_require_deps(), user_id, question_id, answer)
 
 
 def get_values(user_id: str) -> str:

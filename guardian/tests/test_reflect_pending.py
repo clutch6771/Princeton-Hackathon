@@ -307,20 +307,27 @@ def test_a_session_is_skipped_after_three_failed_attempts(reflect, store):
     "bad_summary",
     [
         summary(bullets=[]),
-        summary(question=None),
-        summary(question="You should watch less of this."),
         summary(bullets=["You marked reels as not for you. [fb_999]"]),
         summary(bullets=["You marked reels as not for you."]),
     ],
 )
-def test_a_summary_without_valid_bullets_or_a_closing_question_fails_the_run(
-    reflect, store, bad_summary
-):
+def test_a_summary_without_valid_bullets_fails_the_run(reflect, store, bad_summary):
     reviewed, _ = reflect(good_run(text=bad_summary))
 
     assert reviewed == 0
     assert inbox.list_cards(store, USER) == []
     assert reflector_files.read_file(store, USER, reflector_files.BRIEF) == ""
+
+
+@pytest.mark.parametrize("question", [None, "You should watch less of this."])
+def test_a_missing_closing_question_does_not_fail_the_run(reflect, store, question):
+    reviewed, _ = reflect(good_run(text=summary(question=question)))
+
+    assert reviewed == 1
+    (learned,) = cards(store, "learned")
+    assert learned.prompt == f"- {BULLETS[0]}\n- {BULLETS[1]}"
+    assert len(cards(store, "value_change")) == 1
+    assert reviews.get_review(store, USER, SESSION).status == reviews.STATUS_DONE
 
 
 def test_a_run_that_writes_no_summary_fails(reflect, store):

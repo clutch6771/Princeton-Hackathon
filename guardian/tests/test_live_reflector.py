@@ -76,3 +76,16 @@ def test_reflector_reviews_the_feedback_session_and_queues_cards():
     assert "fb_" in cited
     brief = reflector_files.read_file(store, USER, reflector_files.BRIEF)
     assert 0 < len(brief.split()) <= reflector_files.BRIEF_WORD_CAP
+
+    # Step 4: the user approves every value-change card, unchanged, from the inbox.
+    questions = api.get_questions(USER)
+    assert {q["kind"] for q in questions} == {"learned", "value_change"}
+    for question in questions:
+        if question["kind"] == "value_change":
+            result = api.answer_question(USER, question["id"], {"action": "approve"})
+            logger.info("approved %s -> %s", question["id"], result)
+            assert result == {"ok": True, "error": None}
+    values_after = api.get_values(USER)
+    logger.info("--- values after approval ---\n%s", values_after)
+    assert values_after != values_before
+    assert [q["kind"] for q in api.get_questions(USER)] == ["learned"]

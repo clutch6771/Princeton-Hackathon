@@ -16,6 +16,7 @@ import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+from typing import cast
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
@@ -23,12 +24,21 @@ from langgraph.store.memory import InMemoryStore
 from guardian import api, config
 from guardian.datasource import FakeDataSource
 from guardian.seed.install import install_initial_values
-from guardian.types import ChatContext, Decision, GuardianResponse
+from guardian.types import (
+    Answer,
+    ChatContext,
+    Decision,
+    GuardianResponse,
+    Question,
+)
 
 DEMO_USER = "demo-user"
 DRIFT_REELS = ("rl_014", "rl_015", "rl_016")  # three conflicts in the demo session
 DRIFT_QUESTION = "Why did I get this notification?"
 NO_VALUES = "(no approved values yet)"
+EMPTY_INBOX = "(inbox is empty)"
+ANSWERED = "Done."
+ANSWER_USAGE = "! Use: /answer <number> approve | edit | reject | dismiss"
 EMPTY_FILE = "(empty)"
 QUIT_COMMANDS = ("/quit", "/exit")
 
@@ -40,6 +50,9 @@ HELP = """Type a message to chat. Commands:
   /values    show the approved values (what the Judge reads)
   /memory    show everything stored about this user
   /seed      approve the persona's three starting values (if there are none)
+  /reflect   run the Reflector on finished sessions (takes a few minutes), then show the inbox
+  /inbox     show the cards waiting in the inbox
+  /answer    answer an inbox card: /answer <number> approve | edit | reject | dismiss
   /help      show this list
   /quit      leave"""
 
@@ -99,6 +112,55 @@ def seed_lines(user_id: str) -> list[str]:
     return [f"Approved values: {', '.join(ids)}"]
 
 
+def question_lines(number: int, question: Question) -> list[str]:
+    if question["kind"] == "learned":
+        return [f"[{number}] What I learned", question["prompt"]]
+    change = question["value_change"]
+    if change is None:
+        return [f"[{number}] {question['kind']}", question["prompt"]]
+    is_new = change["value_id"] == "new"
+    target = "new value" if is_new else f"change to {change['value_id']}"
+    lines = [f"[{number}] VALUE CARD ({target})", question["prompt"]]
+    if change["old_text"]:
+        lines += ["Current text:", change["old_text"], "Proposed text:"]
+    return [*lines, change["new_text"], f"Evidence given: {change['evidence']}"]
+
+
+def inbox_lines(user_id: str) -> list[str]:
+    questions = api.get_questions(user_id)
+    if not questions:
+        return [EMPTY_INBOX]
+    lines: list[str] = []
+    for number, question in enumerate(questions, start=1):
+        lines += question_lines(number, question)
+    return [*lines, "--- /answer <number> approve | edit | reject | dismiss ---"]
+
+
+def answer_lines(user_id: str, text: str, read_block: Callable[[], str]) -> list[str]:
+    """Handle "/answer <number> <action>" for a card in the inbox."""
+    parts = text.split()
+    if len(parts) != 3 or not parts[1].isdigit():
+        return [ANSWER_USAGE]
+    questions = api.get_questions(user_id)
+    number = int(parts[1])
+    if not 1 <= number <= len(questions):
+        return [f"! There is no card {number}. Type /inbox."]
+    action = parts[2].lower()
+    answer = {"action": action}
+    if action == "edit":
+        answer["edited_text"] = read_block()
+    result = api.answer_question(
+        user_id, questions[number - 1]["id"], cast(Answer, answer)
+    )
+    return [ANSWERED] if result["ok"] else [f"! {result['error']}"]
+
+
+def reflect_lines(user_id: str) -> list[str]:
+    reviewed = api.reflect_pending(user_id)
+    noun = "session" if reviewed == 1 else "sessions"
+    return [f"Reviewed {reviewed} {noun}.", *inbox_lines(user_id)]
+
+
 def handle(session: Session, line: str, read_block: Callable[[], str]) -> list[str]:
     """Handle one line typed by the user and return the lines to print."""
     text = line.strip()
@@ -134,6 +196,12 @@ def handle(session: Session, line: str, read_block: Callable[[], str]) -> list[s
         return memory_lines(user_id)
     if command == "/seed":
         return seed_lines(user_id)
+    if command == "/reflect":
+        return reflect_lines(user_id)
+    if command == "/inbox":
+        return inbox_lines(user_id)
+    if command == "/answer":
+        return answer_lines(user_id, text, read_block)
     return [f"! Unknown command {command}. Type /help."]
 
 

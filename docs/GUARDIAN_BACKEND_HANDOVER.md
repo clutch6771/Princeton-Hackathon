@@ -1,6 +1,6 @@
-# Guardian handover for the backend: chat routes (checkpoint 1)
+# Guardian handover for the backend
 
-For the backend owner. It covers the four routes that are ready now: `/chat`, `/chat/resume`, `/status` and `/memory`. `/questions` and the background review job come at checkpoint 2.
+For the backend owner. Checkpoint 1 covers the chat routes: `/chat`, `/chat/resume`, `/status` and `/memory`. Checkpoint 2 adds the inbox routes and the background review job; they are described at the end of this page.
 
 The Guardian package exposes Python functions; you own the routes. Each route below is one function call. Return the function's result as the response body, unchanged.
 
@@ -161,6 +161,107 @@ Read-only. File name to markdown text; an empty string means nothing is stored y
 ## For the Judge
 
 `api.get_values(user_id)` returns the `values.md` text above, or `""`. Call it for each reel; do not read the store directly. The draft Judge prompt is in `guardian/judge_prompt.md`.
+
+## Checkpoint 2: the inbox and the review job
+
+| Route or job | Function call | Request body |
+| --- | --- | --- |
+| `GET /questions` | `api.get_questions(user_id)` | none |
+| `POST /questions/{id}/answer` | `api.answer_question(user_id, question_id, answer)` | `{"action": "...", "edited_text": "..."}` |
+| Background job | `api.reflect_pending(user_id)` | none |
+
+### The review job
+
+`api.reflect_pending(user_id)` runs the Reflector on every finished session that has not been reviewed and returns how many it reviewed.
+
+- **Never call it inside a request the app is waiting on.** One session takes 1 to 3 minutes. Run it as a background task.
+- Call it in three places: when the broadcast stops (`POST /session/end`), when the app opens, and on a 10-minute timer. Extra calls are harmless: it returns `0` if a review is already running or nothing is waiting.
+- A session counts as finished when `stopped` is true or it has had no new reels for 10 minutes. Both come from your `DataSource.list_sessions`.
+- It does not raise for a failed review. A failed run is rolled back and retried on a later call, up to three times.
+
+### `GET /questions`
+
+Returns the cards waiting for the user, oldest first. `created` is a Python `datetime`; send it as an ISO 8601 string.
+
+```json
+[
+  {
+    "id": "learned_s_001",
+    "kind": "learned",
+    "prompt": "- You marked 3 hustle reels as not for you. [fb_002, fb_004, fb_007]\n- You disagreed with 5 flags on injury rehab reels. [fb_001, fb_003, fb_005]\n\nWhat makes a rehab story feel different from a transformation video to you?",
+    "session_id": "s_001",
+    "value_change": null,
+    "reel_ids": null,
+    "created": "2026-11-14T22:30:00+00:00"
+  },
+  {
+    "id": "q_3f9a1c2b7d4e",
+    "kind": "value_change",
+    "prompt": "You disagreed with 5 flags on injury rehab reels. I've added an Unless line; edit it if you'd like.",
+    "session_id": "s_001",
+    "value_change": {
+      "value_id": "V1",
+      "old_text": "## V1: Fitness without body comparison (strength: high)\n- Want more: form tutorials, training plans, recovery\n- Want less: before/after transformations, physique rating\n- Unless: none\n- In my words: \"gym stuff is great, comparing bodies is not\"\n- Evidence: said at onboarding; approved 2026-11-14",
+      "new_text": "## V1: Fitness without body comparison (strength: high)\n- Want more: form tutorials, training plans, recovery\n- Want less: before/after transformations, physique rating\n- Unless: injury rehab and recovery progress\n- In my words: \"gym stuff is great, comparing bodies is not\"\n- Evidence: said at onboarding; approved 2026-11-14",
+      "evidence": "fb_001, fb_003, fb_005"
+    },
+    "reel_ids": null,
+    "created": "2026-11-14T22:30:01+00:00"
+  }
+]
+```
+
+- A `learned` card's `prompt` is one to three bullets and, usually, a closing question after a blank line. Show it as text.
+- A `value_change` card has the same four fields as a card in chat, so the app can use one card component. Show `prompt` above it.
+- `kind` can also be `rerate` in the contract, but that feature is not built; no such card is produced.
+- An empty inbox is `[]`.
+
+### `POST /questions/{id}/answer`
+
+| Card kind | Valid `action` | Effect |
+| --- | --- | --- |
+| `value_change` | `approve`, `edit` (with `edited_text`), `reject` | Approve or a valid edit stores the value; reject stores nothing. The card leaves the inbox |
+| `learned` | `dismiss` | The card leaves the inbox |
+
+Request:
+
+```json
+{"action": "approve"}
+```
+
+Response, success:
+
+```json
+{"ok": true, "error": null}
+```
+
+Response, an invalid edit. Nothing is stored and the card stays in the inbox:
+
+```json
+{
+  "ok": false,
+  "error": "An entry has 6 lines; this one has 1. Keep the card's six lines: the ## header, Want more, Want less, Unless, the wording line and Evidence. Change only the text after each label."
+}
+```
+
+Other refusals, each with `"ok": false` and nothing changed:
+
+| Case | `error` |
+| --- | --- |
+| The action does not fit the card | `A "What I learned" card can only be dismissed.` or `A value card can be answered with approve, edit or reject.` |
+| The card was already answered | `This card was already answered.` |
+| Unknown ID, or another user's card | `This card does not exist.` |
+| The value changed since the card was made | `This value has changed since the card was made, so the card no longer applies.` The card is closed and leaves the inbox |
+
+After a successful approval, `api.get_values(user_id)` returns the new text, so the Judge uses it from the next reel.
+
+### Checks for checkpoint 2
+
+- [ ] A finished session triggers `reflect_pending` in the background, and `GET /questions` then returns a "What I learned" card
+- [ ] A value-change card renders with the same component as in chat
+- [ ] Approving it changes what the Judge gets from `get_values`
+- [ ] Dismissing the "What I learned" card removes it
+- [ ] An invalid edit shows the error and keeps the card
 
 ## A reference server until the backend is ready
 

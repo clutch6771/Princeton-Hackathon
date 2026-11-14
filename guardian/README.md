@@ -2,7 +2,7 @@
 
 The two agents that talk with the user and learn about them: the **Guardian** (chat agent) and the **Reflector** (background session review). This package exposes Python functions only. The backend wraps them in routes; the Judge calls one of them for the values text.
 
-Status: chat, value approval, the values lookup, reel explanation, feedback in chat and the Reflector's session review (`reflect_pending`) all work. The inbox functions (`get_questions`, `answer_question`) are next.
+Status: the whole demo loop works on seed data: chat, value approval, the values lookup, reel explanation, feedback in chat, the Reflector's session review, and the inbox.
 
 Related pages:
 
@@ -17,7 +17,7 @@ python -m guardian.demo_chat            # no values yet: run the interview, appr
 python -m guardian.demo_chat --seeded   # start with three values, then type /drift
 ```
 
-Type `/help` inside it for the commands. Everything is in memory and uses the seed data.
+Type `/help` inside it for the commands. Everything is in memory and uses the seed data. To run the whole loop by hand: start with `--seeded`, type `/reflect` (a few minutes), then `/inbox` and `/answer 2 approve`, then `/values`.
 
 ## Setup
 
@@ -71,8 +71,8 @@ install_initial_values(store, datasource, "demo-user", datetime.now(UTC))   # op
 | Judge, per reel | `get_values(user_id)` | Yes |
 | `GET /status` | `has_values(user_id)` | Yes |
 | `GET /memory` | `get_memory(user_id)` | Yes |
-| `GET /questions` | `get_questions(user_id)` | Checkpoint 2 |
-| `POST /questions/{id}/answer` | `answer_question(user_id, question_id, answer)` | Checkpoint 2 |
+| `GET /questions` | `get_questions(user_id)` | Yes |
+| `POST /questions/{id}/answer` | `answer_question(user_id, question_id, answer)` | Yes |
 | Background job | `reflect_pending(user_id)` | Yes. Returns the number of sessions reviewed. Takes 1 to 3 minutes: never call it inside a request the app waits on |
 
 Request and response shapes are in `guardian/types.py`. They match the build spec.

@@ -135,3 +135,131 @@ def test_help_and_unknown_commands_list_what_is_available(start):
     assert run("/help") == demo_chat.HELP
     assert run("/dance").startswith("! Unknown command")
     assert run("   ") == ""
+
+
+# --- The inbox commands: /reflect, /inbox, /answer -------------------------------------
+
+HUSTLE_CARD = """## New: Less get-rich-quick content (strength: medium)
+- Want more: none
+- Want less: hustle culture, get-rich-quick pitches
+- Unless: none
+- Suggested wording: "I don't want hustle and get-rich-quick videos"
+- Evidence: fb_002, fb_004, fb_007"""
+
+
+def fill_inbox(store, datasource) -> None:
+    """One "What I learned" card and one value-change card, as a review would leave them."""
+    from guardian.memory import inbox, proposals
+    from guardian.tests.conftest import NOW
+
+    learned = inbox.new_card(
+        USER,
+        "learned",
+        "- You skipped 3 hustle reels. [fb_002]\n\nWhat made them easy to skip?",
+        NOW,
+        card_id="learned_s_001",
+        session_id="s_001",
+    )
+    inbox.add_card(store, learned)
+    created = proposals.create_proposal(
+        store,
+        datasource,
+        USER,
+        value_id="new",
+        new_text=HUSTLE_CARD,
+        evidence="fb_002, fb_004, fb_007",
+        source=proposals.reflector_source("s_001", "run_1"),
+        now=NOW,
+    )
+    card = inbox.new_card(
+        USER,
+        "value_change",
+        "You marked 3 reels as not for you.",
+        NOW.replace(minute=1),
+        session_id="s_001",
+        proposal_id=created.proposal.id,
+        run_id="run_1",
+    )
+    inbox.add_card(store, card)
+
+
+def test_inbox_lists_numbered_cards_and_says_when_it_is_empty(start, store, datasource):
+    start([reply("unused")])
+    assert run("/inbox") == demo_chat.EMPTY_INBOX
+    fill_inbox(store, datasource)
+
+    output = run("/inbox")
+
+    assert "[1] What I learned" in output and "What made them easy to skip?" in output
+    assert "[2] VALUE CARD (new value)" in output and HUSTLE_CARD in output
+    assert "You marked 3 reels as not for you." in output
+
+
+def test_answer_applies_the_users_decision_to_a_numbered_card(start, store, datasource):
+    start([reply("unused")])
+    fill_inbox(store, datasource)
+
+    approved = run("/answer 2 approve")
+    dismissed = run("/answer 1 dismiss")
+
+    assert approved == demo_chat.ANSWERED and dismissed == demo_chat.ANSWERED
+    assert "## V1: Less get-rich-quick content" in run("/values")
+    assert run("/inbox") == demo_chat.EMPTY_INBOX
+
+
+def test_answer_edit_reads_the_new_text(start, store, datasource):
+    start([reply("unused")])
+    fill_inbox(store, datasource)
+    edited = HUSTLE_CARD.replace(
+        "I don't want hustle and get-rich-quick videos", "no money-bro stuff"
+    )
+
+    assert run("/answer 2 edit", edited=edited) == demo_chat.ANSWERED
+    assert '- In my words: "no money-bro stuff"' in run("/values")
+
+
+def test_answer_reports_errors_and_bad_usage(start, store, datasource):
+    start([reply("unused")])
+    fill_inbox(store, datasource)
+
+    assert run("/answer 1 approve").startswith("! ")
+    assert run("/answer 9 approve").startswith("! ")
+    assert run("/answer two approve").startswith("! ")
+    assert run("/answer 2").startswith("! ")
+    assert "[2] VALUE CARD" in run("/inbox")
+
+
+def test_reflect_reviews_finished_sessions_and_shows_the_inbox(
+    store, datasource, clock
+):
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from guardian.tests.fakes import ScriptedChatModel
+
+    summary = (
+        "# Session {s}\nA short session.\n\n## What I learned\n"
+        "- Some reels conflicted with your values. [{s}]\n\n## A question for you\nWhat stood out?"
+    )
+    script = []
+    for session in ("s_001", "s_002"):
+        path = f"/memories/sessions/{session}.md"
+        script += [
+            tool_call(
+                "write_file",
+                {"file_path": path, "content": summary.format(s=session)},
+                session,
+            ),
+            reply("Review complete."),
+        ]
+    api.configure(
+        store,
+        InMemorySaver(),
+        datasource,
+        clock=clock,
+        reflector_model=ScriptedChatModel(script=script),
+    )
+
+    output = run("/reflect")
+
+    assert output.startswith("Reviewed 2 sessions.")
+    assert output.count("What I learned") == 2 and "What stood out?" in output

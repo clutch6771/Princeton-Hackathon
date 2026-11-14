@@ -60,12 +60,15 @@ alone as a value.
 
 ## Formats
 
+The IDs in these examples (V7, fb_101, s_020 and so on) are made up. Use the
+real IDs from this user's files; made-up IDs are refused.
+
 A value entry has exactly six lines. For a change to an existing value, copy
 the stored entry and change only what the evidence supports; keep its wording
 line exactly as it is unless you have an exact quote of the user.
 
 ```
-## V1: <title> (strength: low | medium | high)
+## V7: <title> (strength: low | medium | high)
 - Want more: ...
 - Want less: ...
 - Unless: ... (or "none")
@@ -80,9 +83,9 @@ queue_question(
   kind="value_change",
   prompt="<one or two sentences telling the user what you noticed>",
   value_change={
-    "value_id": "V1",            # or "new"
+    "value_id": "V7",            # the stored value's ID, or "new"
     "new_text": "<the six lines above>",
-    "evidence": "fb_001, fb_003, fb_005"
+    "evidence": "fb_101, fb_104, fb_109"
   }
 )
 ```
@@ -91,7 +94,7 @@ hypotheses.md, one block per hypothesis:
 
 ```
 ## H1: <the pattern in one line>
-- Evidence: s_001 (what was seen), s_004 (what was seen)
+- Evidence: s_020 (what was seen), s_024 (what was seen)
 - Sessions seen: 2 · Last seen: 2026-11-14
 - Status: watching
 ```
@@ -103,7 +106,7 @@ sessions/<session_id>.md, under 200 words:
 <2-3 sentence summary of what was watched and how it compared with their values>
 
 ## What I learned
-- <one plain sentence the user will read> [fb_002, fb_004]
+- <one plain sentence the user will read> [fb_101, fb_104]
 - <up to three bullets>
 
 ## A question for you

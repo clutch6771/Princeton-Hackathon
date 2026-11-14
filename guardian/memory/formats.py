@@ -44,7 +44,7 @@ _WORDING = re.compile(
     r"^-\s*(In my words|Agreed wording|Suggested wording):\s*(.*)$", re.IGNORECASE
 )
 _VALUE_ID = re.compile(r"^V[1-9]\d*$")
-_APPROVED_STAMP = re.compile(r"[;\s]*approved \d{4}-\d{2}-\d{2}\s*$")
+_APPROVED_STAMP = re.compile(r"approved \d{4}-\d{2}-\d{2}")
 _CANONICAL_LABEL = {label.lower(): label for label in WORDING_LABELS}
 
 
@@ -154,9 +154,14 @@ def value_number(value_id: str) -> int:
 
 
 def stamp_approved(evidence: str, day: date) -> str:
-    """Append the approval date to an Evidence line, replacing an earlier date."""
-    base = _APPROVED_STAMP.sub("", evidence).rstrip(" ;.")
-    return f"{base}; approved {day.isoformat()}"
+    """Append the approval date to an Evidence line, replacing any earlier date.
+
+    An earlier stamp may sit anywhere in the line, since an agent refining a value
+    often adds new evidence after the old one.
+    """
+    parts = [part.strip(" .") for part in _APPROVED_STAMP.sub("", evidence).split(";")]
+    kept = [part for part in parts if part]
+    return "; ".join([*kept, f"approved {day.isoformat()}"])
 
 
 def same_text(first: str, second: str) -> bool:
