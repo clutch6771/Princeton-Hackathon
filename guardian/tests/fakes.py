@@ -54,6 +54,28 @@ class ScriptedChatModel(BaseChatModel):
         return ChatResult(generations=[ChatGeneration(message=self.script[index])])
 
 
+class FailingChatModel(BaseChatModel):
+    """A chat model whose every call fails, like a provider that is unavailable."""
+
+    message: str = "model unavailable"
+
+    @property
+    def _llm_type(self) -> str:
+        return "failing"
+
+    def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> FailingChatModel:
+        return self
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        raise RuntimeError(self.message)
+
+
 def tool_call(name: str, args: dict[str, Any], call_id: str = "call_1") -> AIMessage:
     """An assistant message that asks for one tool call."""
     return AIMessage(
