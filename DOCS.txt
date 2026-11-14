@@ -1,0 +1,3 @@
+Initial commit to the github repository for the princeton hackathon
+
+We can put some standard documentation here or something.
