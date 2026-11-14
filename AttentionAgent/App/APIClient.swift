@@ -3,7 +3,7 @@ import Foundation
 /// Talks to the FastAPI backend. While the "Offline demo backend" switch in
 /// Settings is on, it returns canned answers so the whole app works without a server.
 final class APIClient {
-    private var offline: Bool { UserDefaults.standard.object(forKey: "offline") as? Bool ?? true }
+    private var offline: Bool { true }
     private var baseURL: URL? { URL(string: UserDefaults.standard.string(forKey: "backendURL") ?? "") }
 
     private let encoder: JSONEncoder = {

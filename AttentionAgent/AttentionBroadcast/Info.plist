@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>
@@ -11,5 +16,9 @@
 		<key>RPBroadcastProcessMode</key>
 		<string>RPBroadcastProcessModeSampleBuffer</string>
 	</dict>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connect to your local AttentionAgent backend.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>AttentionAgent transcribes reel audio on-device to detect divisive or inflammatory spoken content.</string>
 </dict>
 </plist>

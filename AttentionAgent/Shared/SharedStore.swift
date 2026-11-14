@@ -54,6 +54,31 @@ enum SharedStore {
         set { defaults?.set(newValue, forKey: "interval") }
     }
 
+    static var backendBaseURL: String {
+        get { defaults?.string(forKey: "backendBaseURL") ?? "http://127.0.0.1:8000" }
+        set { defaults?.set(newValue, forKey: "backendBaseURL") }
+    }
+    static var useLiveBackend: Bool {
+        get { defaults?.bool(forKey: "useLiveBackend") ?? false }
+        set { defaults?.set(newValue, forKey: "useLiveBackend") }
+    }
+    static var sensitivity: String {
+        get { defaults?.string(forKey: "sensitivity") ?? "medium" }
+        set { defaults?.set(newValue, forKey: "sensitivity") }
+    }
+    static var sessionID: String {
+        get { defaults?.string(forKey: "sessionID") ?? "demo" }
+        set { defaults?.set(newValue, forKey: "sessionID") }
+    }
+    static var pausedUntil: Double {
+        get { defaults?.double(forKey: "pausedUntil") ?? 0 }
+        set { defaults?.set(newValue, forKey: "pausedUntil") }
+    }
+    static var userGoal: String {
+        get { defaults?.string(forKey: "userGoal") ?? "Low-Stress Feed" }
+        set { defaults?.set(newValue, forKey: "userGoal") }
+    }
+
     static var stopRequested: Bool {
         get { defaults?.bool(forKey: "stopRequested") ?? false }
         set { defaults?.set(newValue, forKey: "stopRequested") }

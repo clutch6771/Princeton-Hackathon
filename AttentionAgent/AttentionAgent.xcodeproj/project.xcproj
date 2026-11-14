@@ -11,6 +11,9 @@
     ],
   },
   "files": [
+    { "path": "Shared/ReelAudioTranscriber.swift", "target-membership": [ "AttentionAgent/compile-sources", "AttentionBroadcast/compile-sources" ] },
+    { "path": "Shared/LiveAgentBackend.swift", "target-membership": [ "AttentionAgent/compile-sources", "AttentionBroadcast/compile-sources" ] },
+    { "path": "Shared/AgentBridge.swift", "target-membership": [ "AttentionAgent/compile-sources", "AttentionBroadcast/compile-sources" ] },
     { "path": "App/Views/ChatView.swift", "target-membership": [ "AttentionAgent/compile-sources" ] },
     { "path": "App/Views/CheckpointView.swift", "target-membership": [ "AttentionAgent/compile-sources" ] },
     { "path": "App/Views/HomeView.swift", "target-membership": [ "AttentionAgent/compile-sources" ] },

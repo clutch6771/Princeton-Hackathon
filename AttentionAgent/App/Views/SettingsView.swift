@@ -16,15 +16,10 @@ struct SettingsView: View {
                     .disabled(session.isMonitoring)
             }
             Section("Backend") {
-                Toggle("Offline demo backend", isOn: $offline)
-                TextField("https://your-server", text: $backendURL)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    .disabled(offline)
+                NavigationLink("Backend Connection & Speech Permissions") { BackendConnectionView() }
             }
             Section("What is sent to the backend") {
-                Text("Per Reel: an ID, start and end time, duration, the text read on screen, and a confidence score. Screenshots and recordings are never uploaded or stored. Screens that look like they contain passwords or card numbers are skipped.")
+                Text("Per Reel: an ID, start and end time, duration, the text read on screen, and a confidence score. In live broadcast mode, one downscaled snapshot and the on-device audio transcript are also sent per reel. Screens that look like they contain passwords or card numbers are skipped.")
                     .font(.footnote)
             }
             Section("Your data") {

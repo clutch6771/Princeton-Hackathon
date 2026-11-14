@@ -1,9 +1,11 @@
 import Foundation
 import CoreVideo
+import UIKit
 
 /// Frames in, finished ReelObservations out. Runs in the app (demo capture) and
 /// inside the broadcast extension (Instagram). Call from one queue only.
 final class ReelTracker {
+    var frameBase64: String?
     var onObservation: ((ReelObservation) -> Void)?
 
     private let detector = ReelDetector()
@@ -43,10 +45,11 @@ final class ReelTracker {
 
         if !ocrDone, t >= ocrAtT {
             ocrDone = true
-            if let img = FrameSampler.cgImage(from: pb) {
+            if let img = FrameSampler.cgImage(from: pb, maxWidth: 512) {
                 let r = extractor.extract(from: img)
                 text = r.lines
                 sensitive = r.sensitive
+                frameBase64 = r.sensitive ? nil : UIImage(cgImage: img).jpegData(compressionQuality: 0.5)?.base64EncodedString()
             }
         }
     }
@@ -73,6 +76,7 @@ final class ReelTracker {
         startConfidence = e.confidence
         ocrAtT = e.settledAt + 0.35
         ocrDone = false
+        frameBase64 = nil
         text = []
         sensitive = false
     }
