@@ -1,45 +1,50 @@
-# Backend brief: database and backend work before step 4b
+# Backend brief: storage and the Guardian router, before step 4b
 
-From the Guardian owner, Saturday Nov 14. Checkpoint 2 was accepted on the live run. This work comes before step 4b.
+From the Guardian owner, Saturday Nov 14. Checkpoint 2 was accepted on the live run. This work comes before step 4b. Revised after the Part A survey, which found that a teammate has already built the Judge server (branch `Reel-Watcher-Agent`, `watcher_Agent/`) on PostgreSQL.
 
-Answers to the two open decisions:
+## Decisions after the survey
 
-1. Yes to the inbox and session-end routes, as part of Part C below.
-2. Yes: extend the rule to "write 'none' for any line the evidence does not support", in the skill and the Guardian prompt. Fold it into 4b.
+1. **Database:** Postgres, in the teammate's database. MongoDB is dropped.
+2. **Part C:** no new backend, Judge, reel storage or MongoDataSource. Build a small Guardian router that the teammate's server includes.
+3. **App version:** match the teammate's branch (`Reel-Watcher-Agent`): `X-Demo-User-Id` header, `POST feedback`, `session/end`, a digest built from the timeline. Build nothing for the calls only the `main` version makes (`agent2/checkpoint`, `agent2/feedback`, `pending-intervention`).
+4. **Value cards:** build a text fallback in the chat adapter. Keep the JSON card routes for a later card UI.
 
-One more change for 4b: the Guardian's interview focuses on what the user wants less of. It does not ask what they want more of; "Want more" is "none" unless the user states it unprompted. Confirm the format check accepts "none" on that line, and that the Judge prompt treats "Want more: none" as nothing to match.
+Earlier answers that still stand:
 
-## Part A: Survey first (read-only, about 20 minutes, then stop and report)
+- Extend the rule to "write 'none' for any line the evidence does not support", in the skill and the Guardian prompt. Fold it into 4b.
+- For 4b: the Guardian's interview focuses on what the user wants less of. It does not ask what they want more of; "Want more" is "none" unless the user states it unprompted. Confirm the format check accepts "none" on that line, and that the Judge prompt treats "Want more: none" as nothing to match.
 
-1. Find the iOS app in the repo and list every network call it makes: URL, method, request JSON, response JSON it expects. Include the 8-second polling loop, the CheckpointDigest payload, the reel threshold setting, and what the broadcast extension uploads per reel (OCR text, frames, audio).
-2. Find any Python backend a teammate has already written and say what it covers.
-3. Give me one table: app call, what the app expects, which Guardian function or new backend piece serves it, and any mismatch with docs/GUARDIAN_BACKEND_HANDOVER.md or the PRD.
+## Part A: Survey (done)
 
-Where the app and the PRD disagree, plan to match the app, since it is already built. Do not edit the iOS code or a teammate's code. Wait for my go before Part B.
+Read-only survey of the iOS app's network calls and of any teammate backend. Findings are in the Part A report and summarised in `docs/GUARDIAN_PROGRESS.md`.
 
-## Part B: Guardian storage on MongoDB (inside guardian/)
+## Part B: Guardian storage on Postgres (inside guardian/)
 
-- Add a MongoDB option to configure(), selected by MONGODB_URI in the root .env. Treat the URI like the API key: never print or commit it. In-memory stays the default for tests.
-- Everything the package keeps must persist: values, proposals, inbox cards, review records, the value-ID counter, chat log, notes, the Reflector's files and chat threads with pending cards. Use LangGraph's MongoDB store and checkpointer; check current package names in the docs.
-- Every V5 guarantee must still hold on MongoDB: one write path, decide-once, per-user isolation, atomic value-ID counter, one Reflector run at a time per user, all-or-nothing reflect_pending.
-- Tests: run the existing storage tests against both backends. MongoDB tests are marked `mongo` and skipped unless MONGODB_URI is set. Add a restart test: approve a value and leave a card pending, rebuild everything, and both are still there.
+- Add a Postgres option to configure(), selected by a connection-string variable in the root .env (use the name the teammate's server uses). Never print or commit it. In-memory stays the default for tests.
+- Everything the package keeps must persist: values, proposals, inbox cards, review records, the value-ID counter, chat log, notes, the Reflector's files and chat threads with pending cards. Use LangGraph's Postgres store and checkpointer; check current package names in the docs.
+- Every V5 guarantee must still hold: one write path, decide-once, per-user isolation, atomic value-ID counter, one Reflector run at a time per user, all-or-nothing reflect_pending.
+- Values lookup: the teammate's Judge reads values with a direct SELECT on public.store, prefix `<user>.guardian.values`. Check whether that query finds what we store. The preferred fix is theirs (call guardian.api.get_values; the owner will ask). Until then, store the approved values text where their query reads it, keep the single write path as its only writer, pin that layout with a test, and document it in the handover as a compatibility contract.
+- Tests: run the existing storage tests against both backends. Postgres tests are marked `postgres` and skipped unless the variable is set. Add a restart test: approve a value and leave a card pending, rebuild everything, and both are still there.
+- The owner does not have the connection string yet. Use a local Postgres if one is available; otherwise leave those tests skipped and say exactly what to put in .env.
 
 Stop and report after Part B.
 
-## Part C: The real backend (in backend/, outside guardian/)
+## Part C: Guardian router (outside guardian/, replacing dev_server/)
 
-Promote dev_server/ into backend/ and remove the "temporary" marking. It imports guardian only through its public entry points.
+- A FastAPI router their app can include with one line, plus a standalone app on seed data (keep GUARDIAN_DEV_SEEDED). User comes from the X-Demo-User-Id header, default demo-user.
+- JSON routes as in the handover: /chat, /chat/resume, /status, /memory, /questions, /questions/{id}/answer.
+- POST /agent2/chat adapter: accepts {message, profile, context} and returns the ChatMessage shape the app decodes (id, sender "coachAgent", text, timestamp; attached_digest and client_action null).
+  - A context digest becomes a drift-notification entry using the IDs in flagged_reels. Verify these are the reel IDs their JudgeDataSource knows.
+  - Pass profile.stated_goals to the Guardian as background in onboarding, so it starts from what the user already wrote.
+  - Card fallback: a pending card is shown as plain text ending "Reply approve or reject." The decision is parsed in code, not by the model: exactly approve/yes or reject/no, case-insensitive, applied through resume or answer_question. Any other reply returns the card text again. No editing in the fallback.
+  - Inbox through chat: at the start of a chat turn with no chat card pending, present pending inbox cards one at a time, oldest first. A "What I learned" card is shown as text and dismissed once shown; value cards use the same approve/reject fallback.
+- Reflector trigger: export one function for their /session/end to call as a background task. Also start reflect_pending in the background on each /agent2/chat and GET /questions call, so reviews happen even before they add that line.
+- App feedback comments are canned strings, not the user's words: exclude every source="app" comment from the quote check.
+- Tests: offline tests for every route and the fallback. Then one live run through HTTP on seed data: onboarding from stated_goals, approve by text, digest explanation, disagreement, reflect, inbox card through chat, approve, get_values changed.
+- README: the one-line include, the JudgeDataSource wiring, every environment variable, running standalone behind a tunnel.
+- docs/GUARDIAN_FOR_BACKEND_OWNER.md, one page for the teammate: the one-line include; call get_values instead of the SELECT; call the session-end function; their Judge prompt must handle the values format including "Agreed wording", "Want more: none" and "Unless"; check whether ocr_text from the app is being dropped.
 
-- Routes: the existing four, plus GET /questions, POST /questions/{id}/answer, POST /session/end, POST /feedback, GET /timeline, and the upload route(s) in the shape the app actually sends, per the survey.
-- Judge (backend/judge.py): one model call per reel using guardian/judge_prompt.md, the values from guardian.get_values(user_id), and the user's three most recent feedback items as examples. No embeddings or vector search. Input is whatever the app sends: text always, frames and audio if they arrive. Structured output in the reel record shape from the spec. Model set by JUDGE_MODEL, default gemini-3.5-flash-lite. No values means neutral. If the model call fails, store the reel as neutral with confidence 0 and reason "not judged", so uploads never block.
-- Storage: reels, feedback and sessions collections in the same database. Raw frames and audio are never stored.
-- MongoDataSource: implements the DataSource protocol over those collections, with keyword matching for search and similar feedback, like FakeDataSource. Keep FakeDataSource and the seeded mode working.
-- Notifications: check every 15 judged reels, notify when at least 3 conflict, at most once per 10 minutes, wording about the user's own values. Deliver it the way the app expects (upload response body or its polling call), per the survey.
-- Reflector trigger: /session/end, app open and a 10-minute idle check each start reflect_pending as a background task, never inside a request.
-- Tests: offline tests with a scripted model and in-memory storage. Then one live run of the whole loop through HTTP: upload reels, verdicts stored, notification, chat explains, feedback, session end, inbox card, approve, get_values changed.
-- backend/README.md: how to run it locally and behind a tunnel, and every environment variable.
-
-Cap Part C at about three hours. Stop and report after it.
+Cap Part C at about two hours. Stop and report after it.
 
 ## After that
 
