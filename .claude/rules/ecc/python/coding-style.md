@@ -2,6 +2,7 @@
 paths:
   - "**/*.py"
   - "**/*.pyi"
+  - "**/*.ipynb"
 ---
 # Python Coding Style
 

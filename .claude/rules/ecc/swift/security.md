@@ -2,6 +2,9 @@
 paths:
   - "**/*.swift"
   - "**/Package.swift"
+  - "**/*.xcconfig"
+  - "**/Info.plist"
+  - "**/*.entitlements"
 ---
 # Swift Security
 

@@ -25,9 +25,9 @@ Agent(subagent_type: "ecc:planner", prompt: "...")
 
 For the full roster of 69 agents, see `/ecc:ecc-guide`.
 
-## Immediate Agent Usage
+## Suggested Agent Usage
 
-No user prompt needed:
+Recommend these agents; spawn them only when the user asks or the task is too large for one context:
 1. Complex feature requests - Use **ecc:planner** agent
 2. Code just written/modified - Use **ecc:code-reviewer** agent
 3. Bug fix or new feature - Use **ecc:tdd-guide** agent

@@ -2,6 +2,7 @@
 paths:
   - "**/*.py"
   - "**/*.pyi"
+  - "**/*.ipynb"
 ---
 # Python Hooks
 
@@ -9,7 +10,7 @@ paths:
 
 ## PostToolUse Hooks
 
-Configure in `~/.claude/settings.json`:
+Configured in the project `.claude/settings.json` (script: `.claude/hooks/post-edit-format-lint.sh`):
 
 - **black/ruff**: Auto-format `.py` files after edit
 - **mypy/pyright**: Run type checking after editing `.py` files

@@ -9,7 +9,7 @@ paths:
 
 ## PostToolUse Hooks
 
-Configure in `~/.claude/settings.json`:
+Configured in the project `.claude/settings.json` (script: `.claude/hooks/post-edit-format-lint.sh`):
 
 - **SwiftFormat**: Auto-format `.swift` files after edit
 - **SwiftLint**: Run lint checks after editing `.swift` files

@@ -20,3 +20,28 @@ xcuserdata/
 
 # macOS
 .DS_Store
+
+# Python tooling caches
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Machine learning artifacts (keep datasets and weights out of Git)
+data/
+datasets/
+models/
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.onnx
+*.safetensors
+*.pkl
+.ipynb_checkpoints/
+wandb/
+mlruns/
+
+# Xcode build output
+build/

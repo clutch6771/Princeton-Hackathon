@@ -53,3 +53,12 @@ This project combines:
 - Run relevant tests before committing.
 - Never commit secrets or local credentials.
 - Use pull requests to merge into main.
+
+## Tooling
+- Python: `python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt`
+  (black, isort, ruff, mypy, bandit, pytest, pytest-cov; config in `pyproject.toml`).
+- Swift: `brew install swiftformat swiftlint` (config in `.swiftformat`, `.swiftlint.yml`).
+- iOS builds require full Xcode selected via `xcode-select`.
+- ECC plugin (`ecc@ecc`) is enabled in `.claude/settings.json`; its hooks need Node 18+.
+- A PostToolUse hook (`.claude/hooks/post-edit-format-lint.sh`) formats and lints
+  edited `.py`, `.ipynb`, and `.swift` files.
