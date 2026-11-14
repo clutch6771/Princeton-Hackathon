@@ -1,0 +1,31 @@
+# Tool configuration only. Add a [project] table when Python packages exist.
+
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 88
+extend-exclude = [".venv", "DerivedData", "build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+"**/test_*.py" = ["S101"]
+
+[tool.mypy]
+ignore_missing_imports = true
+warn_unused_ignores = true
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: fast, isolated unit tests",
+    "integration: tests touching external systems",
+]
+
+[tool.bandit]
+exclude_dirs = [".venv", "tests"]

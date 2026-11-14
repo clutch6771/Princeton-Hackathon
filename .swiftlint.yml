@@ -1,0 +1,5 @@
+# SwiftLint configuration (ECC swift/coding-style.md)
+excluded:
+  - .venv
+  - DerivedData
+  - build

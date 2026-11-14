@@ -1,0 +1,195 @@
+PROJECT CONTEXT FOR AI ASSISTANTS (ChatGPT, etc.)
+==================================================
+Paste this whole file at the start of a chat. It describes the project, its
+current state, its conventions, and how to prompt for each part.
+Last updated: 2026-11-14 (branch: main)
+
+
+1. WHAT THIS PROJECT IS
+-----------------------
+Princeton Hackathon project. Repo: https://github.com/clutch6771/Princeton-Hackathon
+
+It combines:
+  - Python: machine learning and AI agent logic
+  - Swift / SwiftUI: an iOS app (built with Xcode)
+
+The first component is the "Reel Watcher Agent" (folder: watcher_Agent/).
+  >> TEAM: describe here what the agent does (what it watches, its inputs,
+  >> its outputs, and how the iOS app uses it). The repo doesn't say yet.
+
+How Python and the iOS app communicate (REST API, on-device model, etc.) is
+NOT decided yet. Don't assume one; ask, or offer options.
+
+
+2. CURRENT STATE (IMPORTANT)
+----------------------------
+Only the scaffolding exists. There is NO application code yet: no Python
+modules, no Swift files, no Xcode project, no tests.
+
+What exists:
+  - Developer tooling and lint/format configuration
+  - Claude Code configuration (rules, hooks, the ECC plugin)
+  - Setup docs
+
+Next steps: write the watcher agent in Python, decide how Python and iOS
+communicate, then create the iOS app.
+
+
+3. REPOSITORY LAYOUT
+--------------------
+  CLAUDE.md                 Main project instructions (architecture + guidelines)
+  SETUP.md                  How a teammate sets up their machine
+  PROJECT_CONTEXT.txt       This file
+  DOCS.txt                  Placeholder for general docs
+  pyproject.toml            Python tool config (black, isort, ruff, mypy, pytest, bandit)
+  requirements-dev.txt      Pinned Python dev dependencies
+  .swiftformat              SwiftFormat config (Swift 6.0)
+  .swiftlint.yml            SwiftLint config
+  .gitignore                Ignores .venv, caches, .env, datasets, model weights, Xcode build output
+  watcher_Agent/
+    README.txt              Agent notes + log of the tooling/config changes
+  .claude/
+    settings.json           Enables the ECC plugin and the format/lint hook
+    hooks/post-edit-format-lint.sh   Formats and lints every edited .py/.ipynb/.swift file
+    rules/ecc/common/       Rules for all languages (style, testing, security, git...)
+    rules/ecc/python/       Python rules (also apply to .ipynb)
+    rules/ecc/swift/        Swift rules
+    rules/project/machine-learning.md   Project ML rules
+
+
+4. TECH STACK AND TOOLING
+-------------------------
+Python (virtualenv in .venv, versions pinned):
+  black 26.10.1, isort 9.0.2 (profile=black), ruff 0.17.5, mypy 2.4.1,
+  bandit 1.9.4, pytest 9.2.0, pytest-cov 7.1.0, python-dotenv 1.2.4
+  Line length: 88
+  Ruff lint rule sets: E, F, I, B, UP, S (S101/assert allowed in tests)
+  mypy: ignore_missing_imports = true
+  pytest markers: "unit", "integration"
+
+Swift / iOS:
+  Swift 6.0, SwiftUI, SwiftFormat 0.64.5, SwiftLint 0.65.1
+  Xcode is only needed for iOS work (builds + SwiftLint).
+
+Claude Code (the team's main AI coding tool):
+  - ECC plugin (ecc@ecc, v2.2.3) adds coding rules, review agents and skills.
+  - After every edit, a hook auto-runs ruff/isort/black/mypy on Python files
+    and swiftformat/swiftlint on Swift files, and flags print() statements.
+
+
+5. CODING CONVENTIONS (code you write must follow these)
+--------------------------------------------------------
+General:
+  - Immutability: return new objects; don't mutate inputs in place.
+  - Small functions (<50 lines), focused files (200-400 lines, max ~800).
+  - No nesting deeper than 4 levels; prefer early returns.
+  - No magic numbers; use named constants.
+  - Handle errors explicitly; never swallow exceptions silently.
+  - Validate all external input (user input, API responses, files).
+  - KISS / DRY / YAGNI.
+
+Python:
+  - Type hints on all function signatures; must pass mypy.
+  - Formatted with black + isort; must pass ruff (E, F, I, B, UP, S).
+  - Use the logging module, never print().
+  - Secrets come from environment variables / .env via python-dotenv.
+    NEVER hardcode API keys.
+  - Keep agent components modular and testable.
+  - Notebooks are for exploration; reusable logic goes in .py modules with tests.
+
+Machine learning:
+  - Document model inputs and outputs (shapes, types, ranges).
+  - Validate data going in and out.
+  - Seed every source of randomness (random, NumPy, torch, ...).
+  - Never commit datasets, weights or checkpoints (.pt, .pth, .ckpt, .h5,
+    .onnx, .safetensors, .pkl, data/, models/, ... are git-ignored).
+
+Swift / iOS:
+  - SwiftUI; keep UI separate from business logic.
+  - Respect Swift concurrency and actor isolation (Swift 6 strict concurrency).
+  - Use os.Logger, never print().
+  - Protocol-based dependency injection so logic can be unit tested.
+  - No secrets in source, Info.plist, .xcconfig or .entitlements.
+
+Testing:
+  - Test-driven development: write the failing test first, then implement.
+  - Target 80%+ coverage. Unit + integration tests.
+  - Arrange-Act-Assert structure, descriptive test names
+    (e.g. test_returns_empty_list_when_no_reels_match).
+  - Python: pytest (+ pytest-cov). Swift: XCTest / Swift Testing.
+
+Git:
+  - Work on a feature branch; merge to main through a pull request.
+  - Commit format: "<type>: <description>"
+    types: feat, fix, refactor, docs, test, chore, perf, ci
+  - Never commit secrets, .env, or private data.
+
+
+6. HOW TO PROMPT FOR EACH PART
+------------------------------
+Always state which part you're working on and paste the relevant existing
+code (ChatGPT can't see the repo). Fill in the <...> parts.
+
+A) Python agent code (watcher_Agent/)
+   "Using the project context above, write a Python module for
+    watcher_Agent/<name>.py that <does X>. Inputs: <...>. Outputs: <...>.
+    Follow the conventions: type hints, logging not print, no mutation,
+    functions under 50 lines, secrets from env vars. Also write
+    pytest tests in tests/test_<name>.py first."
+
+B) Machine learning / model work
+   "I'm adding an ML component to the Reel Watcher Agent that <goal>.
+    Data: <format, size, where it comes from>. Suggest a model and write
+    the training/inference code with documented input/output shapes,
+    input validation, seeded randomness, and tests on a tiny fixed
+    sample. Don't store data or weights in the repo."
+
+C) iOS app (Swift / SwiftUI)
+   "Write a SwiftUI view/view model for <screen> in the iOS app. Swift 6,
+    strict concurrency, view model as @MainActor @Observable, business
+    logic behind a protocol for testing, os.Logger for logging. Include
+    XCTest/Swift Testing unit tests for the view model."
+
+D) Python <-> iOS integration (not decided yet)
+   "Compare options for connecting the Python agent to the iOS app
+    (e.g. FastAPI REST service, on-device Core ML conversion, a cloud
+    function). Consider hackathon time limits, latency and complexity.
+    Recommend one and show the API contract (request/response JSON)."
+   If you pick an API: use a consistent response envelope
+   {"success": bool, "data": ..., "error": str | null}.
+
+E) Tests / debugging
+   "Here is <code> and the failing output <error/log>. Find the root
+    cause and fix the implementation (not the test, unless the test is
+    wrong). Keep the fix minimal."
+
+F) Code review
+   "Review this code against the project conventions above: correctness,
+    security (secrets, input validation), type hints, error handling,
+    immutability, function size, test coverage. Rank issues as
+    CRITICAL / HIGH / MEDIUM / LOW."
+
+G) Commits and pull requests
+   "Write a conventional commit message (feat/fix/refactor/docs/test/
+    chore/perf/ci) for this diff: <diff>."
+   "Write a PR description with a summary and a test plan checklist
+    for these commits: <git log / diff>."
+
+Tips:
+  - Ask for code that passes black, ruff and mypy. The team's hook enforces
+    them anyway.
+  - Ask for tests together with the code.
+  - If something about the architecture isn't decided, have ChatGPT ask
+    rather than guess.
+
+
+7. LOCAL SETUP (summary; full steps in SETUP.md)
+------------------------------------------------
+  python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+  brew install swiftformat swiftlint          # Swift/iOS work only
+  Install Xcode + sudo xcode-select -s /Applications/Xcode.app   # iOS only
+  Node 18+ and Claude Code; trust the folder; approve the ECC plugin
+
+Run checks manually:
+  .venv/bin/ruff check . && .venv/bin/black --check . && .venv/bin/mypy .
+  .venv/bin/pytest --cov
