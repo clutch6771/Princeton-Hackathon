@@ -1,0 +1,15 @@
+# Secrets: never commit real keys
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Guardian virtual environment and caches
+guardian/.venv/
+guardian/eval/.cache/
