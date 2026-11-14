@@ -4,6 +4,21 @@ The two agents that talk with the user and learn about them: the **Guardian** (c
 
 Status: chat, value approval, the values lookup, reel explanation and feedback in chat all work. The Reflector and the inbox (`reflect_pending`, `get_questions`, `answer_question`) are still to come.
 
+Related pages:
+
+- `docs/GUARDIAN_BACKEND_HANDOVER.md`: exact request and response JSON for the chat routes
+- `docs/GUARDIAN_PROGRESS.md`: what each step produced and the library findings
+- `docs/GUARDIAN_SPEC_V5.md`: the build spec
+
+## Try the chat in a terminal
+
+```bash
+python -m guardian.demo_chat            # no values yet: run the interview, approve a card
+python -m guardian.demo_chat --seeded   # start with three values, then type /drift
+```
+
+Type `/help` inside it for the commands. Everything is in memory and uses the seed data.
+
 ## Setup
 
 ```bash

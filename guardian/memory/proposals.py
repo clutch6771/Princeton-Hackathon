@@ -395,7 +395,7 @@ def _final_entry(
         return None, "An edit needs the edited text of the value."
     parsed = formats.parse_entry(edited_text or "")
     if parsed.entry is None:
-        return None, parsed.error
+        return None, f"{parsed.reason} {formats.EDIT_HELP}"
     if parsed.entry.header_id != proposed.header_id:
         return (
             None,

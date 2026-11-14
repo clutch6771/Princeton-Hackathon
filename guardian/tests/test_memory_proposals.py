@@ -622,3 +622,17 @@ def test_carried_over_wording_must_be_identical_to_the_stored_line(store, dataso
 
     assert created.proposal is None
     assert "Suggested wording" in created.error
+
+
+def test_an_invalid_edit_gets_a_message_written_for_the_user_not_the_agent(
+    store, datasource
+):
+    proposal = propose(store, datasource, text=NEW_HUSTLE, evidence="fb_002").proposal
+
+    result = decide(store, proposal.id, action="edit", edited_text="less hustle")
+
+    assert not result.ok
+    assert "six lines" in result.error
+    assert "Suggested wording" not in result.error
+    assert "exact quote of the user" not in result.error
+    assert len(result.error) < 300

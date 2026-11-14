@@ -30,6 +30,12 @@ FORMAT_HELP = """A value entry has exactly these six lines:
 For a new value write the header as "## New: <title> (strength: ...)".
 Without an exact quote, replace the fifth line with: - Suggested wording: "<your wording>\""""
 
+# Shown to a user whose edit of a card could not be read.
+EDIT_HELP = (
+    "Keep the card's six lines: the ## header, Want more, Want less, Unless, "
+    "the wording line and Evidence. Change only the text after each label."
+)
+
 _HEADER = re.compile(
     r"^##\s+(V[1-9]\d*|New):\s*(\S.*?)\s*\(strength:\s*(low|medium|high)\)$",
     re.IGNORECASE,
@@ -58,7 +64,8 @@ class ValueEntry:
 @dataclass(frozen=True)
 class Parsed:
     entry: ValueEntry | None
-    error: str | None
+    error: str | None  # the reason plus the full format, written for an agent
+    reason: str | None = None  # the reason alone
 
     @property
     def ok(self) -> bool:
@@ -66,7 +73,7 @@ class Parsed:
 
 
 def _fail(reason: str) -> Parsed:
-    return Parsed(entry=None, error=f"{reason}\n{FORMAT_HELP}")
+    return Parsed(entry=None, error=f"{reason}\n{FORMAT_HELP}", reason=reason)
 
 
 def _field(line: str, label: str) -> str | None:
