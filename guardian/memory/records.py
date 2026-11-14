@@ -64,13 +64,3 @@ def _drop_old_days(store: BaseStore, namespace: tuple[str, ...], today: date) ->
     for item in store.search(namespace, limit=keys.SEARCH_LIMIT):
         if date.fromisoformat(item.key) < cutoff:
             store.delete(namespace, item.key)
-
-
-def render_notes(store: BaseStore, user_id: str) -> str:
-    """notes.md as text: one line per note, in ID order; empty when there are none."""
-    items = store.search(keys.namespace(user_id, keys.NOTES), limit=keys.SEARCH_LIMIT)
-    ordered = sorted(items, key=lambda item: int(item.key[1:]))
-    return "\n".join(
-        f'- {item.key}: {item.value["text"]} (said: "{item.value["evidence"]}")'
-        for item in ordered
-    )

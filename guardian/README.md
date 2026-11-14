@@ -2,7 +2,7 @@
 
 The two agents that talk with the user and learn about them: the **Guardian** (chat agent) and the **Reflector** (background session review). This package exposes Python functions only. The backend wraps them in routes; the Judge calls one of them for the values text.
 
-Status: chat, value approval and the values lookup work (integration checkpoint 1). Reel explanation, the Reflector and the inbox are still to come.
+Status: chat, value approval, the values lookup, reel explanation and feedback in chat all work. The Reflector and the inbox (`reflect_pending`, `get_questions`, `answer_question`) are still to come.
 
 ## Setup
 
@@ -71,6 +71,7 @@ Request and response shapes are in `guardian/types.py`. They match the build spe
 - **While a card is pending**, `chat` does not process a new message. It returns the same card with an error asking the user to decide first.
 - **Failed approvals** (invalid edit, already answered, value changed since the card was made) change nothing and come back in `error`. After an invalid edit the card is still pending, so the user can try again.
 - **Context.** Pass `context={"entry": "drift_notification", "reel_ids": [...]}` when the chat is opened from a notification. Other entries: `onboarding`, `chat`, `reel`, `learned`.
+- **Feedback from chat.** When the user agrees or disagrees in chat, the Guardian records it through `DataSource.record_feedback` with `source="chat"`. The comment on such feedback is the agent's summary, not the user's exact words.
 
 ## For the Judge owner
 
@@ -96,4 +97,10 @@ Request and response shapes are in `guardian/types.py`. They match the build spe
 ```bash
 python -m pytest guardian/tests                 # offline, scripted model, no API calls
 python -m pytest guardian/tests -m live         # real model; uses quota
+```
+
+Code follows the team config in `pyproject.toml` (black, isort, ruff, mypy):
+
+```bash
+ruff check guardian && black --check guardian && mypy guardian --exclude guardian/tests
 ```

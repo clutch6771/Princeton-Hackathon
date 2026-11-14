@@ -21,7 +21,7 @@ from guardian import chat_flow, config, models
 from guardian.chat_agent import build_chat_agent
 from guardian.datasource import DataSource
 from guardian.deps import Deps
-from guardian.memory import records, reflector_files, values
+from guardian.memory import notes, reflector_files, values
 from guardian.types import ChatContext, Decision, GuardianResponse
 
 _deps: Deps | None = None
@@ -115,5 +115,5 @@ def get_memory(user_id: str) -> dict[str, str]:
         "hypotheses.md": reflector_files.read_file(
             deps.store, user_id, reflector_files.HYPOTHESES
         ),
-        "notes.md": records.render_notes(deps.store, user_id),
+        "notes.md": notes.render_notes(deps.store, user_id),
     }

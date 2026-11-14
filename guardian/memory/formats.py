@@ -95,7 +95,13 @@ def parse_entry(text: str) -> Parsed:
     unless = _field(lines[3], "Unless")
     wording = _WORDING.match(lines[4])
     evidence = _field(lines[5], "Evidence")
-    if None in (want_more, want_less, unless, evidence) or wording is None:
+    if (
+        want_more is None
+        or want_less is None
+        or unless is None
+        or evidence is None
+        or wording is None
+    ):
         return _fail("The lines are missing, empty or in the wrong order.")
     wording_text = wording.group(2).strip().strip(QUOTE_CHARACTERS).strip()
     if not wording_text:

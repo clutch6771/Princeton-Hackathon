@@ -9,10 +9,12 @@ from __future__ import annotations
 
 from langgraph.store.base import BaseStore
 
+from guardian.datasource import DataSource
 from guardian.memory import keys
 
 BRIEF = "brief.md"
 HYPOTHESES = "hypotheses.md"
+SESSIONS_FOLDER = "sessions"
 
 
 def read_file(store: BaseStore, user_id: str, name: str) -> str:
@@ -22,3 +24,23 @@ def read_file(store: BaseStore, user_id: str, name: str) -> str:
         return ""
     content = item.value.get("content", "")
     return content if isinstance(content, str) else "\n".join(content)
+
+
+def session_summary_name(session_id: str) -> str:
+    return f"{SESSIONS_FOLDER}/{session_id}.md"
+
+
+def latest_session_summary(
+    store: BaseStore, datasource: DataSource, user_id: str
+) -> str:
+    """The summary of the user's most recent session that has one; empty if none."""
+    sessions = sorted(
+        datasource.list_sessions(user_id),
+        key=lambda session: session["start"],
+        reverse=True,
+    )
+    for session in sessions:
+        summary = read_file(store, user_id, session_summary_name(session["id"]))
+        if summary.strip():
+            return summary
+    return ""

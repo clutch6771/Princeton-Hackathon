@@ -12,9 +12,16 @@ from langgraph.types import Command
 from guardian import config
 from guardian.deps import ChatRunContext, Deps
 from guardian.memory import formats, proposals, records, values
-from guardian.types import ChatContext, Decision, GuardianResponse
+from guardian.types import ChatContext, Decision, GuardianResponse, Interrupt
 
 logger = logging.getLogger("guardian")
+
+# Written by the app into the CONTEXT block whenever reel IDs are passed, so the
+# agent looks the reels up instead of answering in general terms.
+LOOK_UP_REELS_FIRST = (
+    "The user is asking about these reels. Call get_reels with these IDs before you "
+    "reply, then explain each reel."
+)
 
 # Shown when a card carries suggested wording and the model sent no text with it, so
 # the user is always told the wording is not their own.
@@ -25,7 +32,6 @@ SUGGESTED_WORDING_NOTE = (
 
 USER_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 CONTEXT_ENTRIES = ("onboarding", "chat", "drift_notification", "reel", "learned")
-ENTRY_ONBOARDING = "onboarding"
 
 ERROR_INVALID_USER = "The user ID is missing or not valid."
 ERROR_WRONG_THREAD = "This conversation does not belong to this user."
@@ -41,7 +47,7 @@ ERROR_UNAVAILABLE = (
 
 def respond(
     reply: str | None = None,
-    pending: dict[str, Any] | None = None,
+    pending: Interrupt | None = None,
     error: str | None = None,
 ) -> GuardianResponse:
     return GuardianResponse(reply=reply, pending=pending, error=error)
@@ -84,10 +90,11 @@ def context_block(deps: Deps, user_id: str, context: ChatContext | None) -> str:
     if context is None:
         if values.has_values(deps.store, user_id):
             return ""
-        context = ChatContext(entry=ENTRY_ONBOARDING)
+        context = ChatContext(entry="onboarding")
     lines = ["CONTEXT", f"entry: {context.get('entry', 'chat')}"]
     if context.get("reel_ids"):
         lines.append(f"reel_ids: {', '.join(context['reel_ids'])}")
+        lines.append(LOOK_UP_REELS_FIRST)
     if context.get("session_id"):
         lines.append(f"session_id: {context['session_id']}")
     return "\n".join([*lines, "END CONTEXT"])

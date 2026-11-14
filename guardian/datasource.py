@@ -13,7 +13,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, Protocol, TypedDict
+from typing import Any, Literal, Protocol, TypedDict, cast
 
 SEED_DIR = Path(__file__).resolve().parent / "seed"
 UNLISTED_SEED_SESSIONS = frozenset(
@@ -23,6 +23,8 @@ UNLISTED_SEED_SESSIONS = frozenset(
 FEEDBACK_LABELS = ("agree", "disagree", "not_for_me", "fine")
 FEEDBACK_SOURCES = ("app", "chat", "rerate", "share")
 DEFAULT_FEEDBACK_SOURCE = "app"
+FeedbackLabel = Literal["agree", "disagree", "not_for_me", "fine"]
+FeedbackSource = Literal["app", "chat", "rerate", "share"]
 TOP_COUNT = 5
 STOPWORDS = frozenset(
     "a an and are as at be by for from i in is it my of on or that the this to was with you your".split()
@@ -342,9 +344,9 @@ class FakeDataSource:
             id=self._next_feedback_id(),
             reel_id=reel_id,
             ts=self._clock(),
-            label=label,
+            label=cast(FeedbackLabel, label),  # validated above
             comment=feedback.get("comment") or None,
-            source=source,
+            source=cast(FeedbackSource, source),  # validated above
             link=None,
         )
         self._feedback = (*self._feedback, item)

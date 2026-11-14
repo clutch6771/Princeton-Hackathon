@@ -5,7 +5,6 @@ A scripted model stands in for Gemini, so these run offline and deterministicall
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -54,23 +53,6 @@ def propose(
     )
 
 
-@pytest.fixture(autouse=True)
-def fast_retries(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chat_agent, "RETRY_INITIAL_DELAY_SECONDS", 0.0)
-
-
-@pytest.fixture
-def start(store, datasource, clock) -> Callable[[list[AIMessage]], ScriptedChatModel]:
-    """Configure the package with a scripted chat model and return that model."""
-
-    def configure(script: list[AIMessage]) -> ScriptedChatModel:
-        model = ScriptedChatModel(script=script)
-        api.configure(store, InMemorySaver(), datasource, clock=clock, chat_model=model)
-        return model
-
-    return configure
-
-
 def system_text(model: ScriptedChatModel, call: int = 0) -> str:
     return " ".join(
         str(m.content) for m in model.calls[call] if isinstance(m, SystemMessage)
@@ -112,6 +94,7 @@ def test_context_is_prefixed_for_the_model_but_not_stored_in_the_chat_log(start,
 
     seen = [str(m.content) for m in model.calls[0] if isinstance(m, HumanMessage)][-1]
     assert seen.startswith("CONTEXT")
+    assert chat_flow.LOOK_UP_REELS_FIRST in seen
     assert (
         "entry: drift_notification" in seen
         and "rl_014, rl_015" in seen

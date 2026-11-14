@@ -11,13 +11,12 @@ import threading
 import uuid
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
-from typing import Any
 
 from langgraph.store.base import BaseStore
 
 from guardian.datasource import DataSource
 from guardian.memory import checks, formats, keys, values
-from guardian.types import ValueChange
+from guardian.types import Interrupt, ValueChange
 
 STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
@@ -357,6 +356,8 @@ def _apply(
         )
 
     proposed = formats.parse_entry(proposal.proposed_text).entry
+    if proposed is None:
+        return _failed("This card's text is not a valid value entry.")
     final, error = _final_entry(proposed, action, edited_text)
     if final is None:
         return _failed(error)
@@ -392,7 +393,7 @@ def _final_entry(
         return proposed, None
     if not (edited_text or "").strip():
         return None, "An edit needs the edited text of the value."
-    parsed = formats.parse_entry(edited_text)
+    parsed = formats.parse_entry(edited_text or "")
     if parsed.entry is None:
         return None, parsed.error
     if parsed.entry.header_id != proposed.header_id:
@@ -418,6 +419,6 @@ def _failed(error: str | None) -> DecisionResult:
     return DecisionResult(ok=False, outcome=None, value_id=None, error=error)
 
 
-def card(proposal: Proposal) -> dict[str, Any]:
+def card(proposal: Proposal) -> Interrupt:
     """The `Interrupt` payload for a pending chat proposal."""
-    return {"kind": "value_change", "value_change": proposal.to_value_change()}
+    return Interrupt(kind="value_change", value_change=proposal.to_value_change())
