@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Saturday Nov 14, 5:12 pm. Branch: `guardian`.
+Last updated: Saturday Nov 14, 6:34 pm. Branch: `guardian`.
 
 ## Where things stand
 
@@ -14,11 +14,14 @@ Last updated: Saturday Nov 14, 5:12 pm. Branch: `guardian`.
 | Integration checkpoint 1 | Ready on the Guardian side; waiting for the owner to confirm the chat from the app or the dev server | `86e0a5f` and the dev-server commit |
 | 3. Reflector | Done | `5caef44` |
 | 4. Inbox approval (`get_questions`, `answer_question`) | Done; integration checkpoint 2 waiting on the owner | this commit |
+| Backend brief Part A: survey of the app and the teammate's backend | Done | |
+| Backend brief Part B: storage on Postgres | Done; tables not yet created in the team database | this commit |
+| Backend brief Part C: Guardian router | Not started | |
 | 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) | Not started; the closing question on the "What I learned" card is already in | |
 | 5. Learning evaluation | Not started | |
 | Optional items | Not started | |
 
-Offline tests: 298 passing in `guardian/` and 9 in `dev_server/`. They use a scripted model and make no API calls.
+Offline tests: 307 passing in `guardian/` in memory and 9 in `dev_server/`; 521 in total when every storage test also runs on Postgres. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -165,6 +168,32 @@ Results: 25 tests. Live (Flash-Lite): the Reflector reviewed the feedback sessio
 Also fixed: an Evidence line could end up with two "approved" stamps when an agent added new evidence after the old stamp. An earlier stamp is now removed wherever it sits.
 
 The terminal chat gained `/reflect`, `/inbox` and `/answer`, so the whole loop can be run by hand.
+
+## Backend brief (docs/BACKEND_BRIEF.md)
+
+### Part A: what the survey found
+
+- **Two versions of the iOS app.** `main` calls `agent1/ingest`, `agent2/checkpoint`, `agent2/chat`, `agent2/feedback` and polls `agent2/pending-intervention` every 8 seconds, with no user ID. The teammate's branch `Reel-Watcher-Agent` sends an `X-Demo-User-Id` header, builds the checkpoint digest in the app from `GET timeline`, posts `feedback` and `session/end`, and no longer polls the server. The owner chose to match the teammate's branch.
+- **The app has no value-card, inbox or values screen**, and never calls a resume route. Its chat expects a `ChatMessage` (`id`, `sender: "coachAgent"`, `text`, `timestamp`). Its "goal" is free text kept on the phone and sent as `stated_goals`.
+- **The app notifies every N reels** (default 15, setting 3 to 50), whatever the number of conflicts. There is no conflict threshold or cooldown.
+- **A teammate has built the Judge server** (`watcher_Agent/` on `Reel-Watcher-Agent`): FastAPI, PostgreSQL, Grok by default. It serves upload, timeline, feedback and session end, and includes `JudgeDataSource`, an implementation of Guardian's `DataSource`. It has no chat, inbox, memory or status routes and no Reflector trigger. It reads approved values with a direct SELECT on LangGraph's Postgres store.
+
+Decisions that followed: Postgres instead of MongoDB; no second backend or Judge; a Guardian router that the teammate's server includes; a text fallback for value cards.
+
+### Part B: storage on Postgres
+
+Built: `guardian/storage.py` (in memory or Postgres, chosen from the environment), `guardian/memory/locks.py` (in-process locks, or Postgres advisory locks), and `python -m guardian.storage setup`.
+
+- **Selection.** `GUARDIAN_DATABASE_URL` if set, otherwise `DATABASE_URL`; with neither, in memory. `api.configure(datasource=...)` picks storage itself; passing a store and checkpointer still works.
+- **What persists.** Everything: LangGraph's `PostgresStore` holds values, proposals, inbox cards, review records, counters, chat log, notes and the Reflector's files; `PostgresSaver` holds chat threads, including a run paused on a value card.
+- **Guarantees across processes.** Creating and deciding a proposal take a per-user advisory lock, so a card is decided once and value IDs stay unique under concurrent approvals. Saving a note takes one too. A Reflector run takes a non-blocking per-user lock, on top of the `running` review record. Restore-on-failure works through the store as before.
+- **Per-user isolation.** Every listing now filters on the exact namespace, so a user ID containing `_` (a wildcard in SQL `LIKE`) cannot match another user's records.
+- **Secrets.** Connection strings and their passwords are redacted from anything logged. Commits are scanned for them as well as for the API key.
+- **The Judge's values query finds what Guardian stores.** Pinned by a test that runs the Judge's exact SELECT. The layout is written up as a compatibility contract in `docs/GUARDIAN_BACKEND_HANDOVER.md`.
+
+Results: every existing storage test runs on both backends through one parametrized fixture: 521 tests pass with `TEST_DATABASE_URL` set (a local Postgres 16 in Docker), 316 in memory without it. Six Postgres-only tests cover locks across two connections, the Judge's SELECT, wildcard isolation, decide-once from two processes, concurrent value IDs, and a restart (an approved value and a pending card are both still there after everything is rebuilt, and the card can then be approved).
+
+State of the team database (checked read-only): reachable, the role may create tables, and it is empty. Guardian's tables have not been created there.
 
 ## Conventions
 

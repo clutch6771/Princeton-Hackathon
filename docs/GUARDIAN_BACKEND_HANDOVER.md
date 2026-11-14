@@ -263,6 +263,43 @@ After a successful approval, `api.get_values(user_id)` returns the new text, so 
 - [ ] Dismissing the "What I learned" card removes it
 - [ ] An invalid edit shows the error and keeps the card
 
+## Storage, and the values layout the Judge reads
+
+Guardian keeps its state in memory by default and in Postgres when a connection string is set.
+
+| Variable | Used for |
+| --- | --- |
+| `DATABASE_URL` | Guardian's runtime connection, the same variable the Judge server uses |
+| `GUARDIAN_DATABASE_URL` | Optional. Overrides `DATABASE_URL` for Guardian only, for when the Judge's runtime role is read-only on the store |
+| `MIGRATION_DATABASE_URL` | Optional. An owner role, used only by `python -m guardian.storage setup` to create the tables |
+| `TEST_DATABASE_URL` | Tests only. Must point at a disposable database; tests delete their users' rows from it |
+
+With no `store` and `checkpointer` passed, `api.configure(datasource=...)` reads these itself. On Postgres it uses LangGraph's `PostgresStore` and `PostgresSaver` (package `langgraph-checkpoint-postgres`, the version the Judge pins) in schema `public`: tables `store`, `store_migrations`, `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`.
+
+**The role Guardian connects with needs SELECT, INSERT, UPDATE and DELETE on those tables.** The Judge's `grant` step gives its runtime role SELECT only on `store`; that is right for the Judge and not enough for Guardian. Either grant Guardian's role write access, or give Guardian its own role through `GUARDIAN_DATABASE_URL`.
+
+Guardian also takes Postgres advisory locks (`pg_advisory_lock`) so that a value card is decided once, value IDs are never reused, and one review runs per user, even with several server processes.
+
+### Compatibility contract: where approved values are stored
+
+The Judge reads approved values with a direct query instead of calling Guardian:
+
+```sql
+SELECT key, value, updated_at FROM public.store
+WHERE prefix = '<user_id>.guardian.values' AND (expires_at IS NULL OR expires_at > now())
+```
+
+Guardian guarantees the following, and a test pins it (`test_the_judges_select_finds_approved_values_and_nothing_else`):
+
+- Each approved value is one row in namespace `(<user_id>, "guardian", "values")`, which LangGraph stores as prefix `<user_id>.guardian.values`.
+- The key is the value ID (`V1`, `V2`, ...). Nothing else is ever stored in that namespace; the ID counter and pending proposals live elsewhere.
+- `value` is `{"text": "<the full entry>", "updated": "<ISO time>"}`, and `text` starts with `## <key>:`.
+- Joining the `text` of the rows in ID order, separated by a blank line, gives exactly what `api.get_values(user_id)` returns.
+- Only one function writes these rows: the decision on a pending card (`proposals.decide`).
+- User IDs contain only letters, digits, `_` and `-`, so the prefix is unambiguous.
+
+**Preferred instead:** call `guardian.api.get_values(user_id)`. Then the storage layout can change without breaking the Judge. The contract above holds until that switch is made.
+
 ## A reference server until the backend is ready
 
 `dev_server/` holds a temporary FastAPI server with exactly these four routes, one fixed user (`demo-user`), in-memory storage and the seed data. It is not the team's backend and should be deleted once the real routes exist. It doubles as a working example of the wiring above.

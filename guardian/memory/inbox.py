@@ -83,7 +83,7 @@ def get_card(store: BaseStore, user_id: str, card_id: str) -> Card | None:
 
 
 def list_cards(store: BaseStore, user_id: str, status: str | None = None) -> list[Card]:
-    items = store.search(keys.namespace(user_id, keys.INBOX), limit=keys.SEARCH_LIMIT)
+    items = keys.items(store, keys.namespace(user_id, keys.INBOX))
     cards = [Card(**item.value) for item in items]
     wanted = [card for card in cards if status is None or card.status == status]
     return sorted(wanted, key=lambda card: (card.created, card.id))

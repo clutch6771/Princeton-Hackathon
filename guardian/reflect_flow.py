@@ -9,7 +9,6 @@ staged is kept.
 from __future__ import annotations
 
 import logging
-import threading
 import uuid
 from collections.abc import Callable
 from datetime import datetime
@@ -17,19 +16,18 @@ from typing import Any
 
 from guardian import chat_flow, config
 from guardian.deps import Deps, ReflectorRun
-from guardian.memory import checks, inbox, proposals, reflector_files, reviews, values
+from guardian.memory import (
+    checks,
+    inbox,
+    locks,
+    proposals,
+    reflector_files,
+    reviews,
+    values,
+)
 from guardian.reflector import build_reflector, run_input
 
 logger = logging.getLogger("guardian")
-
-_locks: dict[str, threading.Lock] = {}
-_locks_guard = threading.Lock()
-
-
-def user_lock(user_id: str) -> threading.Lock:
-    """One lock per user, so this process runs at most one review for a user at a time."""
-    with _locks_guard:
-        return _locks.setdefault(user_id, threading.Lock())
 
 
 def reflect_pending(deps: Deps, user_id: str, build_model: Callable[[], Any]) -> int:
@@ -40,10 +38,9 @@ def reflect_pending(deps: Deps, user_id: str, build_model: Callable[[], Any]) ->
     """
     if not chat_flow.is_valid_user_id(user_id):
         return 0
-    lock = user_lock(user_id)
-    if not lock.acquire(blocking=False):
-        return 0
-    try:
+    with locks.attempt(user_id, locks.REFLECT) as acquired:
+        if not acquired:
+            return 0
         now = deps.clock()
         if reviews.run_in_progress(deps.store, user_id, now):
             return 0
@@ -56,8 +53,6 @@ def reflect_pending(deps: Deps, user_id: str, build_model: Callable[[], Any]) ->
             review_session(deps, model, user_id, session["id"]) for session in waiting
         ]
         return len([done for done in outcomes if done])
-    finally:
-        lock.release()
 
 
 def review_session(deps: Deps, model: Any, user_id: str, session_id: str) -> bool:

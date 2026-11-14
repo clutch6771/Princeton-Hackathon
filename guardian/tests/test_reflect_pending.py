@@ -13,9 +13,9 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from guardian import api, reflect_flow
+from guardian import api
 from guardian.datasource import SEED_DIR, FakeDataSource
-from guardian.memory import inbox, proposals, reflector_files, reviews, values
+from guardian.memory import inbox, locks, proposals, reflector_files, reviews, values
 from guardian.tests.conftest import NOW, OTHER_USER, USER
 from guardian.tests.fakes import ScriptedChatModel, reply, tool_call
 
@@ -361,12 +361,10 @@ def test_a_call_during_a_run_returns_zero_without_starting_another(reflect, stor
 
 
 def test_a_call_while_this_process_is_reviewing_returns_zero(reflect, store):
-    lock = reflect_flow.user_lock(USER)
-    assert lock.acquire(blocking=False)
-    try:
+    with locks.attempt(USER, locks.REFLECT) as held:
         reviewed, model = reflect(good_run())
-    finally:
-        lock.release()
+
+    assert held is True
 
     assert reviewed == 0 and model.calls == []
 

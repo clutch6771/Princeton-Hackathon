@@ -76,7 +76,7 @@ def _is_stale(review: Review, now: datetime) -> bool:
 
 
 def _running(store: BaseStore, user_id: str) -> list[Review]:
-    items = store.search(keys.namespace(user_id, keys.REVIEWS), limit=keys.SEARCH_LIMIT)
+    items = keys.items(store, keys.namespace(user_id, keys.REVIEWS))
     reviews = [Review(**item.value) for item in items]
     return [review for review in reviews if review.status == STATUS_RUNNING]
 

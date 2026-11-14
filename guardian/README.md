@@ -29,6 +29,27 @@ pip install -r guardian/requirements.txt
 
 Put your own Gemini key in a `.env` file in the repository root (see `guardian/.env.example`). The file is git-ignored. Use one key per teammate so the Judge's calls do not use up the agents' quota.
 
+## Storage
+
+In memory by default. Set a Postgres connection string and the package persists everything it keeps: values, proposals, inbox cards, review records, counters, the chat log, notes, the Reflector's files, and chat threads including a card that is waiting.
+
+| Variable | Used for |
+| --- | --- |
+| `DATABASE_URL` | Runtime connection (the variable the Judge server uses) |
+| `GUARDIAN_DATABASE_URL` | Optional override for Guardian only |
+| `MIGRATION_DATABASE_URL` | Optional owner role for creating the tables |
+| `TEST_DATABASE_URL` | Tests only; a disposable database |
+
+```bash
+python -m guardian.storage setup        # create the tables once (uses MIGRATION_DATABASE_URL if set)
+```
+
+```python
+api.configure(datasource=datasource)    # storage chosen from the environment
+```
+
+Connection strings are secrets: keep them in the root `.env`, which is git-ignored. The package never logs them. See `docs/GUARDIAN_BACKEND_HANDOVER.md` for the privileges Guardian's role needs and for the layout the Judge reads values from.
+
 ## Using it from the backend
 
 Call `configure` once at startup, then call the entry points from your routes.
@@ -112,6 +133,7 @@ Request and response shapes are in `guardian/types.py`. They match the build spe
 ```bash
 python -m pytest guardian/tests                 # offline, scripted model, no API calls
 python -m pytest guardian/tests -m live         # real model; uses quota
+TEST_DATABASE_URL=postgresql://... python -m pytest guardian/tests   # also runs every storage test on Postgres
 ```
 
 Code follows the team config in `pyproject.toml` (black, isort, ruff, mypy):

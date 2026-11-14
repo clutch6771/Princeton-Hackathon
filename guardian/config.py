@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -25,6 +26,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_PATH = PROJECT_ROOT / ".env"
 
 REDACTED = "***"
+SECRET_VARS = (
+    API_KEY_VAR,
+    "DATABASE_URL",
+    "GUARDIAN_DATABASE_URL",
+    "MIGRATION_DATABASE_URL",
+    "TEST_DATABASE_URL",
+)
 
 
 class ConfigError(RuntimeError):
@@ -66,8 +74,13 @@ def reflector_model_name() -> str:
 
 
 def redact_secrets(text: str) -> str:
-    """Remove the API key from text that is about to be logged or shown."""
-    key = os.environ.get(API_KEY_VAR, "").strip()
-    if not key:
-        return text
-    return text.replace(key, REDACTED)
+    """Remove the API key and any database connection string from text about to be logged."""
+    for name in SECRET_VARS:
+        secret = os.environ.get(name, "").strip()
+        if not secret:
+            continue
+        text = text.replace(secret, REDACTED)
+        password = urlsplit(secret).password if "://" in secret else None
+        if password:
+            text = text.replace(password, REDACTED)
+    return text

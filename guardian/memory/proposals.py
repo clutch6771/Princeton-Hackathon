@@ -7,7 +7,6 @@ the proposal's ID and the user's decision, never text supplied by a model.
 
 from __future__ import annotations
 
-import threading
 import uuid
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
@@ -15,7 +14,7 @@ from datetime import datetime
 from langgraph.store.base import BaseStore
 
 from guardian.datasource import DataSource
-from guardian.memory import checks, formats, keys, values
+from guardian.memory import checks, formats, keys, locks, values
 from guardian.types import Interrupt, ValueChange
 
 STATUS_STAGED = "staged"  # queued by a Reflector run that has not finished
@@ -37,8 +36,6 @@ ACTIONS = (ACTION_APPROVE, ACTION_EDIT, ACTION_REJECT)
 TARGET_NEW = "new"
 SOURCE_CHAT = "chat"
 SOURCE_REFLECTOR = "reflector"
-
-_DECIDE_LOCK = threading.Lock()  # one decision at a time within this process
 
 
 @dataclass(frozen=True)
@@ -100,9 +97,7 @@ def get_proposal(store: BaseStore, user_id: str, proposal_id: str) -> Proposal |
 
 
 def list_proposals(store: BaseStore, user_id: str) -> list[Proposal]:
-    items = store.search(
-        keys.namespace(user_id, keys.PROPOSALS), limit=keys.SEARCH_LIMIT
-    )
+    items = keys.items(store, keys.namespace(user_id, keys.PROPOSALS))
     return sorted(
         (Proposal(**item.value) for item in items),
         key=lambda proposal: (proposal.created, proposal.id),
@@ -157,7 +152,7 @@ def discard_staged(store: BaseStore, user_id: str) -> None:
 # --- Creating ------------------------------------------------------------------------
 
 
-def create_proposal(
+def _check_and_record(
     store: BaseStore,
     datasource: DataSource,
     user_id: str,
@@ -209,6 +204,37 @@ def create_proposal(
     )
     _save(store, proposal)
     return CreateResult(proposal, None)
+
+
+def create_proposal(
+    store: BaseStore,
+    datasource: DataSource,
+    user_id: str,
+    *,
+    value_id: str,
+    new_text: str,
+    evidence: str,
+    source: dict[str, str],
+    now: datetime,
+    status: str = STATUS_PENDING,
+) -> CreateResult:
+    """Check a proposed value change and record it, one at a time per user.
+
+    The lock is the one `decide` takes, so the duplicate and one-card-per-thread
+    checks cannot race with another process.
+    """
+    with locks.hold(user_id, locks.VALUES):
+        return _check_and_record(
+            store,
+            datasource,
+            user_id,
+            value_id=value_id,
+            new_text=new_text,
+            evidence=evidence,
+            source=source,
+            now=now,
+            status=status,
+        )
 
 
 def _normalize_target(value_id: str) -> str | None:
@@ -332,7 +358,7 @@ def decide(
     This is the only code that changes approved values. A failed check changes
     nothing and leaves the card pending, except a stale card, which is superseded.
     """
-    with _DECIDE_LOCK:
+    with locks.hold(user_id, locks.VALUES):
         proposal = get_proposal(store, user_id, proposal_id)
         if proposal is None:
             return _failed("This card does not exist.")

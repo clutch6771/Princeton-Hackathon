@@ -17,11 +17,13 @@ from typing import Any
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 
-from guardian import chat_flow, config, inbox_flow, models, reflect_flow
+from guardian import chat_flow, config, inbox_flow, models, reflect_flow, storage
 from guardian.chat_agent import build_chat_agent
 from guardian.datasource import DataSource
 from guardian.deps import Deps
+from guardian.memory import locks as lock_provider
 from guardian.memory import notes, reflector_files, values
+from guardian.memory.locks import Locks
 from guardian.types import (
     Answer,
     AnswerResult,
@@ -36,20 +38,35 @@ _chat_agent: Any | None = None
 
 
 def configure(
-    store: BaseStore,
-    checkpointer: BaseCheckpointSaver,
-    datasource: DataSource,
+    store: BaseStore | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
+    datasource: DataSource | None = None,
     clock: Callable[[], datetime] | None = None,
     *,
     chat_model: Any | None = None,
     reflector_model: Any | None = None,
+    locks: Locks | None = None,
 ) -> None:
-    """Supply the store, checkpointer and data source. Call once before any entry point.
+    """Supply the data source and, optionally, the storage. Call once before any entry point.
+
+    With no `store` and `checkpointer`, storage comes from the environment: Postgres
+    when GUARDIAN_DATABASE_URL or DATABASE_URL is set (in the environment or the
+    repository's .env), otherwise in memory. Pass your own `store` and `checkpointer`
+    to share ones you already have; pass `locks` too if several processes share them.
 
     `clock` defaults to the current UTC time. The models default to the ones named by
     GUARDIAN_CHAT_MODEL and GUARDIAN_REFLECTOR_MODEL; pass instances to override them.
     """
     global _deps, _chat_agent
+    if datasource is None:
+        raise config.ConfigError("configure() needs a datasource.")
+    if (store is None) != (checkpointer is None):
+        raise config.ConfigError("Pass both a store and a checkpointer, or neither.")
+    if store is None or checkpointer is None:
+        opened = storage.open_from_env()
+        store, checkpointer, locks = opened.store, opened.checkpointer, opened.locks
+    if locks is not None:
+        lock_provider.set_provider(locks)
     _deps = Deps(
         store=store,
         checkpointer=checkpointer,
