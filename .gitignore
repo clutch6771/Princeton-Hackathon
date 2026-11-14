@@ -1,9 +1,14 @@
-
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
+.coverage
+htmlcov/
+
+# Guardian virtual environment and caches
+guardian/.venv/
+guardian/eval/.cache/
 
 # Xcode / Swift
 DerivedData/
@@ -24,10 +29,8 @@ xcuserdata/
 # Python tooling caches
 .mypy_cache/
 .ruff_cache/
-.coverage
-htmlcov/
 
-# Machine learning artifacts (keep datasets and weights out of Git)
+# Machine learning artifacts
 data/
 datasets/
 models/

@@ -1,0 +1,6 @@
+[run]
+data_file = guardian/.coverage
+omit =
+    guardian/tests/*
+    guardian/eval/*
+    guardian/.venv/*
