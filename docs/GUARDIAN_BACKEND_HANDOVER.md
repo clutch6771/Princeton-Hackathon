@@ -162,6 +162,17 @@ Read-only. File name to markdown text; an empty string means nothing is stored y
 
 `api.get_values(user_id)` returns the `values.md` text above, or `""`. Call it for each reel; do not read the store directly. The draft Judge prompt is in `guardian/judge_prompt.md`.
 
+## A reference server until the backend is ready
+
+`dev_server/` holds a temporary FastAPI server with exactly these four routes, one fixed user (`demo-user`), in-memory storage and the seed data. It is not the team's backend and should be deleted once the real routes exist. It doubles as a working example of the wiring above.
+
+```bash
+pip install -r dev_server/requirements.txt
+GUARDIAN_DEV_SEEDED=1 uvicorn dev_server.app:create_app --factory --host 0.0.0.0 --port 8000
+```
+
+`GUARDIAN_DEV_SEEDED=1` starts it with three approved values, so a drift explanation works straight away. Leave it out to start with none and go through the interview. See `dev_server/README.md` for curl examples.
+
 ## Try it without a server
 
 ```bash

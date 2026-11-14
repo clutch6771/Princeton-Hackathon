@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Saturday Nov 14, 3:45 pm. Branch: `guardian`.
+Last updated: Saturday Nov 14, 4:15 pm. Branch: `guardian`.
 
 ## Where things stand
 
@@ -11,13 +11,13 @@ Last updated: Saturday Nov 14, 3:45 pm. Branch: `guardian`.
 | 0. Setup and library checks | Done | `2401d3a` |
 | 1. Interview and value approval | Done | `e5d897a`, `5fbb82f` |
 | 2. Reel explanation and feedback in chat | Done | `b2fc5ea` |
-| Integration checkpoint 1 | In progress | |
+| Integration checkpoint 1 | Ready on the Guardian side; waiting for the owner to confirm the chat from the app or the dev server | `86e0a5f` and the dev-server commit |
 | 3. Reflector | Not started | |
 | 4. Inbox approval (`get_questions`, `answer_question`) | Not started | |
 | 5. Learning evaluation | Not started | |
 | Optional items | Not started | |
 
-Offline tests: 205 passing, 98% coverage. They use a scripted model and make no API calls.
+Offline tests: 217 passing in `guardian/` and 9 in `dev_server/`. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -101,6 +101,20 @@ Design points:
 Live scenarios (Flash-Lite): the injection reel changes nothing; a disagreement is recorded as feedback; a drift notification for three reels is explained one reel at a time with stored value IDs, the user's own words and a closing question. The drift scenario passed 3 of 3 consecutive runs on unchanged code.
 
 Known limits of Flash-Lite seen in live runs: it sometimes proposes a value after one message without follow-up questions; it sometimes paraphrases where it could quote.
+
+## Integration checkpoint 1
+
+What exists for trying the chat before the Reflector is built:
+
+- `python -m guardian.demo_chat`: a terminal chat on seed data (interview, `/approve`, `/edit`, `/reject`, `/drift`, `/values`, `/memory`, `/seed`). Tested with a scripted model and run once against Gemini.
+- `docs/GUARDIAN_BACKEND_HANDOVER.md`: exact request and response JSON for `/chat`, `/chat/resume`, `/status` and `/memory`, generated from the real functions.
+- `dev_server/`: a temporary FastAPI server with those four routes, because the team's backend was not ready. One fixed user, in-memory storage, seed data. Delete it once the real backend serves the routes.
+
+Results: the dev server answered all four routes against the live model (status, a drift explanation, an error body, memory) and returns 422 for a malformed body.
+
+Also changed at this checkpoint: an invalid edit of a card now returns a short message written for the user. Before, it returned the format guidance written for the agent.
+
+Gate before Step 3: the owner confirms the chat works from the app or the dev server.
 
 ## Conventions
 
