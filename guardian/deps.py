@@ -21,7 +21,9 @@ class Deps:
     checkpointer: BaseCheckpointSaver
     datasource: DataSource
     clock: Callable[[], datetime]
-    chat_model: Any | None = None  # a chat model instance; built from the environment when None
+    chat_model: Any | None = (
+        None  # a chat model instance; built from the environment when None
+    )
     reflector_model: Any | None = None
 
 

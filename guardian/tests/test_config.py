@@ -32,6 +32,7 @@ def test_load_env_does_not_override_existing_environment(tmp_path, clean_env):
     config.load_env(env_file)
 
     import os
+
     assert os.environ["GOOGLE_API_KEY"] == "already-set"
 
 

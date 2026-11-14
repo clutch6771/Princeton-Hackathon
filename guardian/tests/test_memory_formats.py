@@ -25,11 +25,18 @@ def test_parse_reads_every_field_of_a_valid_entry():
 
     assert parsed.ok and parsed.error is None
     entry = parsed.entry
-    assert (entry.header_id, entry.title, entry.strength) == ("V3", "Fitness without body comparison", "high")
+    assert (entry.header_id, entry.title, entry.strength) == (
+        "V3",
+        "Fitness without body comparison",
+        "high",
+    )
     assert entry.want_more == "form tutorials, training plans, recovery"
     assert entry.want_less == "before/after transformations, physique rating"
     assert entry.unless == "none"
-    assert (entry.wording_label, entry.wording_text) == ("In my words", "gym stuff is great, comparing bodies is not")
+    assert (entry.wording_label, entry.wording_text) == (
+        "In my words",
+        "gym stuff is great, comparing bodies is not",
+    )
     assert entry.evidence == "disagreed with rl_112; approved 2026-11-14"
 
 
@@ -44,7 +51,9 @@ def test_parse_accepts_a_new_value_header():
     assert parsed.entry.header_id == "New"
 
 
-@pytest.mark.parametrize("label", ["In my words", "Agreed wording", "Suggested wording"])
+@pytest.mark.parametrize(
+    "label", ["In my words", "Agreed wording", "Suggested wording"]
+)
 def test_parse_accepts_each_wording_label(label: str):
     parsed = formats.parse_entry(ENTRY.replace("In my words", label))
 
@@ -53,8 +62,14 @@ def test_parse_accepts_each_wording_label(label: str):
 
 
 def test_parse_tolerates_blank_lines_trailing_spaces_and_curly_or_missing_quotes():
-    messy = ENTRY.replace("\n", "  \n\n").replace('"gym stuff is great, comparing bodies is not"', "“gym stuff is great, comparing bodies is not”")
-    unquoted = ENTRY.replace('"gym stuff is great, comparing bodies is not"', "gym stuff is great, comparing bodies is not")
+    messy = ENTRY.replace("\n", "  \n\n").replace(
+        '"gym stuff is great, comparing bodies is not"',
+        "“gym stuff is great, comparing bodies is not”",
+    )
+    unquoted = ENTRY.replace(
+        '"gym stuff is great, comparing bodies is not"',
+        "gym stuff is great, comparing bodies is not",
+    )
 
     assert formats.render_entry(formats.parse_entry(messy).entry) == ENTRY
     assert formats.render_entry(formats.parse_entry(unquoted).entry) == ENTRY
@@ -69,8 +84,13 @@ def test_parse_tolerates_blank_lines_trailing_spaces_and_curly_or_missing_quotes
         ENTRY.replace("(strength: high)", "(strength: enormous)"),
         ENTRY.replace("## V3:", "## 3:"),
         ENTRY.replace("## V3: Fitness without body comparison", "## V3:"),
-        ENTRY.replace("- Want more: form tutorials, training plans, recovery", "- Want more:"),
-        ENTRY.replace('- In my words: "gym stuff is great, comparing bodies is not"', '- In my words: ""'),
+        ENTRY.replace(
+            "- Want more: form tutorials, training plans, recovery", "- Want more:"
+        ),
+        ENTRY.replace(
+            '- In my words: "gym stuff is great, comparing bodies is not"',
+            '- In my words: ""',
+        ),
         "",
         "just a sentence",
     ],
@@ -91,7 +111,9 @@ def test_parse_rejects_lines_in_the_wrong_order():
 
 
 def test_parse_rejects_two_wording_lines_and_says_so():
-    doubled = ENTRY.replace("- Evidence:", '- Suggested wording: "another"\n- Evidence:')
+    doubled = ENTRY.replace(
+        "- Evidence:", '- Suggested wording: "another"\n- Evidence:'
+    )
 
     parsed = formats.parse_entry(doubled)
 
@@ -101,15 +123,25 @@ def test_parse_rejects_two_wording_lines_and_says_so():
 
 def test_value_id_helpers():
     assert formats.is_value_id("V3") and formats.is_value_id("V12")
-    assert not formats.is_value_id("V0") and not formats.is_value_id("new") and not formats.is_value_id("v3")
+    assert (
+        not formats.is_value_id("V0")
+        and not formats.is_value_id("new")
+        and not formats.is_value_id("v3")
+    )
     assert formats.value_number("V12") == 12
 
 
 def test_stamp_approved_appends_the_date_once():
     day = date(2026, 11, 14)
 
-    assert formats.stamp_approved("said at onboarding", day) == "said at onboarding; approved 2026-11-14"
-    assert formats.stamp_approved("fb_001; approved 2026-11-01", day) == "fb_001; approved 2026-11-14"
+    assert (
+        formats.stamp_approved("said at onboarding", day)
+        == "said at onboarding; approved 2026-11-14"
+    )
+    assert (
+        formats.stamp_approved("fb_001; approved 2026-11-01", day)
+        == "fb_001; approved 2026-11-14"
+    )
     assert formats.stamp_approved("User cites transformation videos.", day) == (
         "User cites transformation videos; approved 2026-11-14"
     )

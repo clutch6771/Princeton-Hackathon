@@ -14,9 +14,14 @@ def test_initial_values_are_installed_through_the_approval_path(store, datasourc
     ids = install_initial_values(store, datasource, USER, NOW)
 
     assert ids == ["V1", "V2", "V3"]
-    entries = [formats.parse_entry(value.text).entry for value in values.list_values(store, USER)]
+    entries = [
+        formats.parse_entry(value.text).entry
+        for value in values.list_values(store, USER)
+    ]
     assert [entry.title for entry in entries] == [
-        "Fitness without body comparison", "News without outrage", "Cooking I can actually make",
+        "Fitness without body comparison",
+        "News without outrage",
+        "Cooking I can actually make",
     ]
     assert all(entry.wording_label == formats.WORDING_OWN for entry in entries)
     assert [p.status for p in proposals.list_proposals(store, USER)] == ["approved"] * 3
@@ -34,7 +39,11 @@ def test_installing_twice_does_not_duplicate_values(store, datasource):
 
 def test_seed_verdicts_cite_only_the_initial_values(store, datasource):
     ids = set(install_initial_values(store, datasource, USER, NOW))
-    cited = {value_id for reel in datasource.get_session_reels(USER, "s_002") for value_id in reel["value_ids"]}
+    cited = {
+        value_id
+        for reel in datasource.get_session_reels(USER, "s_002")
+        for value_id in reel["value_ids"]
+    }
 
     assert cited <= ids
 

@@ -14,7 +14,12 @@ from typing import Any
 
 import pytest
 from deepagents import FilesystemPermission, create_deep_agent
-from deepagents.backends import CompositeBackend, FilesystemBackend, StateBackend, StoreBackend
+from deepagents.backends import (
+    CompositeBackend,
+    FilesystemBackend,
+    StateBackend,
+    StoreBackend,
+)
 from deepagents.backends.protocol import BackendProtocol, WriteResult
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
@@ -55,11 +60,16 @@ def text_of(message: Any) -> str:
     content = message.content
     if isinstance(content, str):
         return content
-    return " ".join(str(block.get("text", "")) if isinstance(block, dict) else str(block) for block in content)
+    return " ".join(
+        str(block.get("text", "")) if isinstance(block, dict) else str(block)
+        for block in content
+    )
 
 
 def system_text(model: ScriptedChatModel, call: int = 0) -> str:
-    return " ".join(text_of(m) for m in model.calls[call] if isinstance(m, SystemMessage))
+    return " ".join(
+        text_of(m) for m in model.calls[call] if isinstance(m, SystemMessage)
+    )
 
 
 def tool_messages(result: dict[str, Any]) -> list[ToolMessage]:
@@ -73,12 +83,16 @@ def build_proposing_agent(script: list[AIMessage], log: list[dict[str, str]]):
     @tool
     def propose(text: str, runtime: ToolRuntime[Ctx]) -> str:
         """Propose a change and wait for the user's decision."""
-        log.append({"tool_call_id": runtime.tool_call_id, "user_id": runtime.context.user_id})
+        log.append(
+            {"tool_call_id": runtime.tool_call_id, "user_id": runtime.context.user_id}
+        )
         answer = interrupt({"proposal": text})
         return f"outcome: {answer['outcome']}"
 
     model = ScriptedChatModel(script=script)
-    agent = create_agent(model=model, tools=[propose], context_schema=Ctx, checkpointer=InMemorySaver())
+    agent = create_agent(
+        model=model, tools=[propose], context_schema=Ctx, checkpointer=InMemorySaver()
+    )
     return agent, model, propose
 
 
@@ -94,7 +108,9 @@ def test_runtime_argument_is_hidden_from_the_tool_schema():
 def test_tool_interrupt_pauses_run_and_surfaces_payload():
     # Design: propose_value_change runs its checks, then raises the interrupt itself.
     log: list[dict[str, str]] = []
-    agent, model, _ = build_proposing_agent([tool_call("propose", {"text": "less outrage"})], log)
+    agent, model, _ = build_proposing_agent(
+        [tool_call("propose", {"text": "less outrage"})], log
+    )
 
     result = agent.invoke(user_says("hi"), config=THREAD, context=Ctx("u1"))
 
@@ -111,7 +127,9 @@ def test_resume_reruns_tool_body_with_same_tool_call_id():
     agent, model, _ = build_proposing_agent(script, log)
     agent.invoke(user_says("hi"), config=THREAD, context=Ctx("u1"))
 
-    result = agent.invoke(Command(resume={"outcome": "approved"}), config=THREAD, context=Ctx("u1"))
+    result = agent.invoke(
+        Command(resume={"outcome": "approved"}), config=THREAD, context=Ctx("u1")
+    )
 
     assert log == [{"tool_call_id": "call_1", "user_id": "u1"}] * 2
     assert tool_messages(result)[-1].content == "outcome: approved"
@@ -121,11 +139,15 @@ def test_resume_reruns_tool_body_with_same_tool_call_id():
 
 def test_paused_thread_reports_pending_interrupt_in_state():
     # Design: resume() can tell whether a thread is actually paused.
-    agent, _, _ = build_proposing_agent([tool_call("propose", {"text": "x"}), reply("ok")], [])
+    agent, _, _ = build_proposing_agent(
+        [tool_call("propose", {"text": "x"}), reply("ok")], []
+    )
     agent.invoke(user_says("hi"), config=THREAD, context=Ctx("u1"))
 
     paused = agent.get_state(THREAD)
-    agent.invoke(Command(resume={"outcome": "rejected"}), config=THREAD, context=Ctx("u1"))
+    agent.invoke(
+        Command(resume={"outcome": "rejected"}), config=THREAD, context=Ctx("u1")
+    )
     finished = agent.get_state(THREAD)
 
     assert len(paused.interrupts) == 1
@@ -156,12 +178,19 @@ def test_after_model_can_jump_back_to_model_once():
     @after_model(can_jump_to=["model"])
     def citation_check(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         messages = state["messages"]
-        corrected = any(isinstance(m, HumanMessage) and "CORRECTION" in text_of(m) for m in messages)
+        corrected = any(
+            isinstance(m, HumanMessage) and "CORRECTION" in text_of(m) for m in messages
+        )
         if "V99" in text_of(messages[-1]) and not corrected:
-            return {"messages": [HumanMessage(content="CORRECTION: V99 is not stored")], "jump_to": "model"}
+            return {
+                "messages": [HumanMessage(content="CORRECTION: V99 is not stored")],
+                "jump_to": "model",
+            }
         return None
 
-    model = ScriptedChatModel(script=[reply("That touches V99."), reply("No stored value matches.")])
+    model = ScriptedChatModel(
+        script=[reply("That touches V99."), reply("No stored value matches.")]
+    )
     agent = create_agent(model=model, tools=[], middleware=[citation_check])
 
     result = agent.invoke(user_says("why?"))
@@ -176,7 +205,9 @@ def test_after_model_can_replace_reply_by_message_id():
     def replace_bad_reply(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
         last = state["messages"][-1]
         if "V99" in text_of(last):
-            return {"messages": [AIMessage(content="No stored value matches.", id=last.id)]}
+            return {
+                "messages": [AIMessage(content="No stored value matches.", id=last.id)]
+            }
         return None
 
     model = ScriptedChatModel(script=[reply("That touches V99.")])
@@ -228,7 +259,9 @@ def test_wrap_tool_call_can_rewrite_tool_result():
     def guard(request: Any, handler: Any) -> Any:
         result = handler(request)
         if isinstance(result, ToolMessage):
-            return result.model_copy(update={"content": f"<untrusted>{result.content}</untrusted>"})
+            return result.model_copy(
+                update={"content": f"<untrusted>{result.content}</untrusted>"}
+            )
         return result
 
     model = ScriptedChatModel(script=[tool_call("noop", {}), reply("done")])
@@ -251,7 +284,9 @@ class WordCapBackend(BackendProtocol):
 
     def write(self, file_path: str, content: str) -> WriteResult:
         if len(content.split()) > WORD_CAP:
-            return WriteResult(error=f"{file_path} is over its {WORD_CAP}-word cap. Consolidate first.")
+            return WriteResult(
+                error=f"{file_path} is over its {WORD_CAP}-word cap. Consolidate first."
+            )
         return self._inner.write(file_path, content)
 
     def ls(self, *args: Any, **kwargs: Any) -> Any:
@@ -274,23 +309,43 @@ def user_files(store: InMemoryStore) -> StoreBackend:
     return StoreBackend(namespace=lambda _rt: USER_FILES, store=store)
 
 
-def build_reflector_like_agent(script: list[AIMessage], backend: BackendProtocol, store: InMemoryStore, **options: Any):
+def build_reflector_like_agent(
+    script: list[AIMessage],
+    backend: BackendProtocol,
+    store: InMemoryStore,
+    **options: Any,
+):
     model = ScriptedChatModel(script=script)
     agent = create_deep_agent(
-        model=model, backend=backend, store=store, checkpointer=InMemorySaver(), context_schema=Ctx, **options
+        model=model,
+        backend=backend,
+        store=store,
+        checkpointer=InMemorySaver(),
+        context_schema=Ctx,
+        **options,
     )
     return agent, model
 
 
 def run(agent: Any) -> dict[str, Any]:
-    return agent.invoke(user_says("review session s_001"), config=THREAD, context=Ctx("u1"))
+    return agent.invoke(
+        user_says("review session s_001"), config=THREAD, context=Ctx("u1")
+    )
 
 
 def test_deep_agent_file_write_lands_in_the_users_store_namespace():
     # Design: Reflector-owned files persist per user; the route prefix is stripped from the key.
     store = InMemoryStore()
-    backend = CompositeBackend(default=StateBackend(), routes={"/memories/": user_files(store)})
-    script = [tool_call("write_file", {"file_path": "/memories/brief.md", "content": "Likes cooking."}), reply("done")]
+    backend = CompositeBackend(
+        default=StateBackend(), routes={"/memories/": user_files(store)}
+    )
+    script = [
+        tool_call(
+            "write_file",
+            {"file_path": "/memories/brief.md", "content": "Likes cooking."},
+        ),
+        reply("done"),
+    ]
     agent, _ = build_reflector_like_agent(script, backend, store)
 
     run(agent)
@@ -320,30 +375,54 @@ def test_write_file_overwrites_an_existing_store_file():
     files = user_files(store)
     files.write("/brief.md", "old")
     backend = CompositeBackend(default=StateBackend(), routes={"/memories/": files})
-    script = [tool_call("write_file", {"file_path": "/memories/brief.md", "content": "new"}), reply("done")]
+    script = [
+        tool_call("write_file", {"file_path": "/memories/brief.md", "content": "new"}),
+        reply("done"),
+    ]
     agent, _ = build_reflector_like_agent(script, backend, store)
 
     result = run(agent)
 
-    assert store.get(USER_FILES, "/brief.md").value["content"] == "new", tool_messages(result)[0].content
+    assert store.get(USER_FILES, "/brief.md").value["content"] == "new", tool_messages(
+        result
+    )[0].content
 
 
 def test_permissions_deny_writes_outside_the_allowed_paths():
     # Design: second barrier. Values are not mounted at all; this stops stray files too.
     store = InMemoryStore()
-    backend = CompositeBackend(default=StateBackend(), routes={"/memories/": user_files(store)})
-    allowed = ["/memories/brief.md", "/memories/hypotheses.md", "/memories/sessions/**", "/scratch/**"]
+    backend = CompositeBackend(
+        default=StateBackend(), routes={"/memories/": user_files(store)}
+    )
+    allowed = [
+        "/memories/brief.md",
+        "/memories/hypotheses.md",
+        "/memories/sessions/**",
+        "/scratch/**",
+    ]
     permissions = [
         FilesystemPermission(operations=["write"], paths=allowed, mode="allow"),
         FilesystemPermission(operations=["write"], paths=["/**"], mode="deny"),
     ]
     script = [
-        tool_call("write_file", {"file_path": "/memories/values.md", "content": "## V1: mine"}, "call_1"),
-        tool_call("write_file", {"file_path": "/memories/brief.md", "content": "ok"}, "call_2"),
-        tool_call("write_file", {"file_path": "/memories/sessions/s_001.md", "content": "summary"}, "call_3"),
+        tool_call(
+            "write_file",
+            {"file_path": "/memories/values.md", "content": "## V1: mine"},
+            "call_1",
+        ),
+        tool_call(
+            "write_file", {"file_path": "/memories/brief.md", "content": "ok"}, "call_2"
+        ),
+        tool_call(
+            "write_file",
+            {"file_path": "/memories/sessions/s_001.md", "content": "summary"},
+            "call_3",
+        ),
         reply("done"),
     ]
-    agent, _ = build_reflector_like_agent(script, backend, store, permissions=permissions)
+    agent, _ = build_reflector_like_agent(
+        script, backend, store, permissions=permissions
+    )
 
     result = run(agent)
 
@@ -356,12 +435,16 @@ def test_permissions_deny_writes_outside_the_allowed_paths():
 def test_custom_tool_can_write_a_scratch_file_the_agent_then_reads():
     # Design: dump_session writes /scratch/session.jsonl for the agent to grep.
     store = InMemoryStore()
-    backend = CompositeBackend(default=StateBackend(), routes={"/memories/": user_files(store)})
+    backend = CompositeBackend(
+        default=StateBackend(), routes={"/memories/": user_files(store)}
+    )
 
     @tool
     def dump_session(session_id: str) -> str:
         """Write the session's reels to /scratch/session.jsonl."""
-        outcome = backend.write("/scratch/session.jsonl", '{"id": "rl_001", "verdict": "conflict"}\n')
+        outcome = backend.write(
+            "/scratch/session.jsonl", '{"id": "rl_001", "verdict": "conflict"}\n'
+        )
         return f"wrote /scratch/session.jsonl (error={outcome.error})"
 
     script = [
@@ -384,11 +467,21 @@ def test_custom_tool_can_write_a_scratch_file_the_agent_then_reads():
 def test_policy_wrapper_rejects_a_write_and_the_error_reaches_the_model():
     # Design: caps on brief.md, hypotheses.md and session summaries are enforced in code.
     store = InMemoryStore()
-    backend = CompositeBackend(default=StateBackend(), routes={"/memories/": WordCapBackend(user_files(store))})
+    backend = CompositeBackend(
+        default=StateBackend(), routes={"/memories/": WordCapBackend(user_files(store))}
+    )
     long_text = "one two three four five six seven"
     script = [
-        tool_call("write_file", {"file_path": "/memories/brief.md", "content": long_text}, "call_1"),
-        tool_call("write_file", {"file_path": "/memories/brief.md", "content": "short enough"}, "call_2"),
+        tool_call(
+            "write_file",
+            {"file_path": "/memories/brief.md", "content": long_text},
+            "call_1",
+        ),
+        tool_call(
+            "write_file",
+            {"file_path": "/memories/brief.md", "content": "short enough"},
+            "call_2",
+        ),
         reply("done"),
     ]
     agent, _ = build_reflector_like_agent(script, backend, store)
@@ -418,8 +511,13 @@ def test_skills_load_from_a_local_folder_through_a_filesystem_route(tmp_path: Pa
         "/skills/": FilesystemBackend(root_dir=tmp_path / "skills", virtual_mode=True),
     }
     backend = CompositeBackend(default=StateBackend(), routes=routes)
-    script = [tool_call("read_file", {"file_path": "/skills/session-review/SKILL.md"}), reply("done")]
-    agent, model = build_reflector_like_agent(script, backend, store, skills=["/skills/"])
+    script = [
+        tool_call("read_file", {"file_path": "/skills/session-review/SKILL.md"}),
+        reply("done"),
+    ]
+    agent, model = build_reflector_like_agent(
+        script, backend, store, skills=["/skills/"]
+    )
 
     result = run(agent)
 
@@ -435,7 +533,10 @@ def test_memory_files_are_preloaded_into_the_prompt():
     files.write("/brief.md", "Unwinds with Reels late at night.")
     backend = CompositeBackend(default=StateBackend(), routes={"/memories/": files})
     agent, model = build_reflector_like_agent(
-        [reply("done")], backend, store, memory=["/memories/brief.md", "/memories/hypotheses.md"]
+        [reply("done")],
+        backend,
+        store,
+        memory=["/memories/brief.md", "/memories/hypotheses.md"],
     )
 
     run(agent)
@@ -447,21 +548,34 @@ def test_deep_agent_default_tools_have_no_planning_tool():
     # Finding: deepagents 0.7.38 offers file tools plus `task` and `delete`, but not
     # write_todos. The Reflector must add planning itself and drop `task` and `delete`.
     store = InMemoryStore()
-    backend = CompositeBackend(default=StateBackend(), routes={"/memories/": user_files(store)})
+    backend = CompositeBackend(
+        default=StateBackend(), routes={"/memories/": user_files(store)}
+    )
     agent, model = build_reflector_like_agent([reply("done")], backend, store)
 
     run(agent)
 
     assert set(model.bound_tool_names) == {
-        "ls", "read_file", "write_file", "edit_file", "glob", "grep", "delete", "task",
+        "ls",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+        "delete",
+        "task",
     }
 
 
 def test_todo_list_middleware_adds_the_planning_tool():
     # Design: the Reflector plans with write_todos, supplied by TodoListMiddleware.
     store = InMemoryStore()
-    backend = CompositeBackend(default=StateBackend(), routes={"/memories/": user_files(store)})
-    agent, model = build_reflector_like_agent([reply("done")], backend, store, middleware=[TodoListMiddleware()])
+    backend = CompositeBackend(
+        default=StateBackend(), routes={"/memories/": user_files(store)}
+    )
+    agent, model = build_reflector_like_agent(
+        [reply("done")], backend, store, middleware=[TodoListMiddleware()]
+    )
 
     run(agent)
 
@@ -471,7 +585,9 @@ def test_todo_list_middleware_adds_the_planning_tool():
 def test_deep_agent_accepts_call_limit_and_passes_context_to_tools():
     # Design: 25-call limit on the Reflector; its tools are bound to one user by context.
     store = InMemoryStore()
-    backend = CompositeBackend(default=StateBackend(), routes={"/memories/": user_files(store)})
+    backend = CompositeBackend(
+        default=StateBackend(), routes={"/memories/": user_files(store)}
+    )
     seen_users: list[str] = []
 
     @tool
@@ -482,7 +598,9 @@ def test_deep_agent_accepts_call_limit_and_passes_context_to_tools():
 
     script = [tool_call("whoami", {}, call_id=f"call_{i}") for i in range(5)]
     limit = ModelCallLimitMiddleware(run_limit=2, exit_behavior="error")
-    agent, model = build_reflector_like_agent(script, backend, store, tools=[whoami], middleware=[limit])
+    agent, model = build_reflector_like_agent(
+        script, backend, store, tools=[whoami], middleware=[limit]
+    )
 
     with pytest.raises(ModelCallLimitExceededError):
         run(agent)

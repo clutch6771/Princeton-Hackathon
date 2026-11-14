@@ -30,8 +30,13 @@ FORMAT_HELP = """A value entry has exactly these six lines:
 For a new value write the header as "## New: <title> (strength: ...)".
 Without an exact quote, replace the fifth line with: - Suggested wording: "<your wording>\""""
 
-_HEADER = re.compile(r"^##\s+(V[1-9]\d*|New):\s*(\S.*?)\s*\(strength:\s*(low|medium|high)\)$", re.IGNORECASE)
-_WORDING = re.compile(r"^-\s*(In my words|Agreed wording|Suggested wording):\s*(.*)$", re.IGNORECASE)
+_HEADER = re.compile(
+    r"^##\s+(V[1-9]\d*|New):\s*(\S.*?)\s*\(strength:\s*(low|medium|high)\)$",
+    re.IGNORECASE,
+)
+_WORDING = re.compile(
+    r"^-\s*(In my words|Agreed wording|Suggested wording):\s*(.*)$", re.IGNORECASE
+)
 _VALUE_ID = re.compile(r"^V[1-9]\d*$")
 _APPROVED_STAMP = re.compile(r"[;\s]*approved \d{4}-\d{2}-\d{2}\s*$")
 _CANONICAL_LABEL = {label.lower(): label for label in WORDING_LABELS}
@@ -74,9 +79,13 @@ def parse_entry(text: str) -> Parsed:
     lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
     wording_lines = [line for line in lines if _WORDING.match(line)]
     if len(lines) > 1 and len(wording_lines) != 1:
-        return _fail(f"An entry must contain exactly one wording line; this one has {len(wording_lines)}.")
+        return _fail(
+            f"An entry must contain exactly one wording line; this one has {len(wording_lines)}."
+        )
     if len(lines) != ENTRY_LINE_COUNT:
-        return _fail(f"An entry has {ENTRY_LINE_COUNT} lines; this one has {len(lines)}.")
+        return _fail(
+            f"An entry has {ENTRY_LINE_COUNT} lines; this one has {len(lines)}."
+        )
 
     header = _HEADER.match(lines[0])
     if header is None:
@@ -86,7 +95,13 @@ def parse_entry(text: str) -> Parsed:
     unless = _field(lines[3], "Unless")
     wording = _WORDING.match(lines[4])
     evidence = _field(lines[5], "Evidence")
-    if None in (want_more, want_less, unless, evidence) or wording is None:
+    if (
+        want_more is None
+        or want_less is None
+        or unless is None
+        or evidence is None
+        or wording is None
+    ):
         return _fail("The lines are missing, empty or in the wrong order.")
     wording_text = wording.group(2).strip().strip(QUOTE_CHARACTERS).strip()
     if not wording_text:

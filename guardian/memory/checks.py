@@ -19,6 +19,7 @@ from guardian.datasource import DataSource
 from guardian.memory import records
 
 BEGINNING_OF_TIME = datetime(2000, 1, 1, tzinfo=UTC)
+AGENT_WRITTEN_SOURCE = "chat"  # feedback recorded by the chat agent's tool
 _STRAIGHT_QUOTES = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'"})
 _EVIDENCE_ID = re.compile(r"\b(rl|fb|s)_[A-Za-z0-9]+\b")
 
@@ -36,10 +37,19 @@ def quote_found(quote: str, sources: Iterable[str]) -> bool:
     return any(wanted in normalize(source) for source in sources)
 
 
-def user_statements(store: BaseStore, datasource: DataSource, user_id: str) -> list[str]:
-    """Everything this user wrote: chat messages and feedback comments."""
+def user_statements(
+    store: BaseStore, datasource: DataSource, user_id: str
+) -> list[str]:
+    """Everything this user wrote: chat messages and comments typed in the app.
+
+    Comments on feedback recorded through chat are left out. The chat agent writes
+    those, often as a paraphrase, and the user's real words are already in the chat
+    log. Counting them would let an agent's wording pass as the user's own.
+    """
     comments = [
-        item["comment"] for item in datasource.get_feedback(user_id, BEGINNING_OF_TIME) if item["comment"]
+        item["comment"]
+        for item in datasource.get_feedback(user_id, BEGINNING_OF_TIME)
+        if item["comment"] and item["source"] != AGENT_WRITTEN_SOURCE
     ]
     return [*records.user_chat_messages(store, user_id), *comments]
 

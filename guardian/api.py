@@ -21,7 +21,7 @@ from guardian import chat_flow, config, models
 from guardian.chat_agent import build_chat_agent
 from guardian.datasource import DataSource
 from guardian.deps import Deps
-from guardian.memory import records, reflector_files, values
+from guardian.memory import notes, reflector_files, values
 from guardian.types import ChatContext, Decision, GuardianResponse
 
 _deps: Deps | None = None
@@ -56,7 +56,9 @@ def configure(
 
 def _require_deps() -> Deps:
     if _deps is None:
-        raise config.ConfigError("guardian.api.configure(store, checkpointer, datasource) has not been called.")
+        raise config.ConfigError(
+            "guardian.api.configure(store, checkpointer, datasource) has not been called."
+        )
     return _deps
 
 
@@ -69,7 +71,9 @@ def _agent(deps: Deps) -> Any:
     return _chat_agent
 
 
-def chat(user_id: str, thread_id: str, message: str, context: ChatContext | None = None) -> GuardianResponse:
+def chat(
+    user_id: str, thread_id: str, message: str, context: ChatContext | None = None
+) -> GuardianResponse:
     """Send the user's message to the Guardian.
 
     Returns a reply, or a pending value card. While a card is pending on the thread,
@@ -105,7 +109,11 @@ def get_memory(user_id: str) -> dict[str, str]:
         return {"values.md": "", "brief.md": "", "hypotheses.md": "", "notes.md": ""}
     return {
         "values.md": values.render_values(deps.store, user_id),
-        "brief.md": reflector_files.read_file(deps.store, user_id, reflector_files.BRIEF),
-        "hypotheses.md": reflector_files.read_file(deps.store, user_id, reflector_files.HYPOTHESES),
-        "notes.md": records.render_notes(deps.store, user_id),
+        "brief.md": reflector_files.read_file(
+            deps.store, user_id, reflector_files.BRIEF
+        ),
+        "hypotheses.md": reflector_files.read_file(
+            deps.store, user_id, reflector_files.HYPOTHESES
+        ),
+        "notes.md": notes.render_notes(deps.store, user_id),
     }
