@@ -1,0 +1,87 @@
+PRD TRACEABILITY
+================
+Baseline: Values-Aligned Attention Companion PRD, 2026-11-14, as restated in
+the Judge implementation prompt. Where the older PDF snapshot differs
+(frames only, MongoDB, 3-in-5 drift, 2-minute cooldown, /observe, 4-second
+latency), the newer statements were followed.
+Kinds: PRD = requirement, INT = operational interpretation, ENG = engineering
+setting, DEF = deferred to another owner. Paths are under watcher_Agent/.
+Tests are under tests/ (unit/ unless noted).
+
+Requirement                                  Kind Module                            Tests
+-------------------------------------------- ---- --------------------------------- ---------------------------
+Upload sampled JPEG frames + app audio only  PRD  judge/api, contracts/capture.py   test_api, test_contracts
+Platform-neutral backend, shared contracts   PRD  judge/contracts, contracts/v1     test_contracts
+Demo identity header, replaceable resolver   PRD  judge/api/deps.py                 test_api
+Session on first ingest, one source, no reuse PRD judge/ingest/service.py           test_lifecycle
+Idempotent event ids, duplicates, late       PRD  judge/ingest/service.py           test_lifecycle
+Clock mapping (capture vs server time)       INT  judge/ingest/clock_mapping.py     test_clock_mapping
+Privacy gate before any provider input       PRD  judge/privacy/eligibility.py      test_privacy_gate, test_pipeline
+Audio only in certified intervals            PRD  judge/ingest/service.py           test_pipeline, test_audio
+No raw media persisted; RAM bounded          PRD  judge/runtime/media_budget.py     test_api (no temp files),
+                                                  judge/ingest/volatile.py          test_pipeline, test_lifecycle
+Segmentation: frame change + evidence        PRD  judge/segmentation                test_segmentation,
+                                                  judge/ingest/session_state.py     test_session_state
+Final-audio wait with a deadline             INT  judge/pipeline/finalizer.py       test_session_state, test_pipeline
+Chunk across two reels / Reel to DM          PRD  judge/audio/assembler.py          test_audio, test_pipeline
+AAC decoded per chunk, never concatenated    PRD  judge/audio/codec.py              test_audio
+Approved values read-only, pinned revision   PRD  judge/values                      test_values, test_pipeline,
+                                                                                    storage/test_postgres_integration
+Missing/invalid values never neutral         PRD  judge/pipeline/judge_pipeline.py  test_values, test_pipeline
+Exception clauses never truncated            PRD  judge/values/markdown_parser.py   test_values, test_prompt
+At most 3 explicit feedback examples         PRD  judge/feedback/retriever.py       test_services, test_prompt
+Retrieval: recent-feedback fallback, labeled INT  judge/feedback/retriever.py       test_services
+One multimodal call: transcribe + judge      PRD  judge/understanding               test_pipeline, test_adapters
+No preliminary ASR, captioning, repair loop  PRD  judge/pipeline/judge_pipeline.py  test_pipeline
+Transcript statuses from evidence            PRD  judge/transcriber                 test_validation, test_pipeline
+Validate value ids, bounds, reason, evidence PRD  judge/understanding/validation.py test_validation
+Prompt injection treated as data             PRD  judge/understanding/prompt.py     test_prompt, test_validation,
+                                                                                    test_pipeline
+ReelRecord PRD fields + nullable verdict     PRD/INT judge/contracts/record.py      test_contracts, storage/test_repositories
+One thumbnail per accepted reel              PRD  judge/pipeline/job.py             test_pipeline, storage/test_repositories
+One embedding per reel, async, retried       PRD  judge/embedding/indexer.py        test_services
+Embedding profile pinned, mismatch rejected  PRD  judge/contracts/storage.py        test_services, test_adapters,
+                                                                                    storage/test_repositories
+Batches of 15, >= 3 conflicts                PRD  judge/notifications               test_notifications
+Non-overlapping, session-scoped, capture order INT judge/notifications/accounting.py test_notifications,
+                                                                                    test_review_regressions
+600 s user-scoped cooldown, no deferral      PRD/INT judge/notifications            test_notifications
+Outbox via either ingest response, root notify PRD judge/notifications/outbox.py    test_notifications, test_api
+Stable-id acknowledgment, lost responses     PRD  judge/notifications/outbox.py     test_notifications
+Policy config, validated and versioned       PRD  judge/notifications/policy.py     test_notifications, test_api
+Session end / 600 s idle, flush, event only  PRD  judge/pipeline/lifecycle.py       test_lifecycle
+Stuck jobs finalized; restart exposes loss   INT  judge/pipeline/lifecycle.py       test_lifecycle
+Provider errors, quotas, bounded retries     PRD  judge/pipeline/judge_pipeline.py  test_pipeline, test_adapters
+Latency ~10 s measured per reel              PRD  judge/pipeline/judge_pipeline.py  test_pipeline
+Feedback storage only                        PRD  judge/feedback/service.py         test_services, test_api
+Timeline, thumbs, deletion hooks             PRD  judge/feedback/service.py         test_services, test_api
+Tiger Data as sole database, migrations      PRD  judge/persistence, migrations     storage/*
+SELECT-only on the memory Store              PRD  judge/values/postgres_source.py   storage/test_postgres_integration
+Real Gemini adapters + explicit fakes        PRD  judge/understanding/gemini.py     test_adapters (stubbed HTTP),
+                                                  judge/devfakes                    test_live_gemini (opt-in)
+Optional local provider                      PRD  judge/understanding/local_openai.py test_adapters
+Missing production config fails clearly      PRD  judge/config.py                   test_config, test_adapters
+
+Engineering settings (ENG): every number not listed as a PRD default in
+MEMORY_PARAMETERS.txt section E, including model ids, size caps, RAM limits,
+segmentation thresholds, deadlines, retries and lease times.
+
+Deferred (DEF), not implemented here:
+  Native iOS/Android capture, native eligibility gate, banners   platform owner
+  Guardian chat, onboarding, value proposals and approvals       Guardian owner
+  Reflector, session summaries, hypotheses, briefs, questions    Reflector owner
+  Daily re-rating scheduler, GUI, Share Extension, PiP, shield   other owners
+  /chat, /values, /share endpoints                               other owners
+  Value-concept-vector feedback retrieval                        later (seam exists)
+
+Verified by tests (synthetic data): everything in the table above.
+NOT verified:
+  - Real Instagram frames and audio; segmentation thresholds on real feeds.
+  - Native memory use (50 MB) and physical-device capture.
+  - Gemini: live calls were not run (no API key). Model id, structured
+    output with images + audio, quota and judgment quality are unverified.
+  - pgvector: not installed on the test machine, so vector storage and
+    nearest-neighbour SQL were not executed against PostgreSQL (they run
+    against the in-memory backend only).
+  - Tiger Data cloud itself (tests used local PostgreSQL 17).
+  - Notification banners and delivery timing on a device.

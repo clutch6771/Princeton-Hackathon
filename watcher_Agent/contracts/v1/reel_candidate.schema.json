@@ -1,0 +1,220 @@
+{
+  "$defs": {
+    "AudioStatus": {
+      "description": "Evidence-backed state of the audio assembled for an exposure.",
+      "enum": [
+        "complete",
+        "partial",
+        "missing",
+        "uncertified",
+        "protected",
+        "corrupt"
+      ],
+      "title": "AudioStatus",
+      "type": "string"
+    },
+    "CloseReason": {
+      "description": "Why the exposure was closed.",
+      "enum": [
+        "boundary",
+        "left_feed",
+        "frame_gap",
+        "max_duration",
+        "session_end"
+      ],
+      "title": "CloseReason",
+      "type": "string"
+    },
+    "CoverageMetadata": {
+      "additionalProperties": false,
+      "description": "What was and was not observed for one exposure. All values in ms.",
+      "properties": {
+        "audio_boundary_guard_ms": {
+          "description": "Discarded because the reel boundary was uncertain.",
+          "minimum": 0,
+          "title": "Audio Boundary Guard Ms",
+          "type": "integer"
+        },
+        "audio_corrupt_ms": {
+          "minimum": 0,
+          "title": "Audio Corrupt Ms",
+          "type": "integer"
+        },
+        "audio_kept_ms": {
+          "minimum": 0,
+          "title": "Audio Kept Ms",
+          "type": "integer"
+        },
+        "audio_missing_ms": {
+          "description": "No chunk covered this time.",
+          "minimum": 0,
+          "title": "Audio Missing Ms",
+          "type": "integer"
+        },
+        "audio_protected_ms": {
+          "minimum": 0,
+          "title": "Audio Protected Ms",
+          "type": "integer"
+        },
+        "audio_uncertified_ms": {
+          "description": "Discarded: no native eligibility certification.",
+          "minimum": 0,
+          "title": "Audio Uncertified Ms",
+          "type": "integer"
+        },
+        "audio_window_ms": {
+          "description": "Span in which audio could be attributed to this reel.",
+          "minimum": 0,
+          "title": "Audio Window Ms",
+          "type": "integer"
+        },
+        "frame_count": {
+          "minimum": 0,
+          "title": "Frame Count",
+          "type": "integer"
+        },
+        "observed_ms": {
+          "description": "First to last eligible frame.",
+          "minimum": 0,
+          "title": "Observed Ms",
+          "type": "integer"
+        },
+        "selected_frame_count": {
+          "minimum": 0,
+          "title": "Selected Frame Count",
+          "type": "integer"
+        },
+        "truncated": {
+          "description": "Closed at the maximum exposure length.",
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "uncorroborated_changes": {
+          "description": "Sharp frame changes treated as in-reel cuts.",
+          "minimum": 0,
+          "title": "Uncorroborated Changes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "observed_ms",
+        "frame_count",
+        "selected_frame_count",
+        "audio_window_ms",
+        "audio_kept_ms",
+        "audio_boundary_guard_ms",
+        "audio_uncertified_ms",
+        "audio_protected_ms",
+        "audio_corrupt_ms",
+        "audio_missing_ms",
+        "uncorroborated_changes",
+        "truncated"
+      ],
+      "title": "CoverageMetadata",
+      "type": "object"
+    },
+    "SegmentationStatus": {
+      "description": "How trustworthy the exposure's boundaries are.",
+      "enum": [
+        "clean",
+        "approximate",
+        "uncertain"
+      ],
+      "title": "SegmentationStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Metadata of a finalized exposure handed to understanding.",
+  "properties": {
+    "audio_status": {
+      "$ref": "#/$defs/AudioStatus"
+    },
+    "boundary_uncertainty_ms": {
+      "minimum": 0,
+      "title": "Boundary Uncertainty Ms",
+      "type": "integer"
+    },
+    "candidate_id": {
+      "format": "uuid",
+      "title": "Candidate Id",
+      "type": "string"
+    },
+    "close_reason": {
+      "$ref": "#/$defs/CloseReason"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "coverage": {
+      "$ref": "#/$defs/CoverageMetadata"
+    },
+    "end_ms": {
+      "description": "Last eligible frame (capture clock).",
+      "exclusiveMinimum": 0,
+      "title": "End Ms",
+      "type": "integer"
+    },
+    "first_event_id": {
+      "description": "Stable idempotency identity.",
+      "format": "uuid",
+      "title": "First Event Id",
+      "type": "string"
+    },
+    "first_second_observed": {
+      "title": "First Second Observed",
+      "type": "boolean"
+    },
+    "order_seq": {
+      "description": "Capture order within the session.",
+      "minimum": 1,
+      "title": "Order Seq",
+      "type": "integer"
+    },
+    "owner_id": {
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "segmentation_status": {
+      "$ref": "#/$defs/SegmentationStatus"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "start_ms": {
+      "description": "First eligible frame (capture clock).",
+      "exclusiveMinimum": 0,
+      "title": "Start Ms",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "candidate_id",
+    "owner_id",
+    "session_id",
+    "source_id",
+    "order_seq",
+    "first_event_id",
+    "start_ms",
+    "end_ms",
+    "boundary_uncertainty_ms",
+    "first_second_observed",
+    "segmentation_status",
+    "close_reason",
+    "coverage",
+    "audio_status"
+  ],
+  "title": "ReelCandidate",
+  "type": "object",
+  "x-contract-version": "1"
+}

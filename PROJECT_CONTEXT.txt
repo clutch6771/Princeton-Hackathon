@@ -2,7 +2,7 @@ PROJECT CONTEXT FOR AI ASSISTANTS (ChatGPT, etc.)
 ==================================================
 Paste this whole file at the start of a chat. It describes the project, its
 current state, its conventions, and how to prompt for each part.
-Last updated: 2026-11-14 (branch: main)
+Last updated: 2026-11-14 (branch: Reel-Watcher-Agent, Judge backend added)
 
 
 1. WHAT THIS PROJECT IS
@@ -14,25 +14,48 @@ It combines:
   - Swift / SwiftUI: an iOS app (built with Xcode)
 
 The first component is the "Reel Watcher Agent" (folder: watcher_Agent/).
-  >> TEAM: describe here what the agent does (what it watches, its inputs,
-  >> its outputs, and how the iOS app uses it). The repo doesn't say yet.
+It is the JUDGE of a values-aligned attention companion:
+  Inputs   sampled JPEG frames (one every 2 s, 512 px) and app-audio AAC
+           chunks (16 kHz mono, ~5 s) uploaded by a capture extension, plus
+           the user's approved values (read-only, from the shared memory
+           Store) and explicit feedback.
+  Work     privacy-gates the media, splits it into observed reels, makes ONE
+           Gemini call per reel that transcribes, describes and judges it
+           against the approved values.
+  Outputs  one stored record per reel (verdict aligned | neutral | conflict,
+           value ids, reason, transcript, description), embeddings, one
+           thumbnail, and a warning returned in ingest responses when 3 of
+           the last 15 judged reels conflict (600 s cooldown).
+Two other agents are planned and NOT built: the Guardian (chat, value
+approval) and the Reflector (session review). They read the Judge's tables;
+the Judge never calls them. See JUDGE_MEMORY_OUTPUTS.txt.
 
-How Python and the iOS app communicate (REST API, on-device model, etc.) is
-NOT decided yet. Don't assume one; ask, or offer options.
+Python and the app communicate over an HTTPS REST API served by the Judge
+(FastAPI). The contract is fixed: watcher_Agent/docs/API_CONTRACT.txt and
+watcher_Agent/contracts/v1 (JSON Schemas + synthetic fixtures).
+Database: Tiger Data PostgreSQL (schema "judge"). Not MongoDB.
 
 
 2. CURRENT STATE (IMPORTANT)
 ----------------------------
-Only the scaffolding exists. There is NO application code yet: no Python
-modules, no Swift files, no Xcode project, no tests.
+Built and tested (2026-11-14): the Judge backend in watcher_Agent/judge,
+with SQL migrations, real Gemini and PostgreSQL adapters, development fakes,
+553 passing tests (96% coverage) and documentation.
 
-What exists:
-  - Developer tooling and lint/format configuration
-  - Claude Code configuration (rules, hooks, the ECC plugin)
-  - Setup docs
+NOT built: any Swift/Xcode code, the capture extension, the Guardian, the
+Reflector, any GUI.
 
-Next steps: write the watcher agent in Python, decide how Python and iOS
-communicate, then create the iOS app.
+NOT verified: live Gemini calls, pgvector SQL, Tiger Data cloud, real
+Instagram frames/audio, anything on a physical device. Details:
+watcher_Agent/docs/PRD_TRACEABILITY.txt.
+
+Read first:
+  JUDGE_WORKFLOW.txt          how the Judge works
+  JUDGE_MEMORY_OUTPUTS.txt    what it stores and who should read it
+  watcher_Agent/README.txt    setup, run, verify, document index
+
+Next steps: build the native capture adapter against the API contract
+(watcher_Agent/docs/PLATFORM_BOUNDARY.txt), then the Guardian and Reflector.
 
 
 3. REPOSITORY LAYOUT
@@ -46,8 +69,18 @@ communicate, then create the iOS app.
   .swiftformat              SwiftFormat config (Swift 6.0)
   .swiftlint.yml            SwiftLint config
   .gitignore                Ignores .venv, caches, .env, datasets, model weights, Xcode build output
+  JUDGE_WORKFLOW.txt        How the Judge works, step by step
+  JUDGE_MEMORY_OUTPUTS.txt  What the Judge stores, for Guardian/Reflector
   watcher_Agent/
-    README.txt              Agent notes + log of the tooling/config changes
+    README.txt              Scope, architecture, setup, run, verify
+    judge/                  The Judge backend (Python package "judge")
+    migrations/             PostgreSQL migrations + migrate.py
+    contracts/v1/           JSON Schemas + synthetic fixtures (API contract)
+    docs/                   API contract, privacy, database, parameters
+    scripts/verify.sh       Lint, types, security scan, tests + coverage
+    tests/                  553 tests (unit + PostgreSQL integration)
+    requirements.txt        Pinned runtime dependencies
+    .env.example            Configuration names (no secrets)
   .claude/
     settings.json           Enables the ECC plugin and the format/lint hook
     hooks/post-edit-format-lint.sh   Formats and lints every edited .py/.ipynb/.swift file
@@ -150,13 +183,14 @@ C) iOS app (Swift / SwiftUI)
     logic behind a protocol for testing, os.Logger for logging. Include
     XCTest/Swift Testing unit tests for the view model."
 
-D) Python <-> iOS integration (not decided yet)
-   "Compare options for connecting the Python agent to the iOS app
-    (e.g. FastAPI REST service, on-device Core ML conversion, a cloud
-    function). Consider hackathon time limits, latency and complexity.
-    Recommend one and show the API contract (request/response JSON)."
-   If you pick an API: use a consistent response envelope
-   {"success": bool, "data": ..., "error": str | null}.
+D) Python <-> iOS integration (decided: HTTPS REST, see API_CONTRACT.txt)
+   Paste watcher_Agent/docs/API_CONTRACT.txt, then:
+   "Write the Swift client for POST /ingest/frame and /ingest/audio
+    (multipart: a JSON 'metadata' part and a binary 'media' part), with one
+    upload in flight, and handle the root-level 'notify' object in the
+    response (deduplicate by notification_id, acknowledge on a later call)."
+   Ingest and session-end responses keep "notify" at the response root.
+   Other endpoints use {"success": bool, "data": ..., "error": ..., "meta": ...}.
 
 E) Tests / debugging
    "Here is <code> and the failing output <error/log>. Find the root

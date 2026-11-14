@@ -1,0 +1,728 @@
+{
+  "$defs": {
+    "AudioStatus": {
+      "description": "Evidence-backed state of the audio assembled for an exposure.",
+      "enum": [
+        "complete",
+        "partial",
+        "missing",
+        "uncertified",
+        "protected",
+        "corrupt"
+      ],
+      "title": "AudioStatus",
+      "type": "string"
+    },
+    "CloseReason": {
+      "description": "Why the exposure was closed.",
+      "enum": [
+        "boundary",
+        "left_feed",
+        "frame_gap",
+        "max_duration",
+        "session_end"
+      ],
+      "title": "CloseReason",
+      "type": "string"
+    },
+    "CoverageMetadata": {
+      "additionalProperties": false,
+      "description": "What was and was not observed for one exposure. All values in ms.",
+      "properties": {
+        "audio_boundary_guard_ms": {
+          "description": "Discarded because the reel boundary was uncertain.",
+          "minimum": 0,
+          "title": "Audio Boundary Guard Ms",
+          "type": "integer"
+        },
+        "audio_corrupt_ms": {
+          "minimum": 0,
+          "title": "Audio Corrupt Ms",
+          "type": "integer"
+        },
+        "audio_kept_ms": {
+          "minimum": 0,
+          "title": "Audio Kept Ms",
+          "type": "integer"
+        },
+        "audio_missing_ms": {
+          "description": "No chunk covered this time.",
+          "minimum": 0,
+          "title": "Audio Missing Ms",
+          "type": "integer"
+        },
+        "audio_protected_ms": {
+          "minimum": 0,
+          "title": "Audio Protected Ms",
+          "type": "integer"
+        },
+        "audio_uncertified_ms": {
+          "description": "Discarded: no native eligibility certification.",
+          "minimum": 0,
+          "title": "Audio Uncertified Ms",
+          "type": "integer"
+        },
+        "audio_window_ms": {
+          "description": "Span in which audio could be attributed to this reel.",
+          "minimum": 0,
+          "title": "Audio Window Ms",
+          "type": "integer"
+        },
+        "frame_count": {
+          "minimum": 0,
+          "title": "Frame Count",
+          "type": "integer"
+        },
+        "observed_ms": {
+          "description": "First to last eligible frame.",
+          "minimum": 0,
+          "title": "Observed Ms",
+          "type": "integer"
+        },
+        "selected_frame_count": {
+          "minimum": 0,
+          "title": "Selected Frame Count",
+          "type": "integer"
+        },
+        "truncated": {
+          "description": "Closed at the maximum exposure length.",
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "uncorroborated_changes": {
+          "description": "Sharp frame changes treated as in-reel cuts.",
+          "minimum": 0,
+          "title": "Uncorroborated Changes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "observed_ms",
+        "frame_count",
+        "selected_frame_count",
+        "audio_window_ms",
+        "audio_kept_ms",
+        "audio_boundary_guard_ms",
+        "audio_uncertified_ms",
+        "audio_protected_ms",
+        "audio_corrupt_ms",
+        "audio_missing_ms",
+        "uncorroborated_changes",
+        "truncated"
+      ],
+      "title": "CoverageMetadata",
+      "type": "object"
+    },
+    "EmbeddingInfo": {
+      "additionalProperties": false,
+      "description": "Versioned identity and state of a reel's embedding.",
+      "properties": {
+        "attempts": {
+          "minimum": 0,
+          "title": "Attempts",
+          "type": "integer"
+        },
+        "dimension": {
+          "exclusiveMinimum": 0,
+          "title": "Dimension",
+          "type": "integer"
+        },
+        "model_id": {
+          "title": "Model Id",
+          "type": "string"
+        },
+        "profile_id": {
+          "title": "Profile Id",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/EmbeddingStatus"
+        }
+      },
+      "required": [
+        "profile_id",
+        "model_id",
+        "dimension",
+        "status",
+        "attempts"
+      ],
+      "title": "EmbeddingInfo",
+      "type": "object"
+    },
+    "EmbeddingStatus": {
+      "description": "Indexing state of a judged reel's embedding.",
+      "enum": [
+        "pending",
+        "indexed",
+        "failed"
+      ],
+      "title": "EmbeddingStatus",
+      "type": "string"
+    },
+    "EvaluationStatus": {
+      "description": "Operational state of one observed exposure.",
+      "enum": [
+        "pending",
+        "judged",
+        "insufficient_evidence",
+        "values_unavailable",
+        "failed_provider",
+        "failed_validation",
+        "failed_timeout",
+        "skipped_overload",
+        "lost_on_restart"
+      ],
+      "title": "EvaluationStatus",
+      "type": "string"
+    },
+    "ReelFeatures": {
+      "additionalProperties": false,
+      "description": "PRD ``features`` block of a reel record.",
+      "properties": {
+        "emotional_pull": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emotional Pull"
+        },
+        "format": {
+          "maxLength": 120,
+          "title": "Format",
+          "type": "string"
+        },
+        "hook": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null unless the first second of the exposure was observed.",
+          "title": "Hook"
+        },
+        "is_ad": {
+          "title": "Is Ad",
+          "type": "boolean"
+        },
+        "tone": {
+          "maxLength": 120,
+          "title": "Tone",
+          "type": "string"
+        },
+        "topics": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Topics",
+          "type": "array"
+        }
+      },
+      "required": [
+        "topics",
+        "format",
+        "tone",
+        "is_ad"
+      ],
+      "title": "ReelFeatures",
+      "type": "object"
+    },
+    "RetrievalMode": {
+      "description": "How the examples supplied to a judgment were chosen.\n\nThe new reel's text does not exist before the understanding call, so the\nJudge cannot retrieve by similarity to it. Version 1 uses a bounded,\nclearly labeled recent-feedback fallback.",
+      "enum": [
+        "recent_explicit_feedback",
+        "none"
+      ],
+      "title": "RetrievalMode",
+      "type": "string"
+    },
+    "SegmentationStatus": {
+      "description": "How trustworthy the exposure's boundaries are.",
+      "enum": [
+        "clean",
+        "approximate",
+        "uncertain"
+      ],
+      "title": "SegmentationStatus",
+      "type": "string"
+    },
+    "StageTimings": {
+      "additionalProperties": false,
+      "description": "Measured stage durations in milliseconds (server clock).\n\n``total_ms`` runs from the observed reel end (last eligible frame, mapped\nto the server clock, approximate) to the moment the outcome was ready to\ncommit. It is a measurement, not a guarantee.",
+      "properties": {
+        "audio_wait_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Waiting for the final permitted audio chunk.",
+          "title": "Audio Wait Ms"
+        },
+        "context_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Loading approved values and examples.",
+          "title": "Context Ms"
+        },
+        "detect_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Observed reel end to boundary detection.",
+          "title": "Detect Ms"
+        },
+        "inference_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inference Ms"
+        },
+        "persist_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Database work, excluding the final commit.",
+          "title": "Persist Ms"
+        },
+        "queue_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Queue Ms"
+        },
+        "total_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Ms"
+        },
+        "validation_ms": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Validation Ms"
+        }
+      },
+      "title": "StageTimings",
+      "type": "object"
+    },
+    "TranscriptStatus": {
+      "description": "Evidence-backed transcript state stored on a reel.",
+      "enum": [
+        "speech",
+        "non_speech_music",
+        "silence",
+        "missing_audio",
+        "protected_unavailable",
+        "corrupt",
+        "unintelligible",
+        "partial"
+      ],
+      "title": "TranscriptStatus",
+      "type": "string"
+    },
+    "Verdict": {
+      "description": "PRD verdict enum, always relative to the user's approved values.",
+      "enum": [
+        "aligned",
+        "neutral",
+        "conflict"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One stored reel exposure, as returned by the timeline.",
+  "properties": {
+    "audio_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AudioStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "boundary_uncertainty_ms": {
+      "minimum": 0,
+      "title": "Boundary Uncertainty Ms",
+      "type": "integer"
+    },
+    "close_reason": {
+      "$ref": "#/$defs/CloseReason"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confidence"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "coverage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CoverageMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "embedding": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EmbeddingInfo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "end": {
+      "description": "Last eligible frame, capture clock.",
+      "format": "date-time",
+      "title": "End",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "evaluation_status": {
+      "$ref": "#/$defs/EvaluationStatus"
+    },
+    "features": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReelFeatures"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "feedback_example_ids": {
+      "default": [],
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "title": "Feedback Example Ids",
+      "type": "array"
+    },
+    "first_second_observed": {
+      "title": "First Second Observed",
+      "type": "boolean"
+    },
+    "id": {
+      "format": "uuid",
+      "title": "Id",
+      "type": "string"
+    },
+    "idempotency_key": {
+      "title": "Idempotency Key",
+      "type": "string"
+    },
+    "latency_overrun": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Latency Overrun"
+    },
+    "model_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Id"
+    },
+    "on_screen_text": {
+      "default": "",
+      "title": "On Screen Text",
+      "type": "string"
+    },
+    "order_seq": {
+      "minimum": 1,
+      "title": "Order Seq",
+      "type": "integer"
+    },
+    "owner_id": {
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "prompt_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prompt Version"
+    },
+    "reason": {
+      "default": "",
+      "title": "Reason",
+      "type": "string"
+    },
+    "retrieval_mode": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RetrievalMode"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "segmentation_status": {
+      "$ref": "#/$defs/SegmentationStatus"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "start": {
+      "description": "First eligible frame, capture clock.",
+      "format": "date-time",
+      "title": "Start",
+      "type": "string"
+    },
+    "thumbnail_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Thumbnail Url"
+    },
+    "timings": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/StageTimings"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "transcript": {
+      "default": "",
+      "title": "Transcript",
+      "type": "string"
+    },
+    "transcript_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TranscriptStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "understanding_attempts": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Understanding Attempts",
+      "type": "integer"
+    },
+    "value_ids": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Value Ids",
+      "type": "array"
+    },
+    "values_revision": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Values Revision"
+    },
+    "values_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Values Sha256"
+    },
+    "verdict": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Verdict"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "id",
+    "session_id",
+    "start",
+    "end",
+    "evaluation_status",
+    "owner_id",
+    "source_id",
+    "order_seq",
+    "idempotency_key",
+    "boundary_uncertainty_ms",
+    "first_second_observed",
+    "segmentation_status",
+    "close_reason",
+    "created_at"
+  ],
+  "title": "ReelRecord",
+  "type": "object",
+  "x-contract-version": "1"
+}

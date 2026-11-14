@@ -1,0 +1,68 @@
+PLATFORM BOUNDARY
+=================
+The Python backend is platform-neutral. Nothing in watcher_Agent/judge imports
+ReplayKit, AVFoundation, Swift/Xcode code, the Android SDK, Kotlin or any
+notification API. Replacing an iOS adapter with an Android one changes no
+Judge policy, transcription logic, repository or model adapter: both speak
+the contracts in watcher_Agent/contracts/v1 (see API_CONTRACT.txt).
+
+This repository contains NO native code for either platform. Everything in
+sections 1 and 2 is a contract for a future adapter, not an implementation.
+
+
+1. iOS ADAPTER CONTRACT (future)
+--------------------------------
+Capture    User-started and user-stopped ReplayKit Broadcast Upload Extension.
+           The system capture indicator stays visible.
+Frames     One JPEG every 2 seconds. Keep the aspect ratio; longest edge
+           512 px. Downscale and compress immediately; never keep every
+           callback frame.
+Audio      App audio only (never the microphone). 16,000 Hz mono AAC,
+           nominal 5-second chunks, each independently decodable, container
+           "adts" or "mp4" declared in metadata, with capture_start_ms,
+           capture_end_ms and priming_samples.
+No video   Nothing but sampled JPEGs and AAC chunks is uploaded.
+Transport  Direct HTTPS, multipart/form-data. One upload in flight across
+           BOTH streams; drop frames when busy. Never await network work
+           inside a sample-buffer callback; copy what is permitted and
+           return, respecting sample-buffer lifetime.
+Memory     Stay under 50 MB for the whole extension process during a
+           10-minute scrolling spike. The budget includes encoder buffers,
+           image conversion, HTTP copies, queues and all other overhead.
+Clock      capture timestamps from a monotonic source anchored once per
+           session (a wall-clock adjustment must not move them).
+Privacy    Native FeedEligibilityGate BEFORE upload (see PRIVACY.txt): send
+           only positively eligible Reels frames; certify audio intervals;
+           re-check through the whole session, not only the first frame.
+           Local screening may inspect callbacks without keeping or
+           uploading them. Optionally report transition_at_ms.
+Session    New UUID per broadcast. POST /session/end on stop. On 409
+           session_ended start a new UUID. On 503 back off (Retry-After).
+Notify     Read "notify" from every ingest response; raise a local
+           notification; deduplicate by notification_id; honour expires_at
+           and a local display cooldown; acknowledge on a later request.
+           The user must enable Settings > Notifications > Screen Sharing >
+           Allow Notifications, or banners are hidden while broadcasting.
+App Groups Do not assume App Groups or shared entitlements work on a free
+           Personal Team. The design here does not need them.
+
+
+2. ANDROID ADAPTER CONTRACT (future)
+------------------------------------
+Same transport, payloads, lifecycle, privacy provenance and notification
+duties (MediaProjection for frames, playback capture for app audio). Only
+source_id and the local notification mechanism differ.
+
+
+3. PHYSICAL-SPIKE RESPONSIBILITIES (platform owner; not done here)
+------------------------------------------------------------------
+  [ ] Broadcast extension uploads frames while Instagram is in front
+  [ ] Instagram app audio is actually delivered (it may be withheld)
+  [ ] Signing and entitlements work with the team's account type
+  [ ] Extension memory stays under 50 MB for 10 minutes of scrolling
+  [ ] A banner appears over Instagram with the Screen Sharing toggle on
+  [ ] The native eligibility gate recognises Reels versus DMs and other apps
+  [ ] Segmentation thresholds tuned on real frames (SEGMENT_* settings)
+
+Python tests in this repository use synthetic frames and audio. They do not
+verify any item above.

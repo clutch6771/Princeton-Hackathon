@@ -1,0 +1,230 @@
+{
+  "$defs": {
+    "AudioCaptureState": {
+      "description": "What the native adapter knows about app-audio availability.",
+      "enum": [
+        "available",
+        "protected",
+        "unavailable"
+      ],
+      "title": "AudioCaptureState",
+      "type": "string"
+    },
+    "AudioContainer": {
+      "description": "Container of an uploaded AAC chunk. Each chunk decodes independently.",
+      "enum": [
+        "adts",
+        "mp4"
+      ],
+      "title": "AudioContainer",
+      "type": "string"
+    },
+    "Eligibility": {
+      "description": "Result of the native feed-eligibility gate for one event.",
+      "enum": [
+        "eligible",
+        "ineligible",
+        "unknown"
+      ],
+      "title": "Eligibility",
+      "type": "string"
+    },
+    "GateCapability": {
+      "description": "Which kind of gate produced the privacy provenance.",
+      "enum": [
+        "native_gate",
+        "dev_fake",
+        "none"
+      ],
+      "title": "GateCapability",
+      "type": "string"
+    },
+    "PrivacyProvenance": {
+      "additionalProperties": false,
+      "description": "Evidence about how (and whether) an event was privacy-screened.",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/GateCapability"
+        },
+        "eligibility": {
+          "$ref": "#/$defs/Eligibility"
+        },
+        "gate_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Gate Id",
+          "type": "string"
+        },
+        "gate_version": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Gate Version",
+          "type": "string"
+        },
+        "method": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        },
+        "surface": {
+          "$ref": "#/$defs/Surface"
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_version",
+        "capability",
+        "eligibility",
+        "surface",
+        "method"
+      ],
+      "title": "PrivacyProvenance",
+      "type": "object"
+    },
+    "Surface": {
+      "description": "The on-screen surface the gate recognised.",
+      "enum": [
+        "instagram_reels",
+        "other",
+        "unknown"
+      ],
+      "title": "Surface",
+      "type": "string"
+    },
+    "TimeInterval": {
+      "additionalProperties": false,
+      "description": "Half-open capture-clock interval ``[start_ms, end_ms)``.",
+      "properties": {
+        "end_ms": {
+          "minimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        },
+        "start_ms": {
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_ms",
+        "end_ms"
+      ],
+      "title": "TimeInterval",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Metadata for one app-audio chunk: 16 kHz mono AAC, nominally 5 seconds.",
+  "properties": {
+    "acknowledged_notification_ids": {
+      "default": [],
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Acknowledged Notification Ids",
+      "type": "array"
+    },
+    "capture_end_ms": {
+      "exclusiveMinimum": 0,
+      "title": "Capture End Ms",
+      "type": "integer"
+    },
+    "capture_start_ms": {
+      "exclusiveMinimum": 0,
+      "title": "Capture Start Ms",
+      "type": "integer"
+    },
+    "capture_state": {
+      "$ref": "#/$defs/AudioCaptureState",
+      "default": "available"
+    },
+    "channels": {
+      "const": 1,
+      "title": "Channels",
+      "type": "integer"
+    },
+    "codec": {
+      "const": "aac",
+      "title": "Codec",
+      "type": "string"
+    },
+    "container": {
+      "$ref": "#/$defs/AudioContainer"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "eligible_intervals": {
+      "default": [],
+      "description": "Capture-clock intervals inside this chunk that the native gate certified as eligible Reels audio. Everything else is discarded.",
+      "items": {
+        "$ref": "#/$defs/TimeInterval"
+      },
+      "maxItems": 16,
+      "title": "Eligible Intervals",
+      "type": "array"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "priming_samples": {
+      "default": 0,
+      "description": "Leading decoder-delay samples to discard for this chunk.",
+      "maximum": 8192,
+      "minimum": 0,
+      "title": "Priming Samples",
+      "type": "integer"
+    },
+    "privacy": {
+      "$ref": "#/$defs/PrivacyProvenance"
+    },
+    "sample_rate_hz": {
+      "const": 16000,
+      "title": "Sample Rate Hz",
+      "type": "integer"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "source_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "source_seq": {
+      "minimum": 0,
+      "title": "Source Seq",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "event_id",
+    "session_id",
+    "source_id",
+    "source_seq",
+    "privacy",
+    "capture_start_ms",
+    "capture_end_ms",
+    "codec",
+    "container",
+    "sample_rate_hz",
+    "channels"
+  ],
+  "title": "AudioChunk",
+  "type": "object",
+  "x-contract-version": "1"
+}

@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The single structured object the model returns for one reel.",
+  "properties": {
+    "audio_observation": {
+      "description": "What the audio clip contained.",
+      "enum": [
+        "speech",
+        "non_speech_music",
+        "silence",
+        "unintelligible",
+        "no_audio_provided"
+      ],
+      "title": "Audio Observation",
+      "type": "string"
+    },
+    "confidence": {
+      "description": "Between 0 and 1.",
+      "title": "Confidence",
+      "type": "number"
+    },
+    "description": {
+      "description": "One or two neutral sentences about what the evidence shows.",
+      "title": "Description",
+      "type": "string"
+    },
+    "emotional_pull": {
+      "description": "Main emotional appeal, or empty.",
+      "title": "Emotional Pull",
+      "type": "string"
+    },
+    "evidence_basis": {
+      "description": "Only the evidence types that actually support the verdict.",
+      "items": {
+        "enum": [
+          "frames",
+          "on_screen_text",
+          "audio"
+        ],
+        "type": "string"
+      },
+      "title": "Evidence Basis",
+      "type": "array"
+    },
+    "format": {
+      "description": "For example: tutorial, skit, vlog, ad.",
+      "title": "Format",
+      "type": "string"
+    },
+    "hook": {
+      "description": "Opening hook, only if the first second was observed; else empty.",
+      "title": "Hook",
+      "type": "string"
+    },
+    "is_ad": {
+      "description": "True when the reel is an advertisement.",
+      "title": "Is Ad",
+      "type": "boolean"
+    },
+    "on_screen_text": {
+      "description": "Text visible in the frames, or empty.",
+      "title": "On Screen Text",
+      "type": "string"
+    },
+    "reason": {
+      "description": "One sentence, in terms of what the person said they want.",
+      "title": "Reason",
+      "type": "string"
+    },
+    "tone": {
+      "description": "For example: calm, humorous, urgent.",
+      "title": "Tone",
+      "type": "string"
+    },
+    "topics": {
+      "description": "Up to five short topic labels.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Topics",
+      "type": "array"
+    },
+    "transcript": {
+      "description": "Words actually heard in the audio clip. Empty when no clip was provided or no intelligible speech was heard. Never on-screen text.",
+      "title": "Transcript",
+      "type": "string"
+    },
+    "value_ids": {
+      "description": "IDs of the approved values relied on. Empty when neutral.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Value Ids",
+      "type": "array"
+    },
+    "verdict": {
+      "description": "Relative to the approved values only.",
+      "enum": [
+        "aligned",
+        "neutral",
+        "conflict"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "required": [
+    "transcript",
+    "audio_observation",
+    "on_screen_text",
+    "description",
+    "topics",
+    "format",
+    "tone",
+    "hook",
+    "emotional_pull",
+    "is_ad",
+    "verdict",
+    "confidence",
+    "value_ids",
+    "reason",
+    "evidence_basis"
+  ],
+  "title": "ModelJudgment",
+  "type": "object",
+  "x-contract-version": "1"
+}

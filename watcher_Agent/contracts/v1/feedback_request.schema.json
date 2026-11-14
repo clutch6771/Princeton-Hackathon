@@ -1,0 +1,95 @@
+{
+  "$defs": {
+    "FeedbackLabel": {
+      "description": "Explicit user reaction to a verdict.",
+      "enum": [
+        "agree",
+        "disagree",
+        "not_for_me",
+        "rerate"
+      ],
+      "title": "FeedbackLabel",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Body of ``POST /feedback``.",
+  "properties": {
+    "client_feedback_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional idempotency key chosen by the client.",
+      "title": "Client Feedback Id"
+    },
+    "comment": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Comment"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "label": {
+      "$ref": "#/$defs/FeedbackLabel"
+    },
+    "reel_id": {
+      "format": "uuid",
+      "title": "Reel Id",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional, client-defined. The PRD defines no range; the Judge stores it and does not interpret it.",
+      "title": "Score"
+    },
+    "source": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Where the feedback came from, e.g. 'timeline' or 'share'.",
+      "title": "Source"
+    }
+  },
+  "required": [
+    "reel_id",
+    "label"
+  ],
+  "title": "FeedbackRequest",
+  "type": "object",
+  "x-contract-version": "1"
+}

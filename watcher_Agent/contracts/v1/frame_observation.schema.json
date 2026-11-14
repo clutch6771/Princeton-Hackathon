@@ -1,0 +1,173 @@
+{
+  "$defs": {
+    "Eligibility": {
+      "description": "Result of the native feed-eligibility gate for one event.",
+      "enum": [
+        "eligible",
+        "ineligible",
+        "unknown"
+      ],
+      "title": "Eligibility",
+      "type": "string"
+    },
+    "GateCapability": {
+      "description": "Which kind of gate produced the privacy provenance.",
+      "enum": [
+        "native_gate",
+        "dev_fake",
+        "none"
+      ],
+      "title": "GateCapability",
+      "type": "string"
+    },
+    "PrivacyProvenance": {
+      "additionalProperties": false,
+      "description": "Evidence about how (and whether) an event was privacy-screened.",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/GateCapability"
+        },
+        "eligibility": {
+          "$ref": "#/$defs/Eligibility"
+        },
+        "gate_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Gate Id",
+          "type": "string"
+        },
+        "gate_version": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Gate Version",
+          "type": "string"
+        },
+        "method": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        },
+        "surface": {
+          "$ref": "#/$defs/Surface"
+        }
+      },
+      "required": [
+        "gate_id",
+        "gate_version",
+        "capability",
+        "eligibility",
+        "surface",
+        "method"
+      ],
+      "title": "PrivacyProvenance",
+      "type": "object"
+    },
+    "Surface": {
+      "description": "The on-screen surface the gate recognised.",
+      "enum": [
+        "instagram_reels",
+        "other",
+        "unknown"
+      ],
+      "title": "Surface",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Metadata for one sampled JPEG frame (nominally one every 2 seconds).",
+  "properties": {
+    "acknowledged_notification_ids": {
+      "default": [],
+      "items": {
+        "format": "uuid",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "title": "Acknowledged Notification Ids",
+      "type": "array"
+    },
+    "capture_ts_ms": {
+      "exclusiveMinimum": 0,
+      "title": "Capture Ts Ms",
+      "type": "integer"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "height": {
+      "exclusiveMinimum": 0,
+      "maximum": 4096,
+      "title": "Height",
+      "type": "integer"
+    },
+    "mime_type": {
+      "const": "image/jpeg",
+      "title": "Mime Type",
+      "type": "string"
+    },
+    "privacy": {
+      "$ref": "#/$defs/PrivacyProvenance"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "source_id": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "source_seq": {
+      "minimum": 0,
+      "title": "Source Seq",
+      "type": "integer"
+    },
+    "transition_at_ms": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Capture time of a reel-change transition the native adapter saw since the previous uploaded frame; null when none or unsupported.",
+      "title": "Transition At Ms"
+    },
+    "width": {
+      "exclusiveMinimum": 0,
+      "maximum": 4096,
+      "title": "Width",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "event_id",
+    "session_id",
+    "source_id",
+    "source_seq",
+    "privacy",
+    "capture_ts_ms",
+    "mime_type",
+    "width",
+    "height"
+  ],
+  "title": "FrameObservation",
+  "type": "object",
+  "x-contract-version": "1"
+}

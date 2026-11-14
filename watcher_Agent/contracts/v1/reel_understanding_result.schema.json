@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "EvidenceModality": {
+      "description": "Kinds of evidence a verdict may rest on.",
+      "enum": [
+        "frames",
+        "on_screen_text",
+        "audio"
+      ],
+      "title": "EvidenceModality",
+      "type": "string"
+    },
+    "ReelFeatures": {
+      "additionalProperties": false,
+      "description": "PRD ``features`` block of a reel record.",
+      "properties": {
+        "emotional_pull": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Emotional Pull"
+        },
+        "format": {
+          "maxLength": 120,
+          "title": "Format",
+          "type": "string"
+        },
+        "hook": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Null unless the first second of the exposure was observed.",
+          "title": "Hook"
+        },
+        "is_ad": {
+          "title": "Is Ad",
+          "type": "boolean"
+        },
+        "tone": {
+          "maxLength": 120,
+          "title": "Tone",
+          "type": "string"
+        },
+        "topics": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Topics",
+          "type": "array"
+        }
+      },
+      "required": [
+        "topics",
+        "format",
+        "tone",
+        "is_ad"
+      ],
+      "title": "ReelFeatures",
+      "type": "object"
+    },
+    "TranscriptStatus": {
+      "description": "Evidence-backed transcript state stored on a reel.",
+      "enum": [
+        "speech",
+        "non_speech_music",
+        "silence",
+        "missing_audio",
+        "protected_unavailable",
+        "corrupt",
+        "unintelligible",
+        "partial"
+      ],
+      "title": "TranscriptStatus",
+      "type": "string"
+    },
+    "Verdict": {
+      "description": "PRD verdict enum, always relative to the user's approved values.",
+      "enum": [
+        "aligned",
+        "neutral",
+        "conflict"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Validated outcome of the one joint understand/transcribe/judge call.",
+  "properties": {
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "description": {
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "evidence_basis": {
+      "items": {
+        "$ref": "#/$defs/EvidenceModality"
+      },
+      "title": "Evidence Basis",
+      "type": "array"
+    },
+    "features": {
+      "$ref": "#/$defs/ReelFeatures"
+    },
+    "on_screen_text": {
+      "title": "On Screen Text",
+      "type": "string"
+    },
+    "reason": {
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "transcript": {
+      "title": "Transcript",
+      "type": "string"
+    },
+    "transcript_status": {
+      "$ref": "#/$defs/TranscriptStatus"
+    },
+    "value_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Value Ids",
+      "type": "array"
+    },
+    "verdict": {
+      "$ref": "#/$defs/Verdict"
+    }
+  },
+  "required": [
+    "transcript",
+    "transcript_status",
+    "on_screen_text",
+    "description",
+    "features",
+    "verdict",
+    "confidence",
+    "value_ids",
+    "reason",
+    "evidence_basis"
+  ],
+  "title": "ReelUnderstandingResult",
+  "type": "object",
+  "x-contract-version": "1"
+}

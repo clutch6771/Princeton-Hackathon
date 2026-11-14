@@ -1,0 +1,163 @@
+API CONTRACT (contract version 1)
+=================================
+For native capture adapters and a future GUI. Machine-readable forms:
+  watcher_Agent/contracts/v1/*.schema.json   JSON Schemas
+  watcher_Agent/contracts/v1/fixtures/*      synthetic examples
+  GET /openapi.json                          OpenAPI (also /docs)
+
+
+1. IDENTITY
+-----------
+Every request except /healthz and /readyz needs the header
+  X-Demo-User-Id: <the configured DEMO_USER_ID>
+Missing -> 401 unauthenticated. Different value -> 403 forbidden.
+This demo header is NOT production authentication. The resolver
+(judge/api/deps.py: UserContextResolver) is replaceable.
+
+
+2. ENCODING, TIME, LIMITS
+-------------------------
+Uploads      multipart/form-data with two parts:
+               metadata  application/json  (the contract below)
+               media     the raw bytes (image/jpeg or audio/aac | audio/mp4)
+             No base64. Content-Length is required (411 without it).
+Limits       request 400 kB (413), frame 300 kB, audio chunk 100 kB / 6 s.
+             Frame long edge <= 512 px, declared width/height must match.
+Timestamps   capture_* fields: integer epoch milliseconds on the DEVICE clock,
+             derived from a monotonic source anchored once per session.
+             Server fields (created_at, expires_at): ISO 8601 UTC.
+Ids          event_id and session_id are client-generated UUIDs.
+Rate limits  ingest 240/min, app endpoints 120/min per owner -> 429 + Retry-After.
+Errors       {"success": false, "data": null,
+              "error": {"code": "...", "message": "..."}}
+             Codes: validation_error 422, unauthenticated 401, forbidden 403,
+             not_found 404, length_required 411, payload_too_large 413,
+             unsupported_media 415, privacy_capability_unavailable 422,
+             session_ended 409, source_conflict 409, clock_skew 422,
+             rate_limited 429, overloaded 503, storage_unavailable 503,
+             internal_error 500. Messages never echo submitted values.
+
+
+3. POST /ingest/frame
+---------------------
+metadata (frame_observation.schema.json), example:
+  {"contract_version": "1",
+   "event_id": "aaaaaaa1-0000-4000-8000-000000000001",
+   "session_id": "11111111-1111-4111-8111-111111111111",
+   "source_id": "ios-broadcast-synthetic", "source_seq": 0,
+   "capture_ts_ms": 1800000000000, "mime_type": "image/jpeg",
+   "width": 288, "height": 512,
+   "privacy": {"gate_id": "feed-eligibility-gate", "gate_version": "1.0.0",
+               "capability": "native_gate", "eligibility": "eligible",
+               "surface": "instagram_reels", "method": "on_device_classifier"},
+   "transition_at_ms": null,
+   "acknowledged_notification_ids": []}
+transition_at_ms  optional: capture time of a reel change the adapter saw
+                  since the previous uploaded frame. Improves boundaries.
+Response 200 (ingest_response.schema.json), notify at the ROOT:
+  {"contract_version": "1", "event_id": "...", "session_id": "...",
+   "status": "accepted", "prior_outcome": null,
+   "admitted_by_current_process": true, "notify": null}
+status: accepted | duplicate | late_discarded | privacy_excluded |
+        corrupt_discarded
+"accepted" = admitted to in-memory processing. It is not durable storage.
+
+
+4. POST /ingest/audio
+---------------------
+metadata (audio_chunk.schema.json): the common fields plus
+  capture_start_ms, capture_end_ms, codec "aac", container "adts" | "mp4",
+  sample_rate_hz 16000, channels 1, priming_samples (leading decoder-delay
+  samples to drop, e.g. 2112), capture_state "available" | "protected" |
+  "unavailable", eligible_intervals [{start_ms, end_ms}, ...].
+eligible_intervals = the capture-clock intervals inside this chunk that the
+native gate certified as Reels audio. Samples outside them are discarded.
+An empty list keeps nothing (status privacy_excluded).
+Each chunk must decode on its own. Response: same shape as /ingest/frame.
+
+
+5. NOTIFICATION DELIVERY
+------------------------
+Either ingest endpoint (and /session/end) may return, at the response root:
+  "notify": {"title": "A check-in on your feed",
+             "body": "3 of your last 15 reels went against what you told me
+                      you wanted.",
+             "reel_ids": ["...", "...", "..."],
+             "notification_id": "d0000000-0000-4000-8000-00000000000d",
+             "expires_at": "2026-11-14T12:02:00Z"}
+or "notify": null.
+Adapter duties:
+  - Raise one local notification per notification_id (deduplicate by id).
+  - Do not show it after expires_at; keep a local display cooldown.
+  - Acknowledge by sending the id in acknowledged_notification_ids on a later
+    ingest or session/end request. Acknowledgment is idempotent.
+  - Without an acknowledgment the same id is returned again after 30 s, at
+    most 3 times. A lost HTTP response is not proof of display.
+Limit: after a session ends with no further ingest, a warning created late
+cannot be delivered and expires (120 s).
+
+
+6. POST /session/end
+--------------------
+Body (session_end_request.schema.json):
+  {"contract_version": "1", "session_id": "...",
+   "acknowledged_notification_ids": []}
+Response: {"contract_version": "1", "session_id": "...",
+           "status": "ending" | "ended", "notify": null}
+Idempotent. After it, the session id cannot be reused (409 session_ended);
+start a new UUID. A session also ends after 600 s without an accepted upload.
+
+
+7. APP ENDPOINTS  (envelope {success, data, error, meta})
+---------------------------------------------------------
+GET /timeline?session_id=&limit=50&cursor=
+    data.items: reel records, newest first (reel_record.schema.json).
+    meta.next_cursor: opaque string or null. limit 1..100.
+    Only items with evaluation_status "judged" have a verdict.
+GET /thumbs/{reel_id}.jpg          image/jpeg, the reel's single thumbnail
+POST /feedback                     201. Body (feedback_request.schema.json):
+    {"contract_version": "1", "reel_id": "...",
+     "label": "agree" | "disagree" | "not_for_me" | "rerate",
+     "score": null, "comment": "...", "source": "timeline",
+     "client_feedback_id": "<uuid, optional idempotency key>"}
+    Storage only: no scheduler, no conversation, no values edit.
+    score: optional number, no defined range, stored and not interpreted.
+    source: free text; "share" is reserved for a future share extension.
+GET /config/notification-policy    {batch_size, minimum_conflicts,
+                                    cooldown_seconds, version, updated_at}
+PUT /config/notification-policy    {batch_size 1..100, minimum_conflicts
+                                    1..batch_size, cooldown_seconds 0..86400}
+    Creates a new version; applies when the next batch opens.
+DELETE /reels/{reel_id} | /sessions/{session_id} | /data
+GET /healthz                       liveness, no identity
+GET /readyz                        database, pgvector, privacy mode, model id
+
+
+8. ORDERING AND IDEMPOTENCY RULES
+---------------------------------
+  - One capture source per session; one upload in flight across both streams.
+  - Frames are processed in capture order. A frame older than the newest one
+    is acknowledged (late_discarded, or accepted as extra evidence within 3 s
+    inside the open reel) and never moves a boundary.
+  - Re-sending an event_id returns status "duplicate" and does no work.
+    admitted_by_current_process=false means the first delivery was held by a
+    server process that has restarted; that media is gone.
+  - 503 overloaded: drop the upload, back off for Retry-After seconds.
+
+
+9. INTERNAL CAPABILITIES (not model tools)
+------------------------------------------
+Name                 Input -> output                    Timeout   Side effects / errors
+FeedEligibilityGate  provenance -> admit|exclude        none      none / privacy_capability_unavailable
+ReelSegmenter        two frame samples -> assessment    none      none
+AacDecoder           AAC bytes -> PCM16                 CPU, thread none / AudioDecodeError
+AudioAssembler       PCM segments + window -> clip      none      none
+ValuesReader         owner -> snapshot | unavailable    DB 5 s    read only
+FeedbackRetriever    owner, snapshot -> <=3 examples    DB 5 s    read only
+UnderstandingProvider request -> ModelJudgment          8 s       one remote call / ProviderError
+EmbeddingProvider    text -> vector(768)                SDK       one remote call / ProviderError
+Repositories         typed records                      DB 5 s    PostgreSQL / StorageUnavailable
+RateLimiter          -> wait | refuse                   none      in-process counters
+Clock                now, monotonic, sleep              none      none
+WorkerQueue          job -> accepted | full             none      bounded (32)
+Tests for each are listed in judge/capabilities.py.

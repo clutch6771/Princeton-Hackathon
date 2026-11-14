@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "AckStatus": {
+      "description": "What happened to an uploaded capture event.\n\n``accepted`` means admission to ephemeral, in-memory processing. It is\nnot durable storage of the media.",
+      "enum": [
+        "accepted",
+        "duplicate",
+        "late_discarded",
+        "privacy_excluded",
+        "corrupt_discarded"
+      ],
+      "title": "AckStatus",
+      "type": "string"
+    },
+    "NotificationEnvelope": {
+      "additionalProperties": false,
+      "description": "The ``notify`` object returned at the root of ingest responses.",
+      "properties": {
+        "body": {
+          "title": "Body",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "notification_id": {
+          "description": "Stable across redelivery.",
+          "format": "uuid",
+          "title": "Notification Id",
+          "type": "string"
+        },
+        "reel_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "title": "Reel Ids",
+          "type": "array"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "body",
+        "reel_ids",
+        "notification_id",
+        "expires_at"
+      ],
+      "title": "NotificationEnvelope",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Response of both ingest endpoints. ``notify`` stays at the root.",
+  "properties": {
+    "admitted_by_current_process": {
+      "default": true,
+      "description": "False when the first delivery was acknowledged by a server process that has since restarted; that media is not recoverable.",
+      "title": "Admitted By Current Process",
+      "type": "boolean"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "notify": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NotificationEnvelope"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "prior_outcome": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "For duplicates: outcome of the first delivery.",
+      "title": "Prior Outcome"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AckStatus"
+    }
+  },
+  "required": [
+    "event_id",
+    "session_id",
+    "status"
+  ],
+  "title": "IngestResponse",
+  "type": "object",
+  "x-contract-version": "1"
+}

@@ -20,6 +20,10 @@ bandit==1.9.4
 # Testing
 pytest==9.2.0
 pytest-cov==7.1.0
+pytest-asyncio==1.5.0
+
+# Runtime dependencies of the Judge backend (needed to run its tests)
+-r watcher_Agent/requirements.txt
 
 # Secret loading from .env (see python/security.md)
 python-dotenv==1.2.4

@@ -1,0 +1,30 @@
+{
+  "acknowledged_notification_ids": [],
+  "capture_end_ms": 1800000005000,
+  "capture_start_ms": 1800000000000,
+  "capture_state": "available",
+  "channels": 1,
+  "codec": "aac",
+  "container": "adts",
+  "contract_version": "1",
+  "eligible_intervals": [
+    {
+      "end_ms": 1800000005000,
+      "start_ms": 1800000000000
+    }
+  ],
+  "event_id": "bbbbbbb1-0000-4000-8000-000000000001",
+  "priming_samples": 2112,
+  "privacy": {
+    "capability": "native_gate",
+    "eligibility": "eligible",
+    "gate_id": "feed-eligibility-gate",
+    "gate_version": "1.0.0",
+    "method": "on_device_classifier",
+    "surface": "instagram_reels"
+  },
+  "sample_rate_hz": 16000,
+  "session_id": "11111111-1111-4111-8111-111111111111",
+  "source_id": "ios-broadcast-synthetic",
+  "source_seq": 0
+}
