@@ -13,7 +13,7 @@ class SampleHandler: RPBroadcastSampleHandler {
     private var interval = 15
     private var timer: DispatchSourceTimer?
 
-    override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+    override func broadcastStarted(withSetupInfo _: [String: NSObject]?) {
         SharedStore.sessionID = UUID().uuidString
         interval = SharedStore.checkpointInterval
         SharedStore.stopRequested = false
@@ -28,7 +28,8 @@ class SampleHandler: RPBroadcastSampleHandler {
             if SharedStore.stopRequested {
                 self?.finishBroadcastWithError(NSError(
                     domain: "AttentionAgent", code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Monitoring stopped."]))
+                    userInfo: [NSLocalizedDescriptionKey: "Monitoring stopped."]
+                ))
             }
         }
         t.resume()
@@ -39,11 +40,23 @@ class SampleHandler: RPBroadcastSampleHandler {
         timer?.cancel()
         tracker.flush()
         _ = audio.finish()
+        if SharedStore.useLiveBackend {
+            let sessionID = SharedStore.sessionID
+            Task {
+                while hasPendingUploads() {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                do { try await LiveAgentBackend().endSession(sessionID) }
+                catch { NSLog("Session end failed: %@", error.localizedDescription) }
+            }
+        }
         SharedStore.clearHeartbeat()
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with type: RPSampleBufferType) {
-        if type == .audioApp { audio.append(sampleBuffer); return }
+        if type == .audioApp {
+            audio.append(sampleBuffer); return
+        }
         guard type == .video, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
         autoreleasepool { tracker.process(pixelBuffer: pb, time: t) }
@@ -51,17 +64,20 @@ class SampleHandler: RPBroadcastSampleHandler {
 
     private func emit(_ obs: ReelObservation) {
         let transcript = audio.finish()
-        if SharedStore.useLiveBackend && !obs.sensitiveSkipped {
+        if SharedStore.useLiveBackend, !obs.sensitiveSkipped {
             let payload = ReelIngestPayload(sessionId: SharedStore.sessionID, reelIndex: count + 1,
-                dwellSeconds: obs.duration, ocrText: obs.ocrText, transcriptText: transcript,
-                frameBase64: tracker.frameBase64, sensitivity: SharedStore.sensitivity, statedGoals: SharedStore.userGoal)
+                                            dwellSeconds: obs.duration, ocrText: obs.ocrText, transcriptText: transcript,
+                                            frameBase64: tracker.frameBase64, sensitivity: SharedStore.sensitivity, statedGoals: SharedStore.userGoal,
+                                            startedAt: obs.startedAt)
             enqueue(payload)
         }
         SharedStore.append(obs)
         DarwinNotifier.post()
         interval = SharedStore.checkpointInterval
         count += 1
-        if count % interval == 0 { notifyCheckpoint() }
+        if count % interval == 0 {
+            notifyCheckpoint()
+        }
     }
 
     private func enqueue(_ payload: ReelIngestPayload) {
@@ -76,19 +92,29 @@ class SampleHandler: RPBroadcastSampleHandler {
         let shouldStart = !uploading
         uploading = true
         uploadLock.unlock()
-        if shouldStart { Task { await drainUploads() } }
+        if shouldStart {
+            Task { await drainUploads() }
+        }
     }
+
     private func nextUpload() -> ReelIngestPayload? {
         uploadLock.lock(); defer { uploadLock.unlock() }
         guard !pendingUploads.isEmpty else { uploading = false; return nil }
         return pendingUploads.removeFirst()
     }
+
+    private func hasPendingUploads() -> Bool {
+        uploadLock.lock(); defer { uploadLock.unlock() }
+        return uploading || !pendingUploads.isEmpty
+    }
+
     private func drainUploads() async {
         while let payload = nextUpload() {
             do { try await LiveAgentBackend().ingest(payload) }
             catch { NSLog("Reel upload failed: %@", error.localizedDescription) }
         }
     }
+
     private func notifyCheckpoint() {
         Task {
             do {

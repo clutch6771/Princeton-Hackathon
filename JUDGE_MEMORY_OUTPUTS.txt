@@ -1,0 +1,66 @@
+JUDGE DATA OUTPUTS AND OWNERSHIP (2026-11-14)
+=============================================
+The Judge shares PostgreSQL records with the app and Guardian/Reflector.
+It has read-only access to approved values and cannot change them.
+
+Read-only input
+---------------
+Default Store namespace: (user_id, "guardian", "values"). Each Vn key holds
+{text: full approved entry, updated: ISO timestamp}. Guardian's protected
+approval function owns this namespace. The Judge SELECTs only this namespace,
+orders Vn numerically and preserves all text, including Unless and Agreed
+wording. It normalizes a snapshot in memory, pins its SHA-256 and never
+persists a competing values document. Missing/deleted values never fall back
+to older documents. VALUES_STORE_LAYOUT=document explicitly selects the old
+(user_id, "memories") / values.md contract with approval metadata instead.
+
+Persistent outputs (schema judge)
+----------------------------------
+reels: PRD fields id, session_id, start, end, thumbnail_url, transcript,
+on_screen_text, description, features (topics, format, tone, hook,
+emotional_pull, is_ad), verdict, confidence, value_ids, reason.
+
+Operational fields include owner_id, source_id, order_seq, evaluation_status,
+coverage, audio_status, transcript_status, segmentation_status, close_reason,
+values_revision/hash, feedback IDs, model/prompt versions, attempt counts,
+timings, latency_overrun and error_code. Only judged records have verdicts;
+failed/pending records have null. Device speech transcripts are partial;
+audio_status=missing means no waveform was supplied, even if device text exists.
+
+reel_thumbnails: at most one sanitized bounded JPEG per judged reel.
+reel_embeddings: pinned vector profile, pending/indexed/failed status, retries.
+reel_embedding_vectors: optional vector(768), one vector per reel/profile.
+feedback: explicit agree/disagree/not_for_me/fine reactions, optional comment
+and source. Historical rerate labels remain supported; they are not a user
+reaction and are excluded from Guardian's feedback view.
+sessions: identity, lifecycle, activity, capture order and judged/conflict/
+excluded counts. A failed reel is excluded from judged coverage.
+session_events: one session_completed event once pending jobs are finalized.
+ingest_receipts: stream event idempotency metadata, no media; pruned after 24h.
+
+No active notification state
+----------------------------
+No notification policy, batches, warnings, outbox or dispatch state is used.
+Historical migration 0005 is retained with its dormant tables for upgrade
+compatibility. Existing rows are untouched. Ingest/session responses contain
+no notify field or notification acknowledgement list.
+
+Consumers
+---------
+App: /timeline, /thumbs/{id}.jpg, /feedback and session lifecycle.
+Guardian: judge.integration.guardian_source.JudgeDataSource, passed to its
+existing api.configure. Reads judged records only, never turns failures into
+neutral. Owner filtering applies to reels, sessions and feedback. Feedback
+writes go through the same service as /feedback, invalidating the Judge's
+example cache. Keyword similarity uses existing Guardian query helpers over
+real rows; it is not a new semantic retrieval claim. Snapshot reads currently
+cap feedback history at 100,000 rows (demo scale).
+Reflector integration: consumes stored session completion and shared records;
+the Judge does not invoke it. Reflector orchestration is not implemented here.
+
+Deletion and retention
+----------------------
+DELETE /reels/{id}, /sessions/{id}, /data removes owned records and dependent
+thumbnails, vectors and feedback, and clears relevant caches/volatile media.
+Approved values remain owned by Guardian and are never deleted by the Judge.
+Raw video, raw audio and extra frames are never persisted, logged or traced.

@@ -1,0 +1,16 @@
+{
+  "comment": "This one was a form tutorial, which I do want.",
+  "contract_version": "1",
+  "created_at": "2026-11-14T12:00:00Z",
+  "feedback_id": "fffffff1-0000-4000-8000-000000000001",
+  "label": "disagree",
+  "prior_value_ids": [
+    "V3"
+  ],
+  "prior_verdict": "conflict",
+  "reel_description": "A trainer demonstrates squat form.",
+  "reel_id": "a0000000-0000-4000-8000-00000000000a",
+  "retrieval_mode": "recent_explicit_feedback",
+  "values_revision": "7",
+  "values_sha256": "733091b9d698352e96df8c7a8cc934b564d08940c162d36e88696da7412d4fff"
+}

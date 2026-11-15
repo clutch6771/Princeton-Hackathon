@@ -1,0 +1,97 @@
+JUDGE HTTP CONTRACT (current repository integration, 2026-11-14)
+================================================================
+Single process; /docs and generated contracts/v1 are the detailed schemas.
+Every owner endpoint requires X-Demo-User-Id equal to DEMO_USER_ID. Health and
+readiness are public. This header is a demo identity, not authentication.
+
+Ingest paths
+------------
+POST /ingest/frame
+  multipart/form-data: metadata JSON (frame_observation.schema.json) and
+  media binary JPEG. Longest edge <=512; max frame bytes 300000.
+POST /ingest/audio
+  Same parts: audio_chunk.schema.json and independently decodable AAC,
+  ADTS or MP4, nominally 5 seconds at 16kHz mono. Certify eligible intervals.
+  Only permitted intervals reach the model. No server screen/audio capture.
+
+POST /agent1/ingest
+  application/json matching native_reel_upload.schema.json. Current iOS:
+  {session_id: UUID, reel_index: positive integer, dwell_seconds: 0..90,
+   started_at?: ISO timestamp with timezone, frame_base64?: JPEG base64,
+   transcript_text?: string <=4000, privacy?: PrivacyProvenance}.
+  Other app fields (ocr_text, stated_goals, sensitivity) do not become values.
+  session_id + reel_index identifies one native exposure and deduplicates
+  retries. Backend arrival order determines order_seq on this sequential
+  client path. Native boundaries bypass server segmentation.
+  Without explicit privacy, provenance is dev_fake: development +
+  dev_permissive ONLY. Production requires trusted native certification.
+  Missing/excluded frame -> privacy_excluded with no provider call. A native
+  transcript is untrusted speech evidence, not an instruction, and is stored
+  verbatim with transcript_status=partial. No raw audio coverage is claimed.
+
+All three return an acknowledgement at the response root:
+  {contract_version:"1", event_id:UUID, session_id:UUID,
+   status:"accepted"|"duplicate"|"late_discarded"|"privacy_excluded"|
+          "corrupt_discarded", prior_outcome:null|string,
+   admitted_by_current_process:true|false}
+Accepted means admitted to RAM, not durable raw media. Judgment is asynchronous.
+Read /timeline for outcomes. No notify field, warning, acknowledgement IDs,
+notification-policy endpoint or server notification queue exists.
+
+Session lifecycle
+-----------------
+POST /session/end {contract_version?:"1", session_id:UUID}
+  -> {contract_version:"1", session_id:UUID, status:"ending"|"ended"}
+Idempotent; no new uploads after end. Flushes stream tail; native jobs are
+already closed. 600 seconds idle also closes a session. A single stored
+session_completed event follows once pending jobs finish.
+
+App endpoints
+-------------
+Responses: {success:true, data:..., error:null, meta?:...}.
+GET /timeline?session_id=UUID&limit=1..100&cursor=opaque
+  data.items are ReelRecords, newest first; meta.next_cursor paginates.
+  Only evaluation_status=judged carries a verdict. Pending/failures are null.
+GET /thumbs/{reel_id}.jpg -> one retained JPEG, owner-scoped.
+POST /feedback {reel_id:UUID, label:agree|disagree|not_for_me|fine,
+  source?:string, comment?:string, client_feedback_id?:UUID, score?:number}
+  -> 201 with persisted FeedbackRecord. Historical label rerate is retained
+  for compatibility. Explicit feedback does not authorize a values change.
+DELETE /reels/{UUID}, /sessions/{UUID}, /data -> data.deleted=true.
+GET /healthz (alias /health) -> {status:"ok"}.
+GET /readyz -> storage/privacy/provider/queue/media readiness, without secrets.
+
+Errors
+------
+{success:false,data:null,error:{code,message}}. Validation messages describe
+fields/rules, never payloads. 401 missing identity, 403 wrong identity,
+404 missing owned record, 409 ended session/source conflict, 411 missing
+Content-Length, 413 body/media too large, 415 invalid transport/codec,
+422 invalid metadata/privacy unavailable, 429 rate limit, 503 unavailable or
+bounded capacity. Honour Retry-After; uploads never spill to temp files.
+
+Application ownership
+----------------------
+LiveAgentBackend uses /agent1/ingest and /timeline for judging/checkpoints,
+/feedback for corrections and /session/end after uploads drain. The existing
+app raises local notifications. The Judge does not decide notification policy.
+GuardianDataSource integration is described in ../README.txt. Guardian/chat,
+value approvals and Reflector functions remain owned by Guardian/backend.
+/agent2/chat is not provided by this Judge server and still needs a Guardian
+HTTP adapter; judge integration tests do not imply coach chat is operational.
+
+Compatibility
+-------------
+Removing notification routes and fields breaks older notification consumers.
+This repo updates schemas and the current iOS judging client together, while
+retaining contract version 1. Deploy matching client/server versions. Do not
+edit existing SQL migrations: 0006 adds fine; old notification SQL is dormant.
+
+Grok provider configuration
+---------------------------
+Set PROVIDER_MODE=grok and XAI_API_KEY in watcher_Agent/.env. Grok receives
+images/text; raw waveforms go to xAI STT first (two HTTP requests per normal
+audio attempt, one final verdict). Native transcripts skip STT. Set
+EMBEDDING_INDEXING_ENABLED=false; no Gemini key is required. Public HTTP
+contracts, approved values access and notification/capture ownership are
+unchanged. Empty STT cannot establish music/silence and is uninterpretable.
