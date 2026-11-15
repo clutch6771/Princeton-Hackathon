@@ -2,12 +2,12 @@ import CoreText
 import SwiftUI
 import UIKit
 
-// Iris UI layer: live backdrop, animated eye, Silver Country type.
+// Iris UI layer: live backdrop, animated eye, Neris SemiBold type.
 // Each switch below turns one piece off and restores the previous look.
 enum IrisUI {
     static let liveBackdrop = true
     static let irisEye = true
-    static let silverCountry = true
+    static let customFont = true
 
     // Brand colours, taken from the theme in use.
     static var mint: UIColor { IrisThemeStore.shared.theme.stops[0] }
@@ -15,14 +15,16 @@ enum IrisUI {
     static var purple: UIColor { IrisThemeStore.shared.theme.stops[2] }
     static var deep: UIColor { IrisThemeStore.shared.theme.base }
 
-    private static let fontName = "SilverCountryRegular"
+    // To change typeface, bundle its file next to this one and update these two names.
+    private static let fontName = "Neris-SemiBold" // PostScript name
+    private static let fontFile = "Neris-SemiBold" // file name without .otf
 
     // Registered once, from the bundled file, so no Info.plist entry is needed.
     private static let fontReady: Bool = {
-        guard silverCountry else { return false }
+        guard customFont else { return false }
         if UIFont(name: fontName, size: 12) != nil { return true }
-        let bundled = Bundle.main.url(forResource: "Silver Country", withExtension: "otf")
-            ?? Bundle.main.url(forResource: "Silver Country", withExtension: "otf", subdirectory: "IrisUI")
+        let bundled = Bundle.main.url(forResource: fontFile, withExtension: "otf")
+            ?? Bundle.main.url(forResource: fontFile, withExtension: "otf", subdirectory: "IrisUI")
         guard let url = bundled else { return false }
         CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         return UIFont(name: fontName, size: 12) != nil
