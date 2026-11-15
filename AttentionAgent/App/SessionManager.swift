@@ -14,9 +14,31 @@ final class SessionManager {
     private var broadcastTotal = 0
     private var broadcastFlags: [FlaggedReelEvent] = []
     var sessionTotal: Int { max(currentRecords.count, broadcastTotal) }
-    var sessionFlagged: Int {
-        let local = currentRecords.filter { !($0.analysis?.flaggedPatterns.isEmpty ?? true) }.map(\.id)
-        return min(sessionTotal, Set(local + broadcastFlags.map(\.id)).count)
+    /// One full-session source for Home, Guardian context, and Statistics.
+    var sessionFlaggedReels: [FlaggedReelEvent] {
+        var events = Dictionary(broadcastFlags.map { ($0.id, $0) }, uniquingKeysWith: { _, newer in newer })
+        for record in currentRecords where !(record.analysis?.flaggedPatterns.isEmpty ?? true) {
+            guard events[record.id] == nil else { continue }
+            events[record.id] = FlaggedReelEvent(
+                id: record.id, timestamp: record.observation.endedAt,
+                topic: record.analysis?.summary ?? record.observation.ocrText.joined(separator: " "),
+                emotionTag: record.analysis?.flaggedPatterns.first ?? "Flagged",
+                dwellSeconds: max(0, Int(record.observation.duration)))
+        }
+        return Array(events.values.sorted {
+            $0.timestamp == $1.timestamp ? $0.id.uuidString < $1.id.uuidString : $0.timestamp > $1.timestamp
+        }.prefix(sessionTotal))
+    }
+    var sessionFlagged: Int { sessionFlaggedReels.count }
+    var guardianSessionContext: CheckpointDigest? {
+        guard sessionTotal > 0 else { return activeDigest }
+        var context = activeDigest ?? CheckpointDigest(
+            totalReelsWatched: sessionTotal, flaggedReels: [], userGoalConflict: nil,
+            coachHookMessage: "", suggestedAction: "Reflect on what you want from your feed.")
+        context.totalReelsWatched = sessionTotal
+        context.flaggedReels = sessionFlaggedReels
+        context.coachHookMessage = "\(sessionFlagged) of \(sessionTotal) reels were flagged in the latest session."
+        return context
     }
     private var currentRecords: [ReelRecord] {
         guard let start = sessionStart else { return [] }
@@ -63,6 +85,7 @@ final class SessionManager {
 
     // Chat state
     var messages: [ChatMessage] = []
+    private(set) var isGuardianThinking = false
     var savedPreferences: [String] = []
     var proposal: ProposedPreference?
 
@@ -176,8 +199,9 @@ final class SessionManager {
             capture.stop()
             tracker.flush()
         case .instagramBroadcast:
-            // The system picker owns normal stopping. Do not signal the extension's error path.
-            broadcastControlTrigger += 1
+            // The upload extension observes this flag and ends the broadcast directly.
+            SharedStore.stopRequested = true
+            statusMessage = "Stopping monitoring…"
             return
         }
         isMonitoring = false
@@ -390,17 +414,24 @@ final class SessionManager {
     func beginFreshConversation() {
         saveConversationMemory()
         conversationGeneration = UUID()
+        isGuardianThinking = false
         messages = []
     }
 
     // MARK: Chat
 
     func send(_ text: String) {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isGuardianThinking else { return }
+        isGuardianThinking = true
         messages.append(ChatMessage(isUser: true, text: text))
-        let context = activeDigest
+        let context = guardianSessionContext
         let generation = conversationGeneration
         saveConversationMemory()
         Task {
+            defer {
+                if generation == conversationGeneration { isGuardianThinking = false }
+            }
             do {
                 let reply = try await agentBackend.sendMessageToCoach(text, context: context)
                 guard generation == conversationGeneration else { return }

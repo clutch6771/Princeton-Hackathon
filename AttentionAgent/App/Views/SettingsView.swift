@@ -122,6 +122,9 @@ struct BackendConnectionView: View {
                 }.disabled(testing)
                 if let connected { Text(connected ? "Connected" : "Offline").foregroundStyle(connected ? .green : .red) }
             }
-        }.navigationTitle("Backend Connection")
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .scrollBounceBehavior(.always)
+        .navigationTitle("Backend Connection")
     }
 }

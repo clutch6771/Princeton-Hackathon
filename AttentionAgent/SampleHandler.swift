@@ -4,6 +4,8 @@ import UserNotifications
 /// Broadcast Upload Extension. Receives the screen while Instagram is open,
 /// detects Reels on device, and writes observations to the App Group.
 class SampleHandler: RPBroadcastSampleHandler {
+    private let lifecycleLock = NSRecursiveLock()
+    private var finished = false
     private let audio = ReelAudioTranscriber()
     private var uploading = false
     private var pendingUploads: [ReelIngestPayload] = []
@@ -29,20 +31,28 @@ class SampleHandler: RPBroadcastSampleHandler {
         tracker.onObservation = { [weak self] obs in self?.emit(obs) }
 
         let t = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        t.schedule(deadline: .now() + 1, repeating: 2)
+        t.schedule(deadline: .now() + 0.25, repeating: 0.25)
         t.setEventHandler { [weak self] in
-            SharedStore.heartbeat()
+            guard let self else { return }
+            self.lifecycleLock.lock()
+            defer { self.lifecycleLock.unlock() }
+            guard !self.finished else { return }
             if SharedStore.stopRequested {
-                self?.finishBroadcastWithError(NSError(
+                // ReplayKit may not call broadcastFinished after an error-driven finish.
+                self.broadcastFinished()
+                self.finishBroadcastWithError(NSError(
                     domain: "AttentionAgent", code: 1,
                     userInfo: [NSLocalizedDescriptionKey: "Monitoring stopped."]))
-            }
+            } else { SharedStore.heartbeat() }
         }
         t.resume()
         timer = t
     }
 
     override func broadcastFinished() {
+        lifecycleLock.lock(); defer { lifecycleLock.unlock() }
+        guard !finished else { return }
+        finished = true
         timer?.cancel()
         tracker.flush()
         _ = audio.finish()
@@ -60,6 +70,8 @@ class SampleHandler: RPBroadcastSampleHandler {
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with type: RPSampleBufferType) {
+        lifecycleLock.lock(); defer { lifecycleLock.unlock() }
+        guard !finished, !SharedStore.stopRequested else { return }
         if type == .audioApp { audio.append(sampleBuffer); return }
         guard type == .video, let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let t = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
