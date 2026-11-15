@@ -58,12 +58,24 @@ struct IrisTheme: Identifiable, Equatable {
 }
 
 // The theme in use. Views that read colours through it redraw when it changes.
-// Not persisted yet: restoring a saved id belongs in `init`, saving it in `select`.
+// The choice is saved by preset id, so it survives a restart and the splash opens in it.
 @Observable final class IrisThemeStore {
     static let shared = IrisThemeStore()
-    private(set) var theme = IrisTheme.presets[0]
-    private init() {}
-    func select(_ theme: IrisTheme) { self.theme = theme }
+    static let storageKey = "irisThemeID"
+    private(set) var theme: IrisTheme
+    @ObservationIgnored private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        // A missing id, or one from a preset that no longer exists, falls back to the default theme.
+        let saved = defaults.string(forKey: Self.storageKey)
+        theme = IrisTheme.presets.first { $0.id == saved } ?? IrisTheme.presets[0]
+    }
+
+    func select(_ theme: IrisTheme) {
+        self.theme = theme
+        defaults.set(theme.id, forKey: Self.storageKey)
+    }
 }
 
 extension UIColor {
