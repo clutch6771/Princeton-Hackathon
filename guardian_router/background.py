@@ -38,6 +38,12 @@ def mark_ready() -> None:
     _ready = True
 
 
+def is_reviewing(user_id: str) -> bool:
+    """Whether a review of this user's sessions is running in this process."""
+    with _guard:
+        return user_id in _in_flight
+
+
 def reset() -> None:
     """Forget which reviews are running and that the Guardian is configured. For tests."""
     global _ready

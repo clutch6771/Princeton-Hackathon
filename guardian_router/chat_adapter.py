@@ -242,6 +242,19 @@ class ChatAdapter:
         self._conversations = {**self._conversations, user_id: updated}
         return updated
 
+    def exclusive(self, user_id: str) -> threading.Lock:
+        """The lock that serializes this user's chat turns, for use in a `with` block."""
+        return self._lock(user_id)
+
+    def forget(self, user_id: str) -> None:
+        """Drop what this process remembers about one user's chat (after an account reset)."""
+        with self._guard:
+            self._conversations = {
+                user: state
+                for user, state in self._conversations.items()
+                if user != user_id
+            }
+
     def thread_id(self, user_id: str) -> str:
         """One chat thread per user per local day."""
         return f"{user_id}:{local_day(self._clock())}"

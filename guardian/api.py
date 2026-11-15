@@ -22,7 +22,7 @@ from guardian.chat_agent import build_chat_agent
 from guardian.datasource import DataSource
 from guardian.deps import Deps
 from guardian.memory import locks as lock_provider
-from guardian.memory import notes, reflector_files, values
+from guardian.memory import notes, reflector_files, user_erase, values
 from guardian.memory.locks import Locks
 from guardian.types import (
     Answer,
@@ -153,6 +153,17 @@ def answer_question(user_id: str, question_id: str, answer: Answer) -> AnswerRes
     user's card returns ok=False with an error and changes nothing.
     """
     return inbox_flow.answer_question(_require_deps(), user_id, question_id, answer)
+
+
+def erase_user(user_id: str) -> dict[str, int]:
+    """Delete everything stored about one user: values, cards, notes, the chat log,
+    the Reflector's files and the chat threads. Returns how many records and threads
+    were deleted. An addition to the spec's entry points, for the account-reset route.
+    """
+    deps = _require_deps()
+    if not chat_flow.is_valid_user_id(user_id):
+        return {"store": 0, "threads": 0}
+    return user_erase.erase_user(deps.store, deps.checkpointer, user_id)
 
 
 def get_values(user_id: str) -> str:

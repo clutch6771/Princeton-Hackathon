@@ -299,6 +299,39 @@ After a successful approval, `api.get_values(user_id)` returns the new text, so 
 - [ ] Dismissing the "What I learned" card removes it
 - [ ] An invalid edit shows the error and keeps the card
 
+## Erasing a user's data: `POST /account/reset`
+
+Deletes everything stored about the user in the `X-Demo-User-Id` header: the Guardian's records (values, cards, notes, the chat log, the Reflector's files, chat threads) and, when the server stores to Postgres, the Judge's rows for that user (sessions, reels, feedback). It cannot be undone.
+
+Request:
+
+```json
+{"confirm": "DELETE"}
+```
+
+Response, with what was deleted (the keys are table names on Postgres, `store` and `threads` in memory):
+
+```json
+{"user": "demo-user", "deleted": {"store": 41, "checkpoints": 6, "checkpoint_blobs": 9, "checkpoint_writes": 30, "judge.sessions": 2, "judge.reels": 23}}
+```
+
+| Case | Status and `detail` |
+| --- | --- |
+| The server has not allowed it | 403: `Account reset is disabled on this server. Set GUARDIAN_ALLOW_RESET=1 to allow it.` |
+| No header, or an invalid user ID (this route has no default user) | 400 |
+| `confirm` is not exactly `DELETE` | 400: `To erase this account, send {"confirm": "DELETE"}.` |
+| The user has a recording session open | 409: `A recording session is still open. Stop the recording, then try again.` |
+| A review of their last session is running | 409: `A review of the last session is still running. Try again in a few minutes.` |
+
+It is off unless `GUARDIAN_ALLOW_RESET=1` is set in the environment or `.env`. It also clears what the server process remembers about that user's chat (a card on screen, an offer, the last digest).
+
+**App change needed (not made; the Guardian owner does not edit app files).** A row in Settings, for example "Erase my data", that:
+
+1. shows a confirmation dialog saying it deletes the values, notes, chat and recorded sessions and cannot be undone;
+2. on confirm, calls `POST account/reset` with body `{"confirm": "DELETE"}` and the usual `X-Demo-User-Id` header;
+3. on 200, clears the app's local chat: empty `messages` in `SessionManager` and remove the `guardianMemory` entry it saves in the shared `UserDefaults` (and `sessionInsights`, if the session history should go too);
+4. on 409 or 403, shows the `detail` text.
+
 ## Storage, and the values layout the Judge reads
 
 Guardian keeps its state in memory by default and in Postgres when a connection string is set.

@@ -61,6 +61,7 @@ The user comes from the `X-Demo-User-Id` header and defaults to `demo-user`. The
 | `GET /memory` | `api.get_memory` | none |
 | `GET /questions` | `api.get_questions` | none; also starts a background review |
 | `POST /questions/{id}/answer` | `api.answer_question` | `{"action": "...", "edited_text": "..."}` |
+| `POST /account/reset` | `reset_demo` on Postgres, `api.erase_user` in memory | `{"confirm": "DELETE"}`. Erases the header's user. Off unless `GUARDIAN_ALLOW_RESET=1`; refused while a recording or a review is open |
 
 The JSON routes return the function's result unchanged, with errors in the body and status 200. Exact request and response JSON is in `docs/GUARDIAN_BACKEND_HANDOVER.md`. They are for a later card UI; today's app uses only `/agent2/chat`.
 
@@ -107,6 +108,7 @@ All are read from the environment or the root `.env` (git-ignored). Never commit
 | `GUARDIAN_REFLECTOR_MODEL` | No | Default `google_genai:gemini-3.5-flash-lite` |
 | `GUARDIAN_REQUESTS_PER_MINUTE` | No | Chat model calls per minute. Default 12 |
 | `GUARDIAN_REFLECTOR_REQUESTS_PER_MINUTE` | No | Reflector model calls per minute, on a separate limiter so a review cannot slow a chat reply. Default half the chat rate |
+| `GUARDIAN_ALLOW_RESET` | No | `1` enables `POST /account/reset`, which erases one user's data. Off by default |
 | `GUARDIAN_TIMEZONE` | No | Where a chat day starts and ends (an IANA name). Default `America/New_York`. Each user has one chat thread per local day |
 | `GUARDIAN_DEV_SEEDED` | No | Standalone server only: `1` starts with three approved values |
 | `TEST_DATABASE_URL` | No | Tests only. A disposable database; tests delete rows from it, and the Judge's tests drop and rebuild its schema there. Guardian's tests refuse to run if it equals `DATABASE_URL`. Never point it at the team database |

@@ -20,6 +20,7 @@ App route (see chat_adapter.py):
 
 from __future__ import annotations
 
+import os
 import threading
 import uuid
 from collections.abc import Callable
@@ -27,12 +28,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, cast
 
+import psycopg
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from guardian import api
+from guardian import api, chat_flow, config, storage
+from guardian.memory import reviews
 from guardian.types import Answer, ChatContext, Decision
-from guardian_router import background
+from guardian_router import background, reset_demo
 from guardian_router.chat_adapter import ChatAdapter, Digest, canonical_reel_id
 
 DEFAULT_USER = "demo-user"
@@ -61,15 +64,22 @@ class Runtime:
     clock: Callable[[], datetime]
     launch: background.Launcher
     adapter: ChatAdapter
+    # The Guardian's Postgres connection string when it stores to a database; None
+    # when it is in memory. Never returned or logged.
+    database_url: str | None = None
 
 
 def new_runtime(
     clock: Callable[[], datetime] | None = None,
     launch: background.Launcher | None = None,
+    database_url: str | None = None,
 ) -> Runtime:
     now = clock or utc_now
     return Runtime(
-        clock=now, launch=launch or background.thread_launcher, adapter=ChatAdapter(now)
+        clock=now,
+        launch=launch or background.thread_launcher,
+        adapter=ChatAdapter(now),
+        database_url=database_url,
     )
 
 
@@ -89,7 +99,9 @@ def get_runtime(request: Request) -> Runtime:
                 raise HTTPException(status_code=503, detail=NO_DATASOURCE)
             api.configure(datasource=datasource)
             background.mark_ready()
-            existing = state.guardian_runtime = new_runtime()
+            existing = state.guardian_runtime = new_runtime(
+                database_url=storage.database_url()
+            )
     return cast(Runtime, existing)
 
 
@@ -169,6 +181,77 @@ def answer(
 ) -> dict[str, Any]:
     given = cast(Answer, body.model_dump(exclude_none=True))
     return dict(api.answer_question(user_id, question_id, given))
+
+
+# --- Erasing an account -------------------------------------------------------------------
+
+ALLOW_RESET_VAR = "GUARDIAN_ALLOW_RESET"  # the route answers 403 unless this is "1"
+RESET_CONFIRMATION = "DELETE"
+RESET_DISABLED = (
+    f"Account reset is disabled on this server. Set {ALLOW_RESET_VAR}=1 to allow it."
+)
+RESET_NEEDS_USER = f"The {USER_HEADER} header is required, with a valid user ID."
+RESET_NEEDS_CONFIRMATION = 'To erase this account, send {"confirm": "DELETE"}.'
+RESET_WHILE_RECORDING = (
+    "A recording session is still open. Stop the recording, then try again."
+)
+RESET_WHILE_REVIEWING = (
+    "A review of the last session is still running. Try again in a few minutes."
+)
+RESET_FAILED = "The reset failed and nothing was deleted."
+
+
+class ResetBody(BaseModel):
+    confirm: str = ""
+
+
+def is_recording(request: Request, user_id: str, now: datetime) -> bool:
+    """Whether the user has a session that has not ended."""
+    datasource = getattr(request.app.state, "guardian_datasource", None)
+    if datasource is None:
+        return False
+    return any(
+        not reviews.is_finished(session, now)
+        for session in datasource.list_sessions(user_id)
+    )
+
+
+@router.post("/account/reset")
+def reset_account(
+    body: ResetBody,
+    request: Request,
+    runtime: RuntimeDep,
+    x_demo_user_id: Annotated[str | None, Header()] = None,
+) -> dict[str, Any]:
+    """Erase everything stored about the header's user: Guardian records and, on a
+    database, the Judge's rows. It cannot be undone, so it is off by default, takes
+    no default user, and needs an exact confirmation."""
+    config.load_env()  # so the switch may be set in the repository's .env
+    if os.environ.get(ALLOW_RESET_VAR, "").strip() != "1":
+        raise HTTPException(status_code=403, detail=RESET_DISABLED)
+    user_id = (x_demo_user_id or "").strip()
+    if not chat_flow.is_valid_user_id(user_id):
+        raise HTTPException(status_code=400, detail=RESET_NEEDS_USER)
+    if body.confirm != RESET_CONFIRMATION:
+        raise HTTPException(status_code=400, detail=RESET_NEEDS_CONFIRMATION)
+    if is_recording(request, user_id, runtime.clock()):
+        raise HTTPException(status_code=409, detail=RESET_WHILE_RECORDING)
+    if background.is_reviewing(user_id):
+        raise HTTPException(status_code=409, detail=RESET_WHILE_REVIEWING)
+
+    # Wait for any chat turn of this user to finish, and keep new ones out meanwhile.
+    with runtime.adapter.exclusive(user_id):
+        if runtime.database_url:
+            try:
+                deleted = reset_demo.reset(
+                    runtime.database_url, user_id, confirmed=True
+                )
+            except psycopg.Error as error:
+                raise HTTPException(status_code=500, detail=RESET_FAILED) from error
+        else:
+            deleted = api.erase_user(user_id)
+        runtime.adapter.forget(user_id)
+    return {"user": user_id, "deleted": deleted}
 
 
 # --- The app's chat route -----------------------------------------------------------------

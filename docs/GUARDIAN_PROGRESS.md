@@ -23,7 +23,7 @@ Last updated: Sunday Nov 15, 4:25 am. Branch: `guardian`.
 | Demo notebook (`notebooks/demo.ipynb`) | **Not built** (owner's decision). The terminal chat and `guardian_router.live_run` run the demo loop | |
 | Optional items | Not started | |
 
-Offline tests: 590 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
+Offline tests: 606 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -389,6 +389,7 @@ Not fixed (low): the value write and the proposal's status are two writes with n
 - **The citation check accepts removed IDs,** so the Guardian can say "I removed V2".
 - **Checked in code, not only in the prompt:** `forget_note` refuses unless the user's latest message asks to forget, delete or remove something.
 - **Reviewed before commit** by four reviewers with a verifier per finding: 13 findings confirmed, none critical or high. Fixed: ordinary proposal records are stored without the new `kind` field, so a server on an older checkout can still read them; the forget-note rule is checked in code; other spellings of "none" count as an emptied value; removing a value closes other waiting cards about it; a waiting removal card asks for approve or reject only. Left: the citation check's correction message lists a removed ID among the stored ones; the emptied-value refusal names `propose_value_removal` even to the Reflector, which has no such tool; when a provider sends no tool-call ID, a second removal request for the same value reuses the decided proposal; forgetting a note does not remove what the brief or the chat log already say.
+- **Erasing a user's data.** `POST /account/reset` on the router, body `{"confirm": "DELETE"}`: on Postgres it runs the `reset_demo` code for the header's user (Guardian records and Judge rows), in memory it uses the new `api.erase_user`. Off unless `GUARDIAN_ALLOW_RESET=1`; no default user; refused while that user has a recording session open or a review running; it also clears the process's chat state for the user and waits for a chat turn in progress. The app change it needs is written up in the handover page; no app file was edited. No live run was needed: it makes no model call.
 - Live through `/agent2/chat` (Flash-Lite, paid tier): "Please delete my news value" gave the card "Remove V2: News without outrage? Reply approve or reject."; "approve" deleted V2; a note about exam stress was saved and then removed on "please forget what I told you about exams".
 
 ## Conventions
