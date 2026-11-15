@@ -9,7 +9,7 @@ retry starts from the same state and cannot produce partial or duplicate output.
 from __future__ import annotations
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 
@@ -22,6 +22,7 @@ STATUS_NOT_STARTED = "not started"
 STATUS_RUNNING = "running"
 STATUS_DONE = "done"
 STATUS_FAILED = "failed"
+STATUS_SKIPPED = "skipped"  # finished with no judged reels: nothing to review
 
 MAX_ATTEMPTS = 3
 RUN_TIMEOUT = timedelta(minutes=10)  # a run still "running" after this has crashed
@@ -176,6 +177,12 @@ def succeed(
     )
 
 
+def skip(store: BaseStore, user_id: str, session_id: str) -> None:
+    """Record that a session has nothing to review, so it is never picked up again."""
+    review = get_review(store, user_id, session_id)
+    _save(store, user_id, replace(review, status=STATUS_SKIPPED))
+
+
 def feedback_cursor(store: BaseStore, user_id: str) -> datetime:
     """Collect feedback and chat from here. It moves forward only when a run succeeds."""
     item = store.get(keys.namespace(user_id, keys.META), CURSOR_KEY)
@@ -231,16 +238,21 @@ def learned_prompt(summary: Summary) -> str:
     return f"{listed}\n\n{summary.question}" if summary.question else listed
 
 
-def normalize_hypotheses(text: str) -> str:
+def normalize_hypotheses(text: str, session_ids: Collection[str] = ()) -> str:
     """Set each hypothesis's "Sessions seen" to the number of distinct session IDs in its
-    evidence, so a count can never be inflated by reviewing a session twice."""
+    evidence, so a count can never be inflated by reviewing a session twice.
+
+    Seed-style session IDs (s_001) are recognised by their form. The Judge's session
+    IDs are UUIDs, like its reel IDs, so pass the user's `session_ids` to tell them apart.
+    """
     lines = []
     sessions: set[str] = set()
     for line in text.splitlines():
         if line.startswith(reflector_files.HYPOTHESIS_HEADER):
             sessions = set()
         elif line.strip().lower().startswith("- evidence:"):
-            sessions = set(_SESSION_ID.findall(line))
+            real = {uuid for uuid in checks.uuids_in(line) if uuid in session_ids}
+            sessions = set(_SESSION_ID.findall(line)) | real
         elif sessions and _SESSIONS_SEEN.search(line):
             line = _SESSIONS_SEEN.sub(f"Sessions seen: {len(sessions)}", line)
         lines.append(line)

@@ -13,7 +13,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from guardian import api
+from guardian import api, reflect_flow
 from guardian.datasource import SEED_DIR, FakeDataSource
 from guardian.memory import inbox, locks, proposals, reflector_files, reviews, values
 from guardian.tests.conftest import NOW, OTHER_USER, USER
@@ -424,6 +424,72 @@ def test_a_session_still_in_progress_is_not_reviewed(reflect, clock):
 
     assert soon == 0 and early_model.calls == []
     assert later == 1
+
+
+class WithEmptySession:
+    """A data source with one extra finished session that has no judged reels, as the
+    real Judge reports a session whose reels could not be judged."""
+
+    EMPTY = "s_empty"
+
+    def __init__(self, inner: FakeDataSource) -> None:
+        self._inner = inner
+
+    def list_sessions(self, user_id: str) -> list[dict[str, Any]]:
+        long_ago = NOW - timedelta(hours=3)
+        empty = {
+            "id": self.EMPTY,
+            "start": long_ago,
+            "last_reel_at": long_ago,
+            "stopped": True,
+        }
+        return [empty, *self._inner.list_sessions(user_id)]
+
+    def get_session_reels(self, user_id: str, session_id: str) -> list[Any]:
+        if session_id == self.EMPTY:
+            return []
+        return self._inner.get_session_reels(user_id, session_id)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+def test_a_finished_session_with_no_judged_reels_is_not_reviewed(reflect, store, clock):
+    nothing = FakeDataSource.from_records(USER, reels=[], feedback=[], clock=clock)
+    only_empty = WithEmptySession(nothing)
+
+    first, model = reflect([], datasource=only_empty)
+    second, again = reflect([], datasource=only_empty)
+
+    assert (first, second) == (0, 0)
+    assert model.calls == [] and again.calls == []
+    skipped = reviews.get_review(store, USER, WithEmptySession.EMPTY)
+    assert skipped.status == reviews.STATUS_SKIPPED and skipped.attempts == 0
+    assert cards(store) == []
+
+
+def test_an_empty_session_does_not_stop_the_others_being_reviewed(
+    reflect, store, source
+):
+    reviewed, _ = reflect(good_run(), datasource=WithEmptySession(source))
+
+    assert reviewed == 1
+    assert [c.id for c in cards(store, "learned")] == ["learned_s_001"]
+    assert (
+        reviews.get_review(store, USER, WithEmptySession.EMPTY).status
+        == reviews.STATUS_SKIPPED
+    )
+    assert reviews.get_review(store, USER, SESSION).status == reviews.STATUS_DONE
+
+
+def test_no_model_is_built_when_only_empty_sessions_are_waiting(store, clock):
+    nothing = FakeDataSource.from_records(USER, reels=[], feedback=[], clock=clock)
+    api.configure(store, InMemorySaver(), WithEmptySession(nothing), clock=clock)
+
+    def never() -> Any:
+        raise AssertionError("no model should be built for an empty session")
+
+    assert reflect_flow.reflect_pending(api._require_deps(), USER, never) == 0
 
 
 def test_another_user_and_an_invalid_user_have_nothing_reviewed(reflect, store):

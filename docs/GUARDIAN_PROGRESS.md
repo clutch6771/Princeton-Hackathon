@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Saturday Nov 14, 9:05 pm. Branch: `guardian`.
+Last updated: Saturday Nov 14, 9:50 pm. Branch: `guardian`.
 
 ## Where things stand
 
@@ -16,12 +16,13 @@ Last updated: Saturday Nov 14, 9:05 pm. Branch: `guardian`.
 | 4. Inbox approval (`get_questions`, `answer_question`) | Done; integration checkpoint 2 waiting on the owner | this commit |
 | Backend brief Part A: survey of the app and the teammate's backend | Done | |
 | Backend brief Part B: storage on Postgres | Done; tables created in the team database | `d28f583` |
-| Backend brief Part C: Guardian router (`guardian_router/`) | Done | this commit |
+| Backend brief Part C: Guardian router (`guardian_router/`) | Done | `f6c5e46` |
+| Integration: Guardian wired into the Judge server, team database migrated, run page, reset command | Done | `ce62e33`, `6d5e642`, this commit |
 | 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) | Not started; the closing question on the "What I learned" card is already in | |
 | 5. Learning evaluation | Not started | |
 | Optional items | Not started | |
 
-Offline tests: 381 passing in memory (`guardian/` and `guardian_router/`); 597 when every storage test also runs on Postgres. They use a scripted model and make no API calls.
+Offline tests: 400 passing in memory (`guardian/` and `guardian_router/`); 625 when every storage test also runs on Postgres. The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -252,11 +253,25 @@ Chat replies took 0.7 to 6.9 seconds in run 2. In run 1, before the limiters sta
 
 Seen in these runs and left for 4b: the Reflector's V1 refinement also rewrote the title, the strength and the "Want more" line, not only "Unless".
 
-Found and not fixed (outside this part):
+Found in Part C and fixed during integration: the evidence check and empty sessions (below). Their Judge prompt and the dropped `ocr_text` are covered in `docs/GUARDIAN_FOR_BACKEND_OWNER.md`.
 
-- The evidence check recognises only seed-style IDs (`rl_`, `fb_`, `s_`). The Judge's IDs are UUIDs, so with real data a cited ID is not checked for existence. Nothing breaks; the check is weaker.
-- `reflect_pending` reviews every finished session, including one with no judged reels. With real data that wastes a Reflector run on an empty session.
-- Their Judge prompt never explains "Want more" and "Want less", and the app's `ocr_text` is dropped by their upload model. Both are in `docs/GUARDIAN_FOR_BACKEND_OWNER.md`.
+### Integration (after Part C)
+
+The teammates handed integration to the Guardian owner, who allowed edits to `watcher_Agent/` for the wiring only.
+
+- **Wiring, three small edits in `watcher_Agent/`.** `judge/api/app_api.py` includes `guardian_router`. `POST /session/end` runs `review_sessions(owner_id)` as a background task. The Judge prompt gained one rule: conflict when a reel matches a "Want less" line and no "Unless" applies; aligned when it matches "Want more"; a line that says "none" matches nothing.
+  - The router is included with `include_in_schema=False`. One of the Judge's tests pins its OpenAPI document to the Judge-owned routes and asserts `/chat` is absent; this keeps that test unchanged.
+  - `review_sessions` does nothing until the router has configured the Guardian (on its first request). Otherwise the Judge's own tests, and a session that ends before any Guardian request, would run it unconfigured.
+  - The project rule `.claude/rules/project/judge-backend.md` says the Judge never invokes the Guardian or Reflector. The session-end hook now does, in the HTTP layer only, at the owner's instruction. The rule text has not been changed.
+- **Team database.** pgvector 0.8.7 is available. `migrate.py up` applied 0001 to 0006. `grant` and `seed_dev_values.py` were not run.
+- **`docs/RUN_DEMO.md`:** the `.env` lines, the one command, the tunnel, a curl smoke test and the likely failures. The curl block was run as printed against a local in-memory server.
+- **Reset command:** `python -m guardian_router.reset_demo --user NAME [--yes]`. Without `--yes` it lists row counts and deletes nothing. It matches the user on exact text, never a LIKE pattern. Tested on the test container only (11 tests), never run on the team database.
+- **Smoke test on the team database, 8 of 8.** The real combined server with the run page's settings, except two: `PROVIDER_MODE=fake`, because `.env` has no Judge provider key (neither `XAI_API_KEY` nor `GEMINI_API_KEY`), and a throwaway user `smoke-test-user` instead of `demo-user`, so the demo user stays empty. Onboarding and approval through `/agent2/chat` (real Gemini), a reel through `/agent1/ingest`, the reel in `/timeline` judged as a conflict citing V1 (the Judge read the value Guardian had just stored), and the digest explanation in chat. Chat replies took 1.0 to 1.7 seconds. That user's rows are still in the team database.
+- **Two gaps fixed.**
+  - *UUID evidence IDs.* The evidence check now recognises UUIDs as well as seed-style IDs, so a cited reel, feedback or session ID from the real Judge must exist. "Sessions seen" counts UUID sessions too.
+  - *Empty sessions.* A finished session with no judged reels is marked `skipped` and never run.
+
+Tests: Guardian and router 400 in memory, 625 with Postgres; the Judge's suite 499, unchanged. Four of the Judge's Postgres-only tests fail on the local test container, before and after the wiring: they log in as a role without a password, which the container's password authentication rejects.
 
 ## Conventions
 

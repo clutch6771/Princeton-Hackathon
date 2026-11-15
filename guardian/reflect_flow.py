@@ -45,7 +45,8 @@ def reflect_pending(deps: Deps, user_id: str, build_model: Callable[[], Any]) ->
         if reviews.run_in_progress(deps.store, user_id, now):
             return 0
         reviews.recover_crashed(deps.store, user_id, now)
-        waiting = reviews.sessions_to_review(deps.store, deps.datasource, user_id, now)
+        finished = reviews.sessions_to_review(deps.store, deps.datasource, user_id, now)
+        waiting = [s for s in finished if has_judged_reels(deps, user_id, s["id"])]
         if not waiting:
             return 0
         model = build_model()
@@ -53,6 +54,20 @@ def reflect_pending(deps: Deps, user_id: str, build_model: Callable[[], Any]) ->
             review_session(deps, model, user_id, session["id"]) for session in waiting
         ]
         return len([done for done in outcomes if done])
+
+
+def has_judged_reels(deps: Deps, user_id: str, session_id: str) -> bool:
+    """Whether a finished session has anything to review.
+
+    The data source holds only reels the Judge judged. A session with none (its reels
+    failed, or it ended before any was judged) is marked skipped and never run: a
+    review of nothing would spend a Reflector run and then fail.
+    """
+    if deps.datasource.get_session_reels(user_id, session_id):
+        return True
+    reviews.skip(deps.store, user_id, session_id)
+    logger.info("session %s has no judged reels; review skipped", session_id)
+    return False
 
 
 def review_session(deps: Deps, model: Any, user_id: str, session_id: str) -> bool:
@@ -100,7 +115,8 @@ def commit(
     """Make a successful run's output visible and mark the session done."""
     store, user_id = deps.store, run.user_id
     hypotheses = reflector_files.read_file(store, user_id, reflector_files.HYPOTHESES)
-    normalized = reviews.normalize_hypotheses(hypotheses)
+    session_ids = {session["id"] for session in deps.datasource.list_sessions(user_id)}
+    normalized = reviews.normalize_hypotheses(hypotheses, session_ids)
     if normalized != hypotheses:
         reflector_files.write_text(
             store, user_id, reflector_files.HYPOTHESES, normalized

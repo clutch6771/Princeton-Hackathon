@@ -46,6 +46,18 @@ Stop and report after Part B.
 
 Cap Part C at about two hours. Stop and report after it.
 
+## Integration (after Part C, done)
+
+The teammates handed integration to the Guardian owner. Edits to `watcher_Agent/` were allowed for the wiring lines only.
+
+1. Wire the Guardian into the Judge server: include `guardian_router` in `judge/api/app_api.py`; add `review_sessions(owner_id)` as a background task in `POST /session/end`; add the rule from `guardian/judge_prompt.md` to the Judge prompt. Run both test suites.
+2. Run the Judge's migrations against the team database (check pgvector, then `migrate.py status` and `up`). Never run `grant` or `seed_dev_values.py`.
+3. Write `docs/RUN_DEMO.md`: the `.env` lines and the one command for the combined server, the tunnel, a curl smoke test and the three most likely failures.
+4. Add a demo reset command for one user's Guardian records and Judge rows. It names the user and refuses without `--yes`. Test it on the test container only.
+5. Smoke-test the combined server against the team database.
+6. Fix the two gaps: UUID evidence IDs, and no review for a session with no judged reels.
+7. Push. The owner opens and merges the pull request from `guardian` into `main`.
+
 ## After that
 
-Step 4b (docs/GUARDIAN_REFLECTION_ADDENDUM.md; "none" for any value line the evidence does not support; the interview focuses on "want less"), then the learning evaluation. Feature freeze is 4:00 am.
+A trimmed 4b: "none" for any value line the evidence does not support; a refinement changes only the lines the evidence supports and leaves the title, strength and other lines as they were; the interview focuses on "want less"; the Guardian speaks first on an empty message. Then the learning evaluation, then the ECC code and security review. Feature freeze is 4:00 am.

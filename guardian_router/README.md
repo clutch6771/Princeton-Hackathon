@@ -2,15 +2,17 @@
 
 HTTP routes for the Guardian and Reflector, for the team's server to include. It replaces the temporary `dev_server/`. The Guardian package itself (`guardian/`) exposes Python functions only; this folder is the thin HTTP layer over them.
 
-## Include it in the Judge server
+## Included in the Judge server
 
-One line in `watcher_Agent/judge/api/app_api.py`, next to the other `include_router` calls:
+One line in `watcher_Agent/judge/api/app_api.py`, next to the other `include_router` calls (already there):
 
 ```python
 from guardian_router import router as guardian_router
 
-app.include_router(guardian_router)
+app.include_router(guardian_router, include_in_schema=False)
 ```
+
+To run the combined server for the real app, see `docs/RUN_DEMO.md`.
 
 Start the server from the repository root, so that `guardian` and `guardian_router` are importable, with Guardian's requirements installed in the same environment:
 
@@ -34,7 +36,7 @@ A test runs this router inside the real Judge app on its own fakes (`tests/test_
 
 ### Session end
 
-Run this when a session ends, as a background task:
+The Judge server's `POST /session/end` runs this as a background task (already there):
 
 ```python
 from guardian_router import review_sessions
@@ -42,9 +44,9 @@ from guardian_router import review_sessions
 background_tasks.add_task(review_sessions, owner_id)   # in POST /session/end
 ```
 
-It runs the Reflector on every finished, unreviewed session of that user. It blocks for one to three minutes per session, never raises, and extra calls return 0. A session counts as finished only once the Judge marks it ended, which can be a few seconds after `/session/end` returns while the last reels are judged; the function waits and retries for about 45 seconds.
+It runs the Reflector on every finished, unreviewed session of that user. It blocks for one to three minutes per session, never raises, and extra calls return 0. A session counts as finished only once the Judge marks it ended, which can be a few seconds after `/session/end` returns while the last reels are judged; the function waits and retries for about 45 seconds. A session with no judged reels is not reviewed.
 
-Until that line is added, reviews still happen: the router starts one in the background on every `POST /agent2/chat` and `GET /questions`, once the user has at least one approved value.
+Until the router has configured the Guardian (on its first request after the server starts) the function does nothing. The router also starts a review in the background on every `POST /agent2/chat` and `GET /questions`, once the user has at least one approved value, so a session that ended earlier is still reviewed.
 
 ## Routes
 
@@ -124,6 +126,15 @@ curl -s localhost:8000/agent2/chat -H 'Content-Type: application/json' -H 'X-Dem
   -d '{"message": "why were these flagged?", "profile": {"stated_goals": ""},
        "context": {"id": "d1", "flagged_reels": [{"id": "rl_014"}, {"id": "rl_015"}]}}'
 ```
+
+## Starting a demo clean
+
+```bash
+python -m guardian_router.reset_demo --user demo-user          # lists what would go
+python -m guardian_router.reset_demo --user demo-user --yes    # deletes it
+```
+
+Deletes one user's Guardian records and Judge rows from the database in `DATABASE_URL`. It refuses without `--yes`, and nothing can be recovered. Stop the server first or restart it afterwards.
 
 ## Tests
 

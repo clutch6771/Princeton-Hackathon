@@ -1,16 +1,20 @@
 # Guardian: what the Judge server needs to do
 
-For the backend owner. One page. The Guardian and Reflector now run inside your server through a router you include; nothing in `watcher_Agent/` has been changed by the Guardian owner. Details and exact JSON: `guardian_router/README.md` and `docs/GUARDIAN_BACKEND_HANDOVER.md`.
+For the backend owner. One page. The Guardian and Reflector run inside your server through a router it includes. Details and exact JSON: `guardian_router/README.md` and `docs/GUARDIAN_BACKEND_HANDOVER.md`. How to run it: `docs/RUN_DEMO.md`.
 
-## 1. Include the router (one line)
+**Status, Nov 14 evening.** After the handover of integration, the Guardian owner made three small edits in `watcher_Agent/`: the include line (section 1), the session-end call (section 4) and one prompt rule (section 5). Your migrations have been run on the team database (section 2). Still open for you: sections 3 and 6.
+
+## 1. Include the router (done)
 
 In `judge/api/app_api.py`, next to the other `include_router` calls:
 
 ```python
 from guardian_router import router as guardian_router
 
-app.include_router(guardian_router)
+app.include_router(guardian_router, include_in_schema=False)
 ```
+
+`include_in_schema=False` keeps your OpenAPI document to the Judge-owned routes, which `test_openapi_documents_the_judge_owned_contracts` pins.
 
 - Install Guardian's packages in the server's environment: `pip install -r guardian/requirements.txt`. Your `requirements.txt` does not include `langchain` or `deepagents`.
 - Start the server from the repository root with `python -m uvicorn ...`, as your README says, so `guardian` and `guardian_router` import.
@@ -25,7 +29,7 @@ The team database is a new Tiger Data instance. Point `DATABASE_URL` at it (ask 
 
 Guardian's tables already exist there, in schema `public`: `store`, `store_migrations`, `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`. They are empty.
 
-Run against it, from the repository root:
+Migrations 0001 to 0006 were applied on Nov 14 (pgvector 0.8.7 is available). For reference, and for any later database:
 
 | Step | Command | Run it? |
 | --- | --- | --- |
@@ -49,7 +53,7 @@ values_md = await asyncio.to_thread(api.get_values, owner_id)   # "" if none
 
 Then Guardian's storage layout can change without breaking the Judge. Guardian functions block and must be called from a worker thread.
 
-## 4. Call the session-end function
+## 4. Call the session-end function (done)
 
 In `POST /session/end`, as a background task:
 
@@ -76,7 +80,7 @@ Each approved value has six lines:
 
 - **Wording line.** It is either `In my words` or `Agreed wording`. Your parser accepts both; treat both as the user's approved value.
 - **`Want more: none` is the normal case.** The Guardian's interview is about what the user wants less of. "none" on any line means nothing to match on that line.
-- **Your prompt never says what the lines mean** (`judge/understanding/prompt.py`, the "Rules" block mentions "Unless" and the person's wording only). Please add the rule from `guardian/judge_prompt.md`: *conflict* when the reel matches a "Want less" line and no "Unless" line applies; *aligned* when it matches a "Want more" line; otherwise *neutral*; a line that says "none" matches nothing.
+- **The prompt now says what the lines mean (done).** One rule was added to the "Rules" block of `judge/understanding/prompt.py`, from `guardian/judge_prompt.md`: *conflict* when the reel matches a "Want less" line and no "Unless" exception applies; *aligned* when it matches a "Want more" line; otherwise *neutral*; a line that says "none" matches nothing. `UNDERSTANDING_PROMPT_VERSION` was left at `judge-v1`; bump it if you track prompt changes by version.
 
 ## 6. Things to check on your side
 
