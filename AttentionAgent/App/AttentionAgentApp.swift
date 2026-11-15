@@ -31,7 +31,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 }
 
 @main
-struct AttentionAgentApp: App {
+struct IrisApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {

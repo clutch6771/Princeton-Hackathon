@@ -8,8 +8,8 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Connect to your local AttentionAgent backend.</string>
+	<string>Connect to your local Iris backend.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>AttentionAgent transcribes reel audio on-device to detect divisive or inflammatory spoken content.</string>
+	<string>Iris transcribes reel audio on-device to detect divisive or inflammatory spoken content.</string>
 </dict>
 </plist>

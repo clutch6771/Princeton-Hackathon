@@ -56,7 +56,7 @@ class SampleHandler: RPBroadcastSampleHandler {
         timer?.cancel()
         tracker.flush()
         _ = audio.finish()
-        if SharedStore.useLiveBackend {
+        if SharedStore.useLiveBackend && count > 0 {
             let sessionID = SharedStore.sessionID
             Task {
                 while hasPendingUploads() {

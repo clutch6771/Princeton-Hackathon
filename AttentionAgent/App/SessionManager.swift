@@ -51,16 +51,25 @@ final class SessionManager {
     private func beginSession() {
         sessionStart = pendingBroadcastStart ?? Date()
         pendingBroadcastStart = nil
-        sessionInsights.insert(SessionInsight(startedAt: sessionStart!), at: 0)
+        broadcastTotal = 0
+        broadcastFlags = []
         persistSessionInsights()
     }
     private func persistSessionInsights() {
         let defaults = UserDefaults(suiteName: AppConfig.appGroupID)
-        if let start = sessionStart, !sessionInsights.isEmpty {
-            let history = records.filter { $0.observation.endedAt >= sessionInsights[0].startedAt }
-            sessionInsights[0].total = max(history.count, broadcastTotal)
-            sessionInsights[0].flagged = sessionFlagged
+        sessionInsights.removeAll { $0.total == 0 }
+        if let start = sessionStart {
             defaults?.set(start, forKey: "sessionCounterStart")
+            let history = records.filter { $0.observation.endedAt >= start }
+            let total = max(history.count, broadcastTotal)
+            if total > 0 {
+                if let index = sessionInsights.firstIndex(where: { $0.startedAt == start }) {
+                    sessionInsights[index].total = total
+                    sessionInsights[index].flagged = sessionFlagged
+                } else {
+                    sessionInsights.insert(SessionInsight(startedAt: start, total: total, flagged: sessionFlagged), at: 0)
+                }
+            }
         }
         if let data = try? JSONEncoder().encode(sessionInsights) { defaults?.set(data, forKey: "sessionInsights") }
     }
@@ -115,7 +124,15 @@ final class SessionManager {
         loadHistory()
         let shared = UserDefaults(suiteName: AppConfig.appGroupID)
         sessionStart = shared?.object(forKey: "sessionCounterStart") as? Date
-        if let data = shared?.data(forKey: "sessionInsights"), let saved = try? JSONDecoder().decode([SessionInsight].self, from: data) { sessionInsights = saved }
+        if let data = shared?.data(forKey: "sessionInsights"), let saved = try? JSONDecoder().decode([SessionInsight].self, from: data) {
+            sessionInsights = saved.filter { $0.total > 0 }
+            shared?.set(try? JSONEncoder().encode(sessionInsights), forKey: "sessionInsights")
+        }
+        if let data = shared?.data(forKey: "vigilDigestArchive"),
+           let saved = try? JSONDecoder().decode([CheckpointDigest].self, from: data) {
+            shared?.set(try? JSONEncoder().encode(saved.filter { $0.totalReelsWatched > 0 }), forKey: "vigilDigestArchive")
+        }
+        if SharedStore.latestDigest?.totalReelsWatched == 0 { SharedStore.latestDigest = nil }
         resetNextCheckpoint()
 
         DarwinNotifier.observe {
@@ -187,7 +204,7 @@ final class SessionManager {
             }
             pendingBroadcastStart = Date()
             SharedStore.stopRequested = false
-            statusMessage = "Choose AttentionBroadcast, tap Start Broadcast, then open Instagram."
+            statusMessage = "Choose Iris, tap Start Broadcast, then open Instagram."
         }
     }
 
@@ -222,10 +239,9 @@ final class SessionManager {
 
     func refreshBroadcastState() {
         if let start = SharedStore.broadcastStartedAt,
-           sessionInsights.first?.startedAt != start {
+           sessionStart != start {
             sessionStart = start
             pendingBroadcastStart = nil
-            sessionInsights.insert(SessionInsight(startedAt: start), at: 0)
         }
         broadcastTotal = SharedStore.broadcastReelCount
         broadcastFlags = SharedStore.broadcastFlaggedEvents
@@ -264,8 +280,11 @@ final class SessionManager {
                     startedAt = sessionStart; statusMessage = nil
                 } else {
                     ingestBacklog()
-                    if !sessionInsights.isEmpty { sessionInsights[0].endedAt = Date() }
                     persistSessionInsights()
+                    if let index = sessionInsights.firstIndex(where: { $0.startedAt == sessionStart }) {
+                        sessionInsights[index].endedAt = Date()
+                        persistSessionInsights()
+                    }
                 }
             }
         }
@@ -439,7 +458,7 @@ final class SessionManager {
                 saveConversationMemory()
                 if let action = reply.clientAction { execute(action) }
             }
-            catch { if generation == conversationGeneration { messages.append(ChatMessage(isUser: false, text: "Coach unavailable. Please try again.")) } }
+            catch { if generation == conversationGeneration { messages.append(ChatMessage(isUser: false, text: "Guardian unavailable. Please try again.")) } }
         }
     }
 

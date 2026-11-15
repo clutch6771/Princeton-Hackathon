@@ -11,20 +11,19 @@ struct ChatView: View {
                     LazyVStack(alignment: .leading, spacing: 18) {
                         if let digest = session.guardianSessionContext {
                             VStack(alignment: .leading, spacing: 14) {
-                                Text("LATEST SESSION").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(Vigil.coral)
+                                Text("GOAL VS. REALITY").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(Vigil.coral)
                                 Text("\(digest.flaggedReels.count) / \(digest.totalReelsWatched) Divisive").font(.title2.weight(.semibold)).fontDesign(.rounded).monospacedDigit()
-                                Text(digest.userGoalConflict ?? "Your feed is aligned with your goal.").font(.subheadline)
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Recommended Action").font(.caption.weight(.bold)).foregroundStyle(Vigil.cyan)
-                                    Text(digest.suggestedAction).font(.subheadline)
-                                    Button("60-Second Feed Reset") { Vigil.tap(); breathe = true }.font(.subheadline.weight(.semibold)).padding(.top, 6)
-                                }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Vigil.indigo, in: RoundedRectangle(cornerRadius: 16))
+                                Text("Your goal: \(session.userGoal)").font(IrisUI.font(.subheadline))
+                                Text(digest.userGoalConflict ?? "No preference conflict has been reported yet.")
+                                    .font(IrisUI.font(.subheadline)).foregroundStyle(.secondary)
+                                Text("Latest session").font(IrisUI.font(.caption)).foregroundStyle(.secondary)
+
                             }.vigilCard()
                         }
                         ForEach(session.messages) { message in
                             HStack {
                                 if message.isUser { Spacer(minLength: 40) }
-                                Text(message.text).font(.body).padding(16)
+                                Text(message.text).font(IrisUI.font(.body)).padding(16)
                                     .background(message.isUser ? Vigil.indigo : Color.clear, in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: message.isUser ? 20 : 5, bottomTrailingRadius: message.isUser ? 5 : 20, topTrailingRadius: 20))
                                     .overlay(RoundedRectangle(cornerRadius: 20).stroke(message.isUser ? Vigil.cyan.opacity(0.25) : Color.clear))
                                 if !message.isUser { Spacer(minLength: 40) }
@@ -63,13 +62,13 @@ struct BreathingResetView: View {
             let remaining = max(0, Int(ceil(deadline.timeIntervalSince(context.date))))
             let inhale = remaining % 8 >= 4
             VStack(spacing: 32) {
-                Text(remaining == 0 ? "A fresh start" : "Make a little space").font(.title2.weight(.semibold))
+                Text(remaining == 0 ? "A fresh start" : "Make a little space").font(IrisUI.font(.title2).weight(.semibold))
                 ZStack {
                     Circle().fill(Vigil.indigo).frame(width: 220, height: 220).scaleEffect(inhale && !reduceMotion ? 1.1 : 0.9).animation(.easeInOut(duration: 4), value: inhale)
                     Circle().stroke(Vigil.cyan.opacity(0.6), lineWidth: 2).frame(width: 220, height: 220)
-                    VStack { Text(remaining == 0 ? "Ready" : inhale ? "Breathe in" : "Breathe out").font(.title3); Text("\(remaining)s").monospacedDigit().foregroundStyle(.secondary) }
+                    VStack { Text(remaining == 0 ? "Ready" : inhale ? "Breathe in" : "Breathe out").font(IrisUI.font(.title3)); Text("\(remaining)s").monospacedDigit().foregroundStyle(.secondary) }
                 }
-                Text("Choose what deserves your attention next.").font(.subheadline).foregroundStyle(.secondary)
+                Text("Choose what deserves your attention next.").font(IrisUI.font(.subheadline)).foregroundStyle(.secondary)
                 Button(remaining == 0 ? "Done" : "End reset") { dismiss() }.buttonStyle(.bordered)
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Vigil.canvas).tint(Vigil.cyan)
         }.preferredColorScheme(.dark)
