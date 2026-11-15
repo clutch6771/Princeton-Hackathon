@@ -81,6 +81,7 @@ The app sends `{message, profile, context}` and decodes a `ChatMessage`:
 
 The app has no value-card or inbox screen, so the adapter (`chat_adapter.py`) turns everything into chat text:
 
+- **Removal card as text.** When the user asks to delete a value, the card is one line: "Remove V2: News without outrage? Reply approve or reject." It is decided the same way.
 - **Value card as text.** A pending card is shown as plain text ending "Reply approve or reject." The decision is read in code, not by the model: exactly `approve` or `yes`, `reject` or `no`, in any case. Any other reply shows the card again. Editing is not offered; a card with suggested wording says to reject it and say it in your own words.
 - **Inbox through chat.** At the start of a turn with no card waiting, pending inbox cards are presented one at a time, oldest first. A "What I learned" card is shown and dismissed; the user's next message goes to the Guardian as the answer to its question. A value card waits for approve or reject. The message that arrived when a card was shown is answered once the cards are done.
 - **Digest.** The app's `context` is its checkpoint digest. It becomes a drift-notification entry with the reel IDs in `flagged_reels`. The app attaches the same digest to every later message, so each digest is explained once. The app sends reel IDs as upper-case UUIDs; they are lower-cased to match the Judge's records.

@@ -615,7 +615,9 @@ def test_only_the_decision_path_calls_the_value_writer():
         for path in package.rglob("*.py")
         if ".venv" not in path.parts
         and "tests" not in path.parts
-        and "_store_value(" in path.read_text()
+        and (
+            "_store_value(" in path.read_text() or "_delete_value(" in path.read_text()
+        )
     }
 
     assert callers == {"memory/values.py", "memory/proposals.py"}

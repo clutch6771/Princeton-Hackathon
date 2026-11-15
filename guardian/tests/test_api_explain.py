@@ -398,7 +398,7 @@ def test_read_memory_says_so_when_nothing_is_stored(start):
     assert "has not been reviewed yet" in summary and "8 judged reels" in summary
 
 
-def test_chat_agent_offers_exactly_the_eight_tools_in_the_spec(start):
+def test_chat_agent_offers_exactly_its_ten_tools(start):
     model = start([reply("hello")])
 
     api.chat(USER, THREAD, "hi")
@@ -411,11 +411,19 @@ def test_chat_agent_offers_exactly_the_eight_tools_in_the_spec(start):
         "read_memory",
         "record_feedback",
         "save_note",
+        "propose_value_removal",
+        "forget_note",
         "propose_value_change",
     }
 
 
 def test_only_tools_whose_results_are_written_by_code_are_trusted():
+    # forget_note is left out on purpose: its result repeats a note's text.
     assert tools_chat.TRUSTED_TOOLS == frozenset(
-        {"propose_value_change", "record_feedback", "save_note"}
+        {
+            "propose_value_change",
+            "propose_value_removal",
+            "record_feedback",
+            "save_note",
+        }
     )

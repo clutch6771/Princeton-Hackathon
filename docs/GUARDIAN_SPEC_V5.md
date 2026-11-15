@@ -27,7 +27,9 @@ Made by the Guardian owner during the build. Where they differ from the text bel
 5. **Feedback comments from the app are not the user's words** (the app sends a preset correction), so they cannot be quoted under `In my words`.
 6. **The Reflector's call limit is 35 per run,** raised from 25 after one live review reached 25 and was rolled back. Rollback and retry are unchanged.
 7. **The demo notebook was not built.** The terminal chat (`python -m guardian.demo_chat`) and `python -m guardian_router.live_run` run the demo loop instead.
-8. **Additions to the interfaces:** `pending_card(user_id, thread_id)`; an optional `stated_goals` in `ChatContext`; a `skipped` review status for a finished session with no judged reels; UUIDs accepted as evidence IDs.
+8. **Removing a value through chat (Nov 15).** The Guardian has a tool `propose_value_removal(value_id, evidence)`. It records a removal proposal and pauses like `propose_value_change`; the pending card has `kind: "value_removal"`, the value's stored text in `old_text` and an empty `new_text`. On approve, the single write path deletes that value. The guarantees are those of a change: decided once, refused and superseded if the value changed since, per user, and the ID is never used again. Only approve and reject are valid; an edit is refused and the card stays. Only the Guardian can propose a removal; the Reflector cannot. A change proposal that sets "Want more", "Want less" and "Unless" all to "none" is refused, with a message to propose a removal instead.
+9. **Forgetting a note (Nov 15).** The Guardian has a tool `forget_note(note_id)`. When the user explicitly asks it to forget something it saved about them, it deletes that note and tells the user which one. A note is never deleted without an explicit request, and its ID is not reused.
+10. **Additions to the interfaces:** `pending_card(user_id, thread_id)`; an optional `stated_goals` in `ChatContext`; a `skipped` review status for a finished session with no judged reels; UUIDs accepted as evidence IDs.
 
 ## Instructions for the coding agent
 
@@ -122,8 +124,8 @@ class AnswerResult(TypedDict):
     error: str | None
 
 class Interrupt(TypedDict):
-    kind: Literal["value_change"]
-    value_change: ValueChange
+    kind: Literal["value_change", "value_removal"]   # "value_removal": delete value_change.value_id
+    value_change: ValueChange                        # for a removal, new_text is ""
 
 class ValueChange(TypedDict):
     value_id: str          # "V3", or "new"
@@ -155,6 +157,7 @@ class Answer(TypedDict, total=False):
 | Card | Arrives through | Valid actions | Effect |
 | --- | --- | --- | --- |
 | Value card in chat | `GuardianResponse.pending` | `approve`, `edit` (with `edited_text`), `reject` via `resume` | Approve or a valid edit writes values.md; reject writes nothing |
+| Removal card in chat (`kind: "value_removal"`) | `GuardianResponse.pending` | `approve`, `reject` via `resume` | Approve deletes the value from values.md; reject changes nothing; edit is refused |
 | `value_change` in the inbox | `get_questions` | `approve`, `edit` (with `edited_text`), `reject` via `answer_question` | Same |
 | `learned` | `get_questions` | `dismiss` | Card removed from the inbox |
 | `rerate` (Optional) | `get_questions` | `rate` (with `ratings`), `skip` | Ratings recorded as feedback |
@@ -335,7 +338,8 @@ Current focus: V3 (fitness without comparison) is being refined.
 | See the brief, hypotheses and notes | MVP | Same call; the app may show them on the same screen |
 | Change or add a value | MVP | Only through a value card (chat or inbox) |
 | Delete a single note or hypothesis | Optional | `delete_memory_item` |
-| Remove a value | Not in the hackathon build | Would go through the same approved write path |
+| Remove a value | Built (Nov 15) | Ask the Guardian in chat; it shows a removal card, and approving it deletes the value through the same write path |
+| Forget a note | Built (Nov 15) | Ask the Guardian in chat to forget it (`forget_note`) |
 
 ### What happens on each event
 
@@ -419,6 +423,8 @@ Built with `create_agent`. It is small so it stays fast and within rate limits.
 | `record_feedback(reel_id, label, comment)` | Feedback ID | `source="chat"` |
 | `save_note(text, evidence)` | Confirmation | Appends to notes.md; cap enforced |
 | `propose_value_change(value_id, new_text, evidence)` | Decision | Runs the quote and evidence checks, creates a proposal record and interrupts. The value is written by the single write path when `resume` applies the user's decision |
+| `propose_value_removal(value_id, evidence)` | Decision | Only when the user asks to delete or drop a value. Creates a removal proposal and interrupts. The value is deleted by the single write path when `resume` applies an approval |
+| `forget_note(note_id)` | Which note was removed | Only when the user explicitly asks the Guardian to forget something it saved |
 
 `user_id` comes from runtime context, never from the model.
 

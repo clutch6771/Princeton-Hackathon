@@ -29,7 +29,9 @@ class ValueChange(TypedDict):
 
 
 class Interrupt(TypedDict):
-    kind: Literal["value_change"]
+    # "value_removal" (added after V5): the card asks to delete `value_change.value_id`;
+    # `old_text` is the value as stored and `new_text` is empty. Approve or reject only.
+    kind: Literal["value_change", "value_removal"]
     value_change: ValueChange
 
 

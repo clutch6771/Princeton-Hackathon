@@ -105,6 +105,30 @@ Other errors have `pending: null`, for example a thread that does not belong to 
 
 If the model is unavailable: `"error": "The Guardian could not reply just now. Please try again in a moment."`
 
+### A removal card
+
+When the user asks the Guardian to delete a value, `pending` has `kind: "value_removal"`. `value_change.value_id` names the value, `old_text` is the value as stored, and `new_text` is empty:
+
+```json
+{
+  "reply": null,
+  "pending": {
+    "kind": "value_removal",
+    "value_change": {
+      "value_id": "V2",
+      "old_text": "## V2: News without outrage (strength: medium)\n- Want more: calm explainers, local news, science\n- Want less: rage-bait politics, people shouting at each other\n- Unless: none\n- In my words: \"I want to know what happened, not be told who to be angry at\"\n- Evidence: said at onboarding; approved 2026-11-14",
+      "new_text": "",
+      "evidence": "asked in chat"
+    }
+  },
+  "error": null
+}
+```
+
+Show it as a confirmation ("Remove V2: News without outrage?") with approve and reject. Answer it through `/chat/resume` like any card. `approve` deletes the value: `GET /memory` and `get_values` no longer include it, and its ID is never used again. `reject` changes nothing. `edit` is refused and the card stays. A removal card is decided once, and is refused if the value changed after the card was made. Through `/agent2/chat` it is shown as text: "Remove V2: News without outrage? Reply approve or reject."
+
+Only the Guardian proposes removals, and only when the user asks; they never arrive in the inbox.
+
 ## `POST /chat/resume`
 
 Request, approve or reject:

@@ -74,6 +74,13 @@ def card_lines(response: GuardianResponse) -> list[str]:
     if pending is None:
         return []
     change = pending["value_change"]
+    if pending["kind"] == "value_removal":
+        return [
+            f"--- REMOVE VALUE {change['value_id']}? ---",
+            change["old_text"] or "",
+            f"Evidence given: {change['evidence']}",
+            "--- Answer with /approve or /reject ---",
+        ]
     target = (
         "new value"
         if change["value_id"] == "new"

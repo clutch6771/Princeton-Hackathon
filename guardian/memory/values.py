@@ -76,6 +76,19 @@ def allocate_value_id(store: BaseStore, user_id: str) -> str:
     return f"V{last + 1}"
 
 
+def _delete_value(store: BaseStore, user_id: str, value_id: str) -> None:
+    """Remove one approved value. Call only from `proposals.decide`.
+
+    The ID counter is first raised to at least this ID, so the ID is never given to
+    another value even if the counter had not been written yet.
+    """
+    namespace = keys.namespace(user_id, keys.META)
+    counter = store.get(namespace, COUNTER_KEY)
+    last = max(counter.value["last"] if counter else 0, formats.value_number(value_id))
+    store.put(namespace, COUNTER_KEY, {"last": last})
+    store.delete(values_namespace(user_id), value_id)
+
+
 def _store_value(
     store: BaseStore, user_id: str, value_id: str, text: str, now: datetime
 ) -> None:

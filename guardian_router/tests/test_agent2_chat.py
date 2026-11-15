@@ -299,6 +299,58 @@ def test_approving_a_suggested_wording_card_stores_agreed_wording(serve):
     )
 
 
+# --- Removing a value by text ----------------------------------------------------------------
+
+
+def propose_removal(value_id: str = "V2"):
+    args = {"value_id": value_id, "evidence": "asked in chat"}
+    return tool_call("propose_value_removal", args)
+
+
+def test_a_removal_card_is_one_line_naming_the_value(serve):
+    server = serve([propose_removal()], seeded=True)
+
+    card = server.say("please drop the news one")
+
+    assert card == "Remove V2: News without outrage? Reply approve or reject."
+    assert server.say("what does that mean?") == card
+    assert "## V2:" in api.get_values(USER)
+
+
+def test_approving_a_removal_by_text_deletes_the_value(serve):
+    server = serve([propose_removal(), reply("V2 is gone.")], seeded=True)
+    server.say("please drop the news one")
+
+    text = server.say("Approve")
+
+    assert text == "V2 is gone."
+    assert "## V2:" not in api.get_values(USER)
+    assert (
+        "## V2:"
+        not in server.client.get("/memory", headers=HEADERS).json()["values.md"]
+    )
+
+
+def test_rejecting_a_removal_by_text_keeps_the_value(serve):
+    server = serve([propose_removal(), reply("Okay, it stays.")], seeded=True)
+    server.say("please drop the news one")
+
+    assert server.say("no") == "Okay, it stays."
+    assert "## V2:" in api.get_values(USER)
+
+
+def test_the_json_chat_route_returns_a_removal_card(serve):
+    server = serve([propose_removal()], seeded=True)
+
+    pending = server.client.post(
+        "/chat", json={"message": "drop the news one"}, headers=HEADERS
+    ).json()["pending"]
+
+    assert pending["kind"] == "value_removal"
+    assert pending["value_change"]["value_id"] == "V2"
+    assert pending["value_change"]["new_text"] == ""
+
+
 # --- A digest becomes a drift notification ---------------------------------------------------
 
 
