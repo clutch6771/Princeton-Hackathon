@@ -18,7 +18,7 @@ from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
-from guardian import api, chat_agent, config, reflector, storage
+from guardian import api, chat_agent, config, key_fallback, reflector, storage
 from guardian.datasource import FakeDataSource
 from guardian.memory import locks
 from guardian.seed.install import install_initial_values
@@ -124,6 +124,13 @@ def reset_lock_provider() -> Iterator[None]:
 @pytest.fixture
 def datasource(clock: Callable[[], datetime]) -> FakeDataSource:
     return FakeDataSource.from_seed(USER, clock=clock)
+
+
+@pytest.fixture(autouse=True)
+def primary_key_again() -> Iterator[None]:
+    """No test leaves the process on a fallback key for the next one."""
+    yield
+    key_fallback.reset()
 
 
 @pytest.fixture(autouse=True)

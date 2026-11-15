@@ -70,18 +70,22 @@ def background_rate_limiter() -> InMemoryRateLimiter:
     return _limiter(background_requests_per_minute())
 
 
-def build_model(name: str, background: bool = False) -> Any:
+def build_model(name: str, background: bool = False, api_key: str | None = None) -> Any:
     """Create a chat model such as "google_genai:gemini-3.5-flash-lite".
 
     `background=True` is for the Reflector: it takes the slower background limiter.
+    `api_key` builds the model with that key instead of GOOGLE_API_KEY; it is how
+    a fallback key is put to use (see guardian/key_fallback.py).
     """
     config.load_env()
     config.require_api_key()
     limiter = background_rate_limiter() if background else shared_rate_limiter()
+    with_key: dict[str, Any] = {"api_key": api_key} if api_key else {}
     return init_chat_model(
         name,
         temperature=0,
         timeout=REQUEST_TIMEOUT_SECONDS,
         max_retries=PROVIDER_MAX_RETRIES,
         rate_limiter=limiter,
+        **with_key,
     )

@@ -11,6 +11,7 @@ One file, `.env` in the repository root (git-ignored; never commit it). Both hal
 ```bash
 # Keys and database
 GOOGLE_API_KEY=...          # Guardian and Reflector (Gemini)
+GOOGLE_API_KEY_FALLBACKS=key2,key3   # optional spare Gemini keys, comma-separated
 DATABASE_URL=...            # the team database; the Judge and the Guardian share it
 XAI_API_KEY=...             # Judge, for PROVIDER_MODE=grok
 
@@ -128,7 +129,15 @@ chat run failed for thread demo-user:2026-11-15: GoogleRateLimitError: Error cal
 
 The words to look for are `RESOURCE_EXHAUSTED` and `Quota exceeded`. (A failed review logs `session review failed` or `review of session ... failed` with the same error.)
 
-The fix: put a spare key in `GOOGLE_API_KEY` in `.env` and restart the server. Nothing is lost: values, cards and the chat are in the database. Keep a spare key ready before the demo.
+**Automatic, if spare keys are listed.** Put spare Gemini keys in `GOOGLE_API_KEY_FALLBACKS` in `.env`, separated by commas, before starting the server. When a Guardian or Reflector call fails with a quota or rate-limit error that the usual retries did not clear, the server switches to the next key, repeats the call once, and stays on that key. The log then has one line, and never a key:
+
+```text
+switched to fallback key 1
+```
+
+The switch lasts until the server restarts; a restart begins again with `GOOGLE_API_KEY`. The Judge's provider key is separate and is not covered by this.
+
+**By hand, if every key is used up** (the error lines continue after the last `switched to fallback key` line), or if no spare keys were listed: put a fresh key in `GOOGLE_API_KEY` in `.env` and restart the server. Nothing is lost: values, cards and the chat are in the database.
 
 ## 6. The three most likely failures
 

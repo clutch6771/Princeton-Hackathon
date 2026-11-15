@@ -12,7 +12,7 @@ from langchain.agents.middleware import (
     dynamic_prompt,
 )
 
-from guardian import middleware, prompts
+from guardian import config, key_fallback, middleware, models, prompts
 from guardian.deps import ChatRunContext, Deps
 from guardian.memory import reflector_files, values
 from guardian.tools_chat import TRUSTED_TOOLS, build_chat_tools
@@ -38,7 +38,11 @@ def build_chat_agent(deps: Deps, model: Any) -> Any:
     def stored_value_ids(user_id: str) -> list[str]:
         return [value.id for value in values.list_values(deps.store, user_id)]
 
+    def with_key(api_key: str) -> Any:
+        return models.build_model(config.chat_model_name(), api_key=api_key)
+
     agent_middleware: list[Any] = [
+        key_fallback.middleware(with_key),  # outermost: after the retries below fail
         guardian_prompt,
         middleware.frame_text_guard(trusted_tools=TRUSTED_TOOLS),
         middleware.value_citation_check(stored_value_ids),
