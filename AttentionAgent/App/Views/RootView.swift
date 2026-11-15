@@ -9,6 +9,9 @@ enum Vigil {
     static let coral = Color(red: 0.65, green: 0.61, blue: 0.86)
     static let background = LinearGradient(colors: [canvas, Color(red: 0.10, green: 0.11, blue: 0.30), Color(red: 0.16, green: 0.10, blue: 0.32), Color(red: 0.03, green: 0.23, blue: 0.26)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let accent = LinearGradient(colors: [.blue, Color(red: 0.5, green: 0.35, blue: 0.95), cyan, Color(red: 0.3, green: 0.9, blue: 0.65)], startPoint: .topLeading, endPoint: .bottomTrailing)
+    static let monitoringButton = LinearGradient(
+        colors: [Color(uiColor: IrisUI.teal), Color(uiColor: IrisUI.purple), Color(uiColor: IrisUI.deep)],
+        startPoint: .topLeading, endPoint: .bottomTrailing)
     static let spring = Animation.spring(response: 0.45, dampingFraction: 0.8)
     @ViewBuilder static var backdrop: some View {
         if IrisUI.liveBackdrop { IrisBackdrop().ignoresSafeArea() } else { Rectangle().fill(background).ignoresSafeArea() }
@@ -53,7 +56,7 @@ struct RootView: View {
             if value == .active && wasBackground { session.beginFreshConversation(); wasBackground = false }
         }
         .onChange(of: session.activeDigest) { _, digest in
-            guard let digest else { return }
+            guard let digest, digest.totalReelsWatched > 0 else { return }
             let existing = (try? JSONDecoder().decode([CheckpointDigest].self, from: archiveData)) ?? []
             guard !existing.contains(where: { $0.id == digest.id }) else { return }
             archiveData = (try? JSONEncoder().encode(Array(([digest] + existing).prefix(100)))) ?? archiveData

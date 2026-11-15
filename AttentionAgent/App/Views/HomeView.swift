@@ -12,7 +12,9 @@ struct HomeView: View {
     @Environment(\.openURL) private var openURL
     private var ratio: Double { Double(session.sessionFlagged) / Double(max(1, session.sessionTotal)) }
     var body: some View {
-        VStack(spacing: 0) {
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(spacing: 0) {
             Spacer(minLength: 24)
             Group {
                 // Opens once the system broadcast prompt is confirmed, closes when monitoring stops.
@@ -28,9 +30,9 @@ struct HomeView: View {
             } label: {
                 Text(session.isMonitoring ? "STOP" : "START")
                     .font(IrisUI.font(size: 30)).tracking(2)
-                    .foregroundStyle(Vigil.canvas).frame(width: 190, height: 190)
-                    .background(session.isMonitoring ? LinearGradient(colors: [Vigil.coral, Vigil.indigo], startPoint: .topLeading, endPoint: .bottomTrailing) : Vigil.accent, in: Circle())
-                    .shadow(color: (session.isMonitoring ? Vigil.coral : .green).opacity(0.18), radius: 28, y: 8)
+                    .foregroundStyle(session.isMonitoring ? Color.white : Vigil.canvas).frame(width: 190, height: 190)
+                    .background(session.isMonitoring ? Vigil.monitoringButton : Vigil.accent, in: Circle())
+                    .shadow(color: (session.isMonitoring ? Color(uiColor: IrisUI.teal) : Color(uiColor: IrisUI.mint)).opacity(0.18), radius: 28, y: 8)
             }.disabled(preparing).buttonStyle(.plain).animation(Vigil.spring, value: session.isMonitoring)
                 .background(BroadcastPicker(trigger: trigger).frame(width: 1, height: 1).opacity(0.01))
             GeometryReader { geometry in
@@ -50,7 +52,10 @@ struct HomeView: View {
             Text(session.sessionTotal == 0 ? "No completed reels detected yet" : "Most recent session")
                 .font(IrisUI.font(.caption)).foregroundStyle(.secondary).padding(.top, 12)
             Spacer(minLength: 24)
-        }.frame(maxWidth: .infinity).toolbar(.hidden, for: .navigationBar)
+                }.frame(maxWidth: .infinity).frame(minHeight: max(0, geometry.size.height - 24))
+                    .padding(.horizontal, 20).padding(.vertical, 12)
+            }.scrollBounceBehavior(.basedOnSize)
+        }.toolbar(.hidden, for: .navigationBar)
             .alert("Some features are unavailable", isPresented: $showPermissionNotice) {
                 Button("Continue Monitoring") { beginBroadcast() }
                 Button("Open Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } }

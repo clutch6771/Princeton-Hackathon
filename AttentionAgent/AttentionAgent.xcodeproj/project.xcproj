@@ -11,9 +11,25 @@
     ],
   },
   "files": [
-    { "path": "Shared/ReelAudioTranscriber.swift", "target-membership": [ "AttentionAgent/compile-sources", "AttentionBroadcast/compile-sources" ] },
-    { "path": "Shared/LiveAgentBackend.swift", "target-membership": [ "AttentionAgent/compile-sources", "AttentionBroadcast/compile-sources" ] },
-    { "path": "Shared/AgentBridge.swift", "target-membership": [ "AttentionAgent/compile-sources", "AttentionBroadcast/compile-sources" ] },
+    {
+      "path": "Shared/ReelAudioTranscriber.swift",
+      "target-membership": [
+        "AttentionAgent/compile-sources",
+        "AttentionBroadcast/compile-sources",
+      ],
+    }, {
+      "path": "Shared/LiveAgentBackend.swift",
+      "target-membership": [
+        "AttentionAgent/compile-sources",
+        "AttentionBroadcast/compile-sources",
+      ],
+    }, {
+      "path": "Shared/AgentBridge.swift",
+      "target-membership": [
+        "AttentionAgent/compile-sources",
+        "AttentionBroadcast/compile-sources",
+      ],
+    },
     { "path": "App/Views/ChatView.swift", "target-membership": [ "AttentionAgent/compile-sources" ] },
     { "path": "App/Views/CheckpointView.swift", "target-membership": [ "AttentionAgent/compile-sources" ] },
     { "path": "App/Views/HomeView.swift", "target-membership": [ "AttentionAgent/compile-sources" ] },
@@ -169,9 +185,9 @@
         "DEVELOPMENT_TEAM": "J24J3XV956",
         "GENERATE_INFOPLIST_FILE": "YES",
         "INFOPLIST_FILE": "AttentionBroadcast/Info.plist",
-        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
         "INFOPLIST_KEY_CFBundleDisplayName": "AttentionBroadcast",
         "INFOPLIST_KEY_NSHumanReadableCopyright": "",
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
         "LD_RUNPATH_SEARCH_PATHS": [
           "$(inherited)",
           "@executable_path/Frameworks",

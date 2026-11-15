@@ -89,7 +89,13 @@ enum SharedStore {
     }
     static var latestDigest: CheckpointDigest? {
         get { defaults?.data(forKey: "latestDigest").flatMap { try? JSONDecoder().decode(CheckpointDigest.self, from: $0) } }
-        set { defaults?.set(try? JSONEncoder().encode(newValue), forKey: "latestDigest") }
+        set {
+            guard let digest = newValue, digest.totalReelsWatched > 0 else {
+                defaults?.removeObject(forKey: "latestDigest")
+                return
+            }
+            defaults?.set(try? JSONEncoder().encode(digest), forKey: "latestDigest")
+        }
     }
     static var notificationError: String? {
         get { defaults?.string(forKey: "notificationError") }

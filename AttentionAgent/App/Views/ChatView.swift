@@ -9,30 +9,15 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
-                        DisclosureGroup {
-                            Text(session.userGoal).font(.subheadline).padding(.vertical, 8)
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(alignment: .top) {
-                                    ForEach(session.activeDigest?.flaggedReels ?? []) { event in
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            Text(event.topic).foregroundStyle(Vigil.coral)
-                                            if let quote = event.transcriptText { Label(quote, systemImage: "waveform").lineLimit(3) }
-                                            Text("\(event.dwellSeconds)s • \(event.emotionTag)").foregroundStyle(.secondary)
-                                        }.font(.caption).padding(12).frame(width: 190, alignment: .leading).background(Vigil.canvas, in: RoundedRectangle(cornerRadius: 14))
-                                    }
-                                }
-                            }
-                        } label: { Label("Shared Memory", systemImage: "shield.checkered").font(.subheadline.weight(.semibold)) }.vigilCard()
-                        if let digest = session.activeDigest {
+                        if let digest = session.guardianSessionContext {
                             VStack(alignment: .leading, spacing: 14) {
                                 Text("GOAL VS. REALITY").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(Vigil.coral)
                                 Text("\(digest.flaggedReels.count) / \(digest.totalReelsWatched) Divisive").font(.title2.weight(.semibold)).fontDesign(.rounded).monospacedDigit()
-                                Text(digest.userGoalConflict ?? "Your feed is aligned with your goal.").font(.subheadline)
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Recommended Action").font(IrisUI.font(.caption).weight(.bold)).foregroundStyle(Vigil.cyan)
-                                    Text(digest.suggestedAction).font(IrisUI.font(.subheadline))
-                                    Button("60-Second Feed Reset") { Vigil.tap(); breathe = true }.font(IrisUI.font(.subheadline).weight(.semibold)).padding(.top, 6)
-                                }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Vigil.indigo, in: RoundedRectangle(cornerRadius: 16))
+                                Text("Your goal: \(session.userGoal)").font(IrisUI.font(.subheadline))
+                                Text(digest.userGoalConflict ?? "No preference conflict has been reported yet.")
+                                    .font(IrisUI.font(.subheadline)).foregroundStyle(.secondary)
+                                Text("Latest session").font(IrisUI.font(.caption)).foregroundStyle(.secondary)
+
                             }.vigilCard()
                         }
                         ForEach(session.messages) { message in
@@ -66,9 +51,7 @@ struct ChatView: View {
         .onChange(of: session.showReset) { _, show in if show { breathe = true; session.showReset = false } }
         .onAppear { if session.showReset { breathe = true; session.showReset = false } }
     }
-    private func chip(_ title: String, action: @escaping () -> Void) -> some View {
-        Button { Vigil.tap(); action() } label: { Text(title).font(.caption.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 11).background(Vigil.indigo, in: Capsule()) }
-    }
+
 }
 struct BreathingResetView: View {
     @Environment(\.dismiss) private var dismiss
