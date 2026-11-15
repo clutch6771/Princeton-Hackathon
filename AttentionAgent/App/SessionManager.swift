@@ -40,6 +40,9 @@ final class SessionManager {
         context.coachHookMessage = "\(sessionFlagged) of \(sessionTotal) reels were flagged in the latest session."
         return context
     }
+    /// True from launch until the user starts talking or fresh session data arrives;
+    /// never persisted, so every restart opens on the greeting instead of the old summary.
+    private(set) var showGuardianGreeting = true
     private var currentRecords: [ReelRecord] {
         guard let start = sessionStart else { return [] }
         return records.filter { $0.observation.endedAt >= start }
@@ -53,6 +56,7 @@ final class SessionManager {
         pendingBroadcastStart = nil
         broadcastTotal = 0
         broadcastFlags = []
+        showGuardianGreeting = false
         persistSessionInsights()
     }
     private func persistSessionInsights() {
@@ -203,6 +207,7 @@ final class SessionManager {
                 return
             }
             pendingBroadcastStart = Date()
+            showGuardianGreeting = false
             SharedStore.stopRequested = false
             statusMessage = "Choose Iris, tap Start Broadcast, then open Instagram."
         }
@@ -266,6 +271,7 @@ final class SessionManager {
                 do {
                     if let digest = try await LiveAgentBackend().pending(), seenInterventions.insert(digest.id).inserted {
                         activeDigest = digest
+                        showGuardianGreeting = false
                         try await AgentNotification.deliver(digest)
                     }
                 } catch { statusMessage = "Guardian connection unavailable: \(error.localizedDescription)" }
@@ -360,6 +366,7 @@ final class SessionManager {
                 return
             }
             activeDigest = digest
+            showGuardianGreeting = false
             do { try await AgentNotification.deliver(digest) }
             catch { statusMessage = error.localizedDescription }
         }
@@ -369,6 +376,7 @@ final class SessionManager {
 
     func handleNotificationTap(_ digest: CheckpointDigest, reset: Bool = false) {
         activeDigest = digest
+        showGuardianGreeting = false
         showReport = false
         selectedTab = .coach
         showReset = reset
@@ -443,6 +451,7 @@ final class SessionManager {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isGuardianThinking else { return }
         isGuardianThinking = true
+        showGuardianGreeting = false
         messages.append(ChatMessage(isUser: true, text: text))
         let context = guardianSessionContext
         let generation = conversationGeneration

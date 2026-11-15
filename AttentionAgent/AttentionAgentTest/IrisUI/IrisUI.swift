@@ -48,16 +48,16 @@ enum IrisUI {
 
     private static func pointSize(_ style: Font.TextStyle) -> CGFloat {
         switch style {
-        case .largeTitle: return 34
-        case .title: return 28
-        case .title2: return 22
-        case .title3: return 20
-        case .callout: return 16
-        case .subheadline: return 15
-        case .footnote: return 13
-        case .caption: return 12
-        case .caption2: return 11
-        default: return 17
+        case .largeTitle: return 36
+        case .title: return 30
+        case .title2: return 24
+        case .title3: return 22
+        case .callout: return 17
+        case .subheadline: return 16
+        case .footnote: return 14
+        case .caption: return 13
+        case .caption2: return 12
+        default: return 18
         }
     }
 }

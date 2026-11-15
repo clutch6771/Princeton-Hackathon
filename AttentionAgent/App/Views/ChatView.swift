@@ -9,7 +9,14 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
-                        if let digest = session.guardianSessionContext {
+                        if session.showGuardianGreeting {
+                            VStack(alignment: .leading, spacing: 14) {
+                                Text("WELCOME").font(IrisUI.font(.caption)).tracking(2).foregroundStyle(Vigil.cyan)
+                                Text("Hi, I'm your Guardian").font(IrisUI.font(.title2))
+                                Text("Say hello to get started. Tell me how you're feeling or what you'd like from your feed today. I'm here to help, never to judge.")
+                                    .font(IrisUI.font(.subheadline)).foregroundStyle(.secondary)
+                            }.frame(maxWidth: .infinity, alignment: .leading).vigilCard()
+                        } else if let digest = session.guardianSessionContext {
                             VStack(alignment: .leading, spacing: 14) {
                                 Text("GOAL VS. REALITY").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(Vigil.coral)
                                 Text("\(digest.flaggedReels.count) / \(digest.totalReelsWatched) Divisive").font(.title2.weight(.semibold)).fontDesign(.rounded).monospacedDigit()
