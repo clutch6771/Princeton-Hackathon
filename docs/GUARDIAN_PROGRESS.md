@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Saturday Nov 14, 11:25 pm. Branch: `guardian`.
+Last updated: Sunday Nov 15, 12:15 am. Branch: `guardian`.
 
 ## Where things stand
 
@@ -18,11 +18,11 @@ Last updated: Saturday Nov 14, 11:25 pm. Branch: `guardian`.
 | Backend brief Part B: storage on Postgres | Done; tables created in the team database | `d28f583` |
 | Backend brief Part C: Guardian router (`guardian_router/`) | Done | `f6c5e46` |
 | Integration: Guardian wired into the Judge server, team database migrated, run page, reset command | Done | `ce62e33`, `6d5e642`, `fbdf1a0` |
-| 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) and the new onboarding interview | Done | this commit |
-| 5. Learning evaluation | Not started | |
+| 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) and the new onboarding interview | Done | `3df767e` |
+| 5. Learning evaluation | Done; results in `guardian/eval/REPORT.md` | `7542141`, `6053bd3`, this commit |
 | Optional items | Not started | |
 
-Offline tests: 457 passing in memory (`guardian/` and `guardian_router/`); 700 when every storage test also runs on Postgres. The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
+Offline tests: 482 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -309,6 +309,33 @@ Limits seen, not fixed:
 - The turn that records a disagreement and proposes a refinement makes four or five model calls. Run back to back with other turns it took 20 seconds, because the chat rate limiter (12 calls a minute) had been used up. Paced like a person, with 8 seconds between messages, the same turn took 2.7 seconds and every reply took 0.6 to 2.7 seconds. `LIVE_PAUSE_SECONDS` sets the pace of the live script.
 - Notes are saved for almost every onboarding answer, including ones that state the value itself, and a note's summary sometimes adds a word the user did not use ("draining"). The quoted evidence is always exact.
 - One review queued only the V1 refinement and not a value for the three hustle marks; earlier runs queued both.
+
+## Main merged in, and the redesigned app
+
+`main` (the redesigned app under `AttentionAgent/`, with the backend connection restored) was merged into `guardian` on GitHub as PR #10. `ios-reconnect.patch` was removed in a commit of its own (`963857b`), because the merge commit already existed.
+
+The app's calls to the server are the same five routes. Two things changed and are matched in `guardian_router/` (`6eb5fc7`):
+
+- Its chat request now carries `conversation_memory`, the app's own saved messages. The router ignores it: the Guardian keeps the conversation itself, and text from the client must not be treated as what was said.
+- Its timeout is 30 seconds, up from 12. A reply counts as missed only after 29 seconds.
+
+The chat screen now opens empty and does not yet send the empty message that makes the Guardian speak first.
+
+## Step 5: the learning evaluation
+
+Built: `guardian/eval/learning_eval.py`, committed before its first live run. Full results, every run and the caveats: `guardian/eval/REPORT.md`.
+
+| Stage | Matches | In-pattern |
+| --- | --- | --- |
+| 1. Baseline (initial values) | 16 of 20 | 4 of 8 |
+| 2. With up to three feedback examples | 17 of 20 | 5 of 8 |
+| 3. With the Reflector's two approved changes | 19 of 20 | 8 of 8 |
+
+- With 20 reels a difference of one or two is within noise. Stage 3 is three reels above the baseline overall and four of eight in-pattern.
+- **Stage 2 was run twice.** Run 1 gave 12 of 20 with 7 invalid verdicts: shown "The person marked it: disagree", the stand-in Judge answered with the feedback labels. The script's example format was changed to state the verdict each reaction was to, and run 2 gave 17 of 20. That change was made after seeing held-out results.
+- **The Reflector step was run three times.** Run 1 hit the 25-call limit and was rolled back, queuing nothing. A traced diagnostic run completed in 14 calls and queued both cards. The retry in the script completed and queued the V1 refinement (only the "Unless" line changed) and a new hustle value; both were approved unchanged and stage 3 uses them.
+- One stage-3 reply had malformed JSON and counts as no match; its verdict field would have matched.
+- Not a blind test of the skill: see the caveat under Step 3 and in the report.
 
 ## Conventions
 
