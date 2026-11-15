@@ -70,6 +70,14 @@ NO_PROPOSAL = (
     "no proposal: the Reflector queued no value change, so there is nothing to approve"
 )
 
+# What each feedback label means, in words the Judge cannot mistake for a verdict.
+REACTIONS = {
+    "agree": "they agreed with that verdict",
+    "disagree": "they disagreed with that verdict",
+    "not_for_me": "they marked the reel as not for them, so they want less of this",
+    "fine": "they said the reel was fine for them",
+}
+
 REEL_SECTION = """THE REEL
 This is a text-only test: you have no frames or audio. The text below is what the
 frames showed and what was said. Judge it as you would the reel.
@@ -244,14 +252,18 @@ def judge_prompt_template() -> str:
 
 
 def examples_block(examples: Sequence[FeedbackExample]) -> str:
+    """Past reactions, each with the verdict it was a reaction to. A bare label such
+    as "disagree" says nothing without that verdict, and the Judge then copies the
+    label into its own verdict (seen in the first live run)."""
     if not examples:
         return NO_EXAMPLES
     lines = []
     for example in examples:
+        reaction = REACTIONS.get(example["label"], example["label"])
         comment = f' They said: "{example["comment"]}"' if example["comment"] else ""
         lines.append(
-            f'- {example["reel"]["one_line"]} The person marked it: '
-            f'{example["label"]}.{comment}'
+            f'- {example["reel"]["one_line"]} It was judged '
+            f'{example["reel"]["verdict"]}. The person\'s reaction: {reaction}.{comment}'
         )
     return "\n".join(lines)
 
@@ -372,11 +384,17 @@ def run_stage(
 # --- The Reflector step ---------------------------------------------------------------------
 
 
-def reflector_step(environment: Environment, cache: Cache) -> ReflectorOutcome:
+def reflector_step(
+    environment: Environment, cache: Cache, retry: bool = False
+) -> ReflectorOutcome:
     """Run `reflect_pending` once on the feedback session and approve every
-    value-change card unchanged. Run once; later calls read the saved outcome."""
+    value-change card unchanged. Run once; later calls read the saved outcome.
+
+    `retry` runs it again on purpose. The earlier run stays in the run log, and the
+    report lists every run with what it queued.
+    """
     saved = cache.load_outcome()
-    if saved is not None:
+    if saved is not None and not retry:
         return saved
     before = api.get_values(USER)
     reviewed = api.reflect_pending(USER)
@@ -415,6 +433,7 @@ def reflector_step(environment: Environment, cache: Cache) -> ReflectorOutcome:
             "reviewed": reviewed,
             "queued": [card["kind"] for card in queued],
             "approved": approved,
+            "cards": queued,
         }
     )
     return outcome
@@ -423,11 +442,13 @@ def reflector_step(environment: Environment, cache: Cache) -> ReflectorOutcome:
 # --- The evaluation and its report ----------------------------------------------------------
 
 
-def evaluate(environment: Environment, judge: Any, cache: Cache) -> Report:
+def evaluate(
+    environment: Environment, judge: Any, cache: Cache, retry_reflector: bool = False
+) -> Report:
     initial = api.get_values(USER)
     baseline = run_stage(BASELINE, judge, environment, initial, cache)
     feedback = run_stage(FEEDBACK, judge, environment, initial, cache)
-    outcome = reflector_step(environment, cache)
+    outcome = reflector_step(environment, cache, retry=retry_reflector)
     refined = (
         run_stage(REFINED, judge, environment, outcome.values_after, cache)
         if outcome.approved
@@ -479,6 +500,28 @@ def _reflector_lines(outcome: ReflectorOutcome) -> list[str]:
     return lines
 
 
+def _every_reflector_run(cache: Cache) -> list[str]:
+    """Each Reflector run in the log, with the value changes it queued."""
+    lines = []
+    runs = [run for run in cache.runs() if run["stage"] == REFLECTOR]
+    for number, run in enumerate(runs, start=1):
+        lines.append(
+            f"Reflector run {number} ({run['when']}): reviewed {run['reviewed']} "
+            f"session(s), approved {run['approved']} value change(s)."
+        )
+        changes = [card for card in run.get("cards", []) if card.get("new_text")]
+        if not run["queued"]:
+            lines.append(
+                "  The review completed and queued nothing."
+                if run["reviewed"]
+                else "  The review did not complete, so it queued nothing."
+            )
+        for card in changes:
+            first_line = str(card["new_text"]).splitlines()[0]
+            lines.append(f"  Queued for {card['value_id']}: {first_line}")
+    return lines or ["(no Reflector run is logged)"]
+
+
 def _run_lines(cache: Cache) -> list[str]:
     lines = []
     for run in cache.runs():
@@ -522,6 +565,7 @@ def render(report: Report, cache: Cache) -> str:
         "Values given to the Judge in stage 3\n"
         + (report.outcome.values_after if report.refined else "(not run)"),
         "Every run that called a model, oldest first\n" + "\n".join(_run_lines(cache)),
+        "Every Reflector run\n" + "\n".join(_every_reflector_run(cache)),
         "Caveats\n" + "\n".join(f"- {caveat}" for caveat in CAVEATS),
     ]
     return "\n\n".join(sections)
@@ -530,13 +574,20 @@ def render(report: Report, cache: Cache) -> str:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run the learning evaluation.")
     parser.add_argument("--fresh", action="store_true", help="forget cached results")
+    parser.add_argument(
+        "--retry-reflector",
+        action="store_true",
+        help="run the Reflector step again; earlier runs stay in the report",
+    )
     arguments = parser.parse_args(argv)
     cache = Cache()
     if arguments.fresh:
         cache.clear()
     judge_name = os.environ.get(JUDGE_MODEL_VAR, "").strip() or config.chat_model_name()
     judge = models.build_model(judge_name)
-    report = evaluate(build_environment(), judge, cache)
+    report = evaluate(
+        build_environment(), judge, cache, retry_reflector=arguments.retry_reflector
+    )
     sys.stdout.write(render(report, cache) + "\n")
     return 0
 

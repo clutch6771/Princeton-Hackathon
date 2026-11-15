@@ -95,6 +95,27 @@ def test_the_verdict_is_read_from_the_judges_json(text, verdict):
     assert ev.parse_verdict(text) == verdict
 
 
+def test_a_feedback_example_says_what_was_judged_and_what_the_reaction_means(
+    environment,
+):
+    # Run 1 of the live evaluation: given only "The person marked it: disagree", the
+    # Judge answered with the feedback labels as verdicts on 7 of 20 reels.
+    examples = environment.datasource.find_similar_feedback(
+        ev.USER, "injury rehab recovery progress knee surgery", 3
+    )
+
+    block = ev.examples_block(examples)
+
+    assert examples and block.count("\n- ") == len(examples) - 1
+    assert "It was judged conflict." in block
+    assert "they disagreed with that verdict" in block
+    assert "marked it: disagree" not in block
+
+
+def test_each_feedback_label_is_explained_in_words():
+    assert set(ev.REACTIONS) == {"agree", "disagree", "not_for_me", "fine"}
+
+
 # --- Scoring ---------------------------------------------------------------------------
 
 
@@ -211,6 +232,30 @@ def test_the_reflector_step_runs_once_and_is_then_read_from_the_cache(cache):
 
     assert again == first and len(reflector.calls) == calls
     assert len([run for run in cache.runs() if run["stage"] == ev.REFLECTOR]) == 1
+
+
+def test_a_second_reflector_run_must_be_asked_for_and_both_runs_are_reported(cache):
+    failed = ScriptedChatModel(script=[reply("I give up.")])  # writes no summary
+    first = ev.reflector_step(
+        ev.build_environment(clock=lambda: NOW, reflector_model=failed), cache
+    )
+    working = ScriptedChatModel(script=good_run())
+    environment = ev.build_environment(clock=lambda: NOW, reflector_model=working)
+
+    judge = FakeJudge()
+    report = ev.evaluate(environment, judge, cache, retry_reflector=True)
+    second = report.outcome
+
+    assert (first.reviewed, first.approved) == (0, 0)
+    assert (second.reviewed, second.approved) == (1, 1)
+    # Stages 1 and 2 are judged before the Reflector runs, with the initial values.
+    assert all("get-rich-quick" not in prompt for prompt in judge.prompts[:40])
+    assert all("Less get-rich-quick content" in prompt for prompt in judge.prompts[40:])
+    runs = [run for run in cache.runs() if run["stage"] == ev.REFLECTOR]
+    assert [run["reviewed"] for run in runs] == [0, 1]
+    text = ev.render(report, cache)
+    assert "Reflector run 1" in text and "Reflector run 2" in text
+    assert "queued nothing" in text and "Less get-rich-quick content" in text
 
 
 def test_with_no_value_card_the_refined_stage_is_no_proposal(cache):

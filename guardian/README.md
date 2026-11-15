@@ -128,6 +128,15 @@ Request and response shapes are in `guardian/types.py`. They match the build spe
 
 `FakeDataSource.from_seed(user_id)` serves 40 invented reels and 8 feedback items for one user, generated from `seed/persona.md` by `seed/build_seed.py`. It implements the `DataSource` protocol in `guardian/datasource.py`, which the Judge server's `JudgeDataSource` also implements. `FakeDataSource.from_records(user_id, reels, feedback)` accepts real Judge output in the same record shape.
 
+## Learning evaluation
+
+```bash
+python -m guardian.eval.learning_eval            # reuses cached Judge outputs
+python -m guardian.eval.learning_eval --fresh    # forgets the cache and runs everything again
+```
+
+Three stages on the 20 held-out seed reels, with a text-only stand-in Judge that runs `guardian/judge_prompt.md`: the initial values alone; the same values with up to three similar feedback examples; and the values after the Reflector's proposals from the feedback session are approved unchanged. It makes about 60 Judge calls and one Reflector run. Judge outputs are cached in `guardian/eval/.cache/` (git-ignored), and every run that called a model is logged there and listed in the report. The result of the run made for the hackathon is in `guardian/eval/REPORT.md`.
+
 ## Tests
 
 ```bash
