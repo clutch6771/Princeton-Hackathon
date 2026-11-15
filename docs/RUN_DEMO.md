@@ -113,6 +113,23 @@ It deletes that one user's Guardian records (values, cards, notes, chat) and Jud
 
 Then, in the app: open the chat and finish onboarding (approve the first value) **before** recording. Until a value is approved the Judge has nothing to judge against.
 
+## If the Guardian stops replying
+
+The Gemini free tier allows 500 requests a day for each model on a key. A chat turn uses 2 to 5 requests and a session review about 14, so a long demo day can use them up. The count starts again at 3:00 am Eastern.
+
+How to recognise it:
+
+- In the app, every Guardian reply is "The Guardian could not reply just now. Please try again in a moment."
+- In the server log, each failed turn has a line like this:
+
+```text
+chat run failed for thread demo-user:2026-11-15: GoogleRateLimitError: Error calling model 'gemini-3.5-flash-lite' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED ... Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500 ... Please retry in 8m5s.
+```
+
+The words to look for are `RESOURCE_EXHAUSTED` and `Quota exceeded`. (A failed review logs `session review failed` or `review of session ... failed` with the same error.)
+
+The fix: put a spare key in `GOOGLE_API_KEY` in `.env` and restart the server. Nothing is lost: values, cards and the chat are in the database. Keep a spare key ready before the demo.
+
 ## 6. The three most likely failures
 
 **The server exits at startup with "Invalid configuration".** The message names every variable that is wrong, for example:
