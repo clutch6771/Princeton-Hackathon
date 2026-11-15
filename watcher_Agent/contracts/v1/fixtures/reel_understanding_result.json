@@ -1,0 +1,28 @@
+{
+  "confidence": 0.86,
+  "contract_version": "1",
+  "description": "A trainer demonstrates squat form with three spoken cues.",
+  "evidence_basis": [
+    "frames",
+    "audio"
+  ],
+  "features": {
+    "emotional_pull": "self-improvement",
+    "format": "tutorial",
+    "hook": null,
+    "is_ad": false,
+    "tone": "calm",
+    "topics": [
+      "strength training",
+      "squat form"
+    ]
+  },
+  "on_screen_text": "3 squat cues",
+  "reason": "This matches what you said about wanting form tutorials.",
+  "transcript": "Keep your chest up and push the floor away.",
+  "transcript_status": "speech",
+  "value_ids": [
+    "V3"
+  ],
+  "verdict": "aligned"
+}

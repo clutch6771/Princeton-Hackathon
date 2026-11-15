@@ -1,0 +1,114 @@
+PRIVACY
+=======
+
+1. TWO ELIGIBILITY BOUNDARIES
+-----------------------------
+Native gate (future adapter, before upload)
+    Decides what may leave the device. Only positively eligible Instagram
+    Reels media is uploaded. It re-checks throughout the session and
+    excludes non-feed and private screens, sensitive overlays, and their
+    audio. Unknown eligibility means: discard or mute that interval.
+Backend gate (implemented: judge/privacy/eligibility.py)
+    Defense in depth. Every event carries privacy provenance. Media is kept
+    only when capability = native_gate, eligibility = eligible and surface =
+    instagram_reels. Everything else is dropped before any provider request
+    is built. The gate never sends media anywhere to decide.
+
+Guarantees that depend on the native adapter (the backend cannot give them):
+    - Private media never leaves the device. Backend filtering cannot undo
+      an upload that already happened.
+    - The provenance is truthful. The backend trusts what the adapter says.
+
+PRIVACY_MODE=enforce (default)   uploads without a native gate are rejected
+                                 with 422 privacy_capability_unavailable.
+PRIVACY_MODE=dev_permissive      also accepts capability "dev_fake". Refused
+                                 at startup unless APP_ENV=development.
+/readyz reports the mode and whether a native gate is required.
+
+
+2. AUDIO INTERVALS
+------------------
+A frame every 2 seconds cannot certify the audio in between. Therefore:
+    - Audio is kept only inside eligible_intervals certified by the native
+      gate. Uncertified chunks are not decoded at all.
+    - A chunk that crosses from a Reel into a DM keeps only the certified
+      part; the rest is discarded and counted as audio_uncertified_ms.
+    - The uncertain interval between two reels belongs to neither reel.
+    - Protected audio is reported only from native evidence
+      (capture_state = "protected"), never inferred from silence.
+
+
+3. VOLATILE RETENTION
+---------------------
+Raw frames and audio exist only in bounded RAM (see MEMORY_PARAMETERS.txt,
+section D) and are released on success, failure, timeout, cancellation and
+shutdown. They are never written to:
+    PostgreSQL (the only media column is the one thumbnail), object storage,
+    durable queues, temporary files or upload spools, logs, traces,
+    checkpoints or crash attachments.
+How this is enforced:
+    - Uploads are parsed in memory. The 400 kB request cap is checked before
+      the body is read; the parser never spools to disk (tested by making
+      tempfile unusable).
+    - Audio is decoded from memory by PyAV; WAV clips are built in memory.
+    - Log calls carry ids, codes and counts only.
+    - One thumbnail per judged reel is re-encoded from a screened frame
+      (320 px, <= 48 kB, metadata dropped).
+Kept until the owner deletes them: transcript, on-screen text, description,
+features, verdict, reason, embeddings, feedback, the thumbnail.
+
+
+4. PROXY AND SDK
+----------------
+Reverse proxy   Must not buffer request bodies to disk. For nginx:
+                proxy_request_buffering off; or client_body_buffer_size >=
+                the 400 kB request cap. Disable body logging.
+SDK tracing     LangSmith / LangChain tracing would export prompts (frames,
+                audio, values). Startup refuses to run when
+                LANGSMITH_TRACING, LANGCHAIN_TRACING_V2 or LANGCHAIN_TRACING
+                is enabled. Model calls pass no callbacks.
+Provider side   Grok mode sends permitted audio to xAI STT, then frames,
+                transcript and values to xAI's vision judgment API. Gemini
+                mode sends them to Google. Provider retention is governed by
+                the API terms for your project and tier. Deleting media
+                locally does NOT establish provider-side zero retention.
+                Check the data-use terms before using real user data.
+
+
+5. PROMPT INJECTION
+-------------------
+Speech, captions, on-screen text, feedback and values text are data. They
+are wrapped in delimiters with a per-request random nonce. The system
+instruction is constant. The model has no tools and returns one structured
+object; deterministic code validates it and controls storage, configuration
+and policy. Nothing the model returns can change configuration, edit values,
+run SQL or reveal secrets.
+
+
+6. DELETION
+-----------
+DELETE /reels/{id}, /sessions/{id}, /data are owner-scoped. They remove
+dependent thumbnails, vectors and feedback, drop volatile state and clear
+caches. The approved
+values are not the Judge's to delete. Embeddings are never re-used across
+model or profile changes.
+
+
+7. NOT COVERED
+--------------
+The demo identity header is not authentication. There is no encryption at
+rest beyond what the database service provides. There is no retention timer
+for text and metadata; deletion is explicit.
+
+8. CURRENT NATIVE COMPATIBILITY PATH
+------------------------------------
+/agent1/ingest receives one device-segmented frame and optional speech text.
+The same backend provenance check runs before either reaches the provider.
+Legacy requests are explicitly dev_fake; production refuses them until a
+trusted native gate exists. A supplied device transcript is untrusted partial
+evidence; it never certifies raw audio coverage, silence or music. No Judge
+capture API, notification policy or notification delivery exists.
+
+The generated media in docs/examples and /tmp sample executions is invented
+test material, never a real screen/audio recording. Production raw-media
+retention rules are unchanged. Never use sample scripts for real user media.

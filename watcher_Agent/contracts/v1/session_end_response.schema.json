@@ -1,0 +1,40 @@
+{
+  "$defs": {
+    "SessionStatus": {
+      "description": "Lifecycle of a capture session.",
+      "enum": [
+        "active",
+        "ending",
+        "ended"
+      ],
+      "title": "SessionStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Response of ``POST /session/end``.",
+  "properties": {
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/SessionStatus"
+    }
+  },
+  "required": [
+    "session_id",
+    "status"
+  ],
+  "title": "SessionEndResponse",
+  "type": "object",
+  "x-contract-version": "1"
+}

@@ -30,6 +30,12 @@ FORMAT_HELP = """A value entry has exactly these six lines:
 For a new value write the header as "## New: <title> (strength: ...)".
 Without an exact quote, replace the fifth line with: - Suggested wording: "<your wording>\""""
 
+# Shown to a user whose edit of a card could not be read.
+EDIT_HELP = (
+    "Keep the card's six lines: the ## header, Want more, Want less, Unless, "
+    "the wording line and Evidence. Change only the text after each label."
+)
+
 _HEADER = re.compile(
     r"^##\s+(V[1-9]\d*|New):\s*(\S.*?)\s*\(strength:\s*(low|medium|high)\)$",
     re.IGNORECASE,
@@ -38,7 +44,7 @@ _WORDING = re.compile(
     r"^-\s*(In my words|Agreed wording|Suggested wording):\s*(.*)$", re.IGNORECASE
 )
 _VALUE_ID = re.compile(r"^V[1-9]\d*$")
-_APPROVED_STAMP = re.compile(r"[;\s]*approved \d{4}-\d{2}-\d{2}\s*$")
+_APPROVED_STAMP = re.compile(r"approved \d{4}-\d{2}-\d{2}")
 _CANONICAL_LABEL = {label.lower(): label for label in WORDING_LABELS}
 
 
@@ -58,7 +64,8 @@ class ValueEntry:
 @dataclass(frozen=True)
 class Parsed:
     entry: ValueEntry | None
-    error: str | None
+    error: str | None  # the reason plus the full format, written for an agent
+    reason: str | None = None  # the reason alone
 
     @property
     def ok(self) -> bool:
@@ -66,7 +73,7 @@ class Parsed:
 
 
 def _fail(reason: str) -> Parsed:
-    return Parsed(entry=None, error=f"{reason}\n{FORMAT_HELP}")
+    return Parsed(entry=None, error=f"{reason}\n{FORMAT_HELP}", reason=reason)
 
 
 def _field(line: str, label: str) -> str | None:
@@ -147,9 +154,14 @@ def value_number(value_id: str) -> int:
 
 
 def stamp_approved(evidence: str, day: date) -> str:
-    """Append the approval date to an Evidence line, replacing an earlier date."""
-    base = _APPROVED_STAMP.sub("", evidence).rstrip(" ;.")
-    return f"{base}; approved {day.isoformat()}"
+    """Append the approval date to an Evidence line, replacing any earlier date.
+
+    An earlier stamp may sit anywhere in the line, since an agent refining a value
+    often adds new evidence after the old one.
+    """
+    parts = [part.strip(" .") for part in _APPROVED_STAMP.sub("", evidence).split(";")]
+    kept = [part for part in parts if part]
+    return "; ".join([*kept, f"approved {day.isoformat()}"])
 
 
 def same_text(first: str, second: str) -> bool:

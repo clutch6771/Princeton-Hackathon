@@ -1,0 +1,161 @@
+MEMORY AND PARAMETER REGISTRY (authoritative)
+=============================================
+Every memory field and configuration parameter of the Judge.
+Origin column:  PRD = product requirement   INT = operational interpretation
+                ENG = engineering setting chosen here (the PRD gives no number)
+Configuration lives in one typed source: judge/config.py (Settings). Names
+below are the environment variable names. The model cannot alter any of them.
+
+
+A. SEMANTIC MEMORY  (shared Store; written by the approval owner, read by Judge)
+-------------------------------------------------------------------------------
+Location   Default Store prefix "<user_id>.guardian.values", keys Vn.
+           Protected Guardian entries: {text: full Markdown, updated: timestamp}.
+           Rendered in memory; approval derives from protected namespace.
+           VALUES_STORE_LAYOUT=guardian (default) | document.
+           document explicitly selects "<user_id>.memories" / "values.md".
+           The fields below describe the normalized snapshot/document contract.
+Writer     Guardian / approval owner (owner role).   Reader: Judge (SELECT only)
+Lifetime   Until the owner replaces or deletes it. Judge never writes.
+
+Field                 Type            Meaning / validation                  Origin
+content               str | [lines]   Canonical Markdown of approved values PRD
+revision              int | str       Revision; falls back to sha256 prefix PRD
+sha256                hex(64)         Hash of canonical content; verified   PRD
+approval.status       str             Must be "approved" to be used         PRD
+approval.approved_at  datetime        Approval time                         PRD
+lifecycle.status      active|deleted  "deleted" -> unavailable              PRD
+Per entry (Markdown)  value id, title, strength, Want more, Want less,
+                      Unless, In my words OR Agreed wording, Evidence, Approved, Status
+                      (superseded by Vn | deleted). Wording kept verbatim.  PRD
+VALUES_ACCESS_MODE = read_only (constant)                                   PRD
+VALUES_REQUIRE_APPROVAL_METADATA  bool, default true                        INT
+VALUES_MAX_BYTES  16384 bytes. Over cap -> unavailable; never truncated     ENG
+VALUES_STORE_SCHEMA  "public"                                               ENG
+A snapshot (revision + sha256) is pinned on every judged reel.
+
+
+B. STORED EVIDENCE  (schema judge; written by Judge; kept until owner deletes)
+-------------------------------------------------------------------------------
+judge.reels            PRD record: id, session_id, start, end, thumbnail_url,
+                       transcript, on_screen_text, description, features.topics,
+                       features.format, features.tone, features.hook,
+                       features.emotional_pull, features.is_ad, verdict
+                       (aligned|neutral|conflict), confidence [0,1] finite,
+                       value_ids, reason                                    PRD
+                       Extension: evaluation_status, nullable verdict,
+                       owner_id, order_seq, coverage, audio_status,
+                       transcript_status, segmentation_status, close_reason,
+                       boundary_uncertainty_ms, first_second_observed,
+                       values_revision, values_sha256, feedback_example_ids,
+                       retrieval_mode, model_id, prompt_version,
+                       understanding_attempts, idempotency_key, timings,
+                       latency_overrun, error_code                          INT
+                       Readers: app, Guardian, Reflector.
+judge.reel_thumbnails  one JPEG bytea per judged reel, <= 48 kB             PRD
+judge.reel_embeddings  profile_id, model_id, dimension, task_type, status,
+                       attempts, error_code                                 PRD/ENG
+judge.reel_embedding_vectors  vector(768), keyed by (reel, profile)         ENG
+judge.feedback         reel_id, label, score, comment, source. Writer: app
+                       via POST /feedback. Score has no defined range.      PRD
+Deletion: DELETE /reels/{id}, /sessions/{id}, /data (owner-scoped, cascades).
+
+
+C. OPERATIONAL STATE  (schema judge; written by Judge)
+-------------------------------------------------------------------------------
+judge.sessions               lifecycle, last_ingest_at, order cursor, counts
+judge.session_events         one "session_completed" row per session
+judge.ingest_receipts        idempotency metadata; pruned after 24 h; no media
+public.judge_schema_migrations migration ledger
+
+
+D. VOLATILE STATE  (RAM only; bounded; released on every exit path)
+-------------------------------------------------------------------------------
+Safe frame reservoir   first, last, <= 4 thinned frames per open reel
+Audio buffer           decoded PCM16 segments with capture timestamps
+Candidate intervals    open and closed exposures awaiting final audio
+Provider payloads      frames + WAV clip, or supplied device transcript (partial)
+Context caches         values snapshot (5 s), feedback examples
+Lost on restart; affected reels become lost_on_restart. Never written to
+PostgreSQL, files, logs, traces or queues.
+
+
+E. CONFIGURATION
+-------------------------------------------------------------------------------
+PRD defaults
+FRAME_INTERVAL_SECONDS = 2            FRAME_MAX_LONG_EDGE_PX = 512
+FRAME_MIME_TYPE = image/jpeg          JUDGE_SELECTED_FRAMES = normally 2-3 (max 3)
+AUDIO_SAMPLE_RATE_HZ = 16000          AUDIO_CHANNELS = 1
+AUDIO_CODEC = AAC                     AUDIO_CHUNK_SECONDS = 5 nominal
+NATIVE_MEMORY_CAP_MB = 50             NATIVE_MEMORY_SPIKE_MINUTES = 10
+MAX_UPLOADS_IN_FLIGHT = 1             (the three above bind the native adapter)
+NORMAL_UNDERSTANDING_CALLS_PER_REEL = 1
+NORMAL_NEW_REEL_EMBEDDINGS_PER_REEL = 1
+MAX_FEEDBACK_EXAMPLES = 3             REEL_END_TO_VERDICT_TARGET_SECONDS = ~10
+SESSION_IDLE_TIMEOUT_SECONDS = 600
+Notification policy is native-owned, not a Judge setting.
+VALUES_ACCESS_MODE = read_only        PERSIST_RAW_AUDIO = false
+PERSIST_RAW_VIDEO = false             PERSIST_EXTRA_FRAMES = false
+PERSISTED_THUMBNAILS_PER_ACCEPTED_REEL = at most 1
+Fixed invariants (PERSIST_*, VALUES_ACCESS_MODE, the two "per reel" counts)
+are constants in judge/config.py; configuration cannot change them.
+
+Engineering settings (ENG; tunable; none is a PRD value)
+Models      UNDERSTANDING_MODEL_ID=gemini-3.5-flash-lite
+            UNDERSTANDING_PROMPT_VERSION=judge-v1
+            EMBEDDING_MODEL_ID=gemini-embedding-001  EMBEDDING_DIMENSION=768
+            EMBEDDING_TASK_TYPE=SEMANTIC_SIMILARITY  EMBEDDING_PROFILE_VERSION=v1
+            EMBEDDING_INDEXING_ENABLED=true
+Payloads    FRAME_MAX_BYTES=300000 (native: JPEG quality about 0.6)
+            AUDIO_CHUNK_MAX_BYTES=100000 (AAC-LC about 32 kbps, ADTS or MP4)
+            AUDIO_CHUNK_MAX_SECONDS=6   INGEST_MAX_BODY_BYTES=400000
+            THUMBNAIL_MAX_LONG_EDGE_PX=320 THUMBNAIL_JPEG_QUALITY=70
+            THUMBNAIL_MAX_BYTES=48000
+Context     VALUES_MAX_BYTES=16384  FEEDBACK_EXAMPLE_MAX_CHARS=600
+            UNDERSTANDING_MAX_OUTPUT_TOKENS=1024
+            UNDERSTANDING_MAX_INPUT_TOKENS=12000  TRANSCRIPT_MAX_CHARS=4000
+Python RAM  MEDIA_BUDGET_BYTES=268435456  SESSION_MEDIA_BUDGET_BYTES=25165824
+            MAX_CANDIDATE_SECONDS=90  MIN_JUDGEABLE_FRAMES=1
+            WORKER_QUEUE_CAPACITY=32  WORKER_CONCURRENCY=2  MAX_ACTIVE_SESSIONS=4
+            Overload: HTTP 503 (drop upload) or reel skipped_overload.
+            There is no raw-media database offload threshold.
+Segmenting  SEGMENT_FRAME_HASH_THRESHOLD=20 (of 64)
+            SEGMENT_OVERLAY_HASH_THRESHOLD=12 (of 64)  SEGMENT_GAP_SECONDS=8
+            TRANSITION_HINT_UNCERTAINTY_MS=250
+Clocks      CLOCK_SKEW_TOLERANCE_SECONDS=5  LATE_EVENT_GRACE_SECONDS=3
+            FINAL_AUDIO_WAIT_SECONDS=6 (must be < JOB_DEADLINE_SECONDS)
+            AUDIO_COMPLETE_RATIO=0.8  MIN_AUDIO_MS_FOR_MODEL=500
+Providers   PROVIDER_TIMEOUT_SECONDS=8  PROVIDER_MAX_ATTEMPTS=2
+            PROVIDER_REQUESTS_PER_MINUTE=10  PROVIDER_REQUESTS_PER_DAY=unset
+            JOB_DEADLINE_SECONDS=30  JOB_SWEEP_GRACE_SECONDS=5
+            EMBEDDING_REQUESTS_PER_MINUTE=60  EMBEDDING_MAX_ATTEMPTS=5
+            EMBEDDING_RETRY_BASE_SECONDS=2 (doubles per attempt)
+Database    DB_STATEMENT_TIMEOUT_MS=5000  DB_POOL_MIN_SIZE=1  DB_POOL_MAX_SIZE=8
+Values wait VALUES_WAIT_SECONDS=20  VALUES_POLL_SECONDS=5
+            VALUES_CACHE_TTL_SECONDS=5
+Retention   RECEIPT_RETENTION_SECONDS=86400; reel text and metadata are kept
+            until the owner deletes them.
+API limits  INGEST_REQUESTS_PER_MINUTE=240  API_REQUESTS_PER_MINUTE=120
+Runtime     TICK_INTERVAL_SECONDS=0.5
+Modes       APP_ENV=production|development  PRIVACY_MODE=enforce|dev_permissive
+            PROVIDER_MODE=grok|gemini|local|fake (default grok)  STORAGE_MODE=postgres|memory
+            (fake, memory, dev_permissive are refused in production)
+Identity    DEMO_USER_ID (required)  DEMO_USER_HEADER=X-Demo-User-Id
+
+
+F. SECRETS  (environment or secret store only)
+-------------------------------------------------------------------------------
+DATABASE_URL            runtime role; TLS required in production
+MIGRATION_DATABASE_URL  owner role; migrations and seeding only
+XAI_API_KEY             Grok provider key (SecretStr)
+GROK_MODEL_ID           grok-4.7 (vision judgment)
+GROK_TRANSCRIPTION_MODEL grok-voice-transcribe-2.0 (waveform to text)
+GEMINI_API_KEY          optional Gemini-mode provider key
+Never placed in memory documents, model prompts, logs, fixtures or the repo.
+Separate API keys do not by themselves give separate quota pools.
+
+Grok mode requires EMBEDDING_INDEXING_ENABLED=false and uses no Gemini key.
+The local .env example raises provider timeout to 30s, job deadline to 90s,
+output budget to 2048 and limits attempts to one for initial live testing.
+Grok audio: one STT call + one vision judgment per normal attempt. Quota
+settings currently count provider attempts, not individual HTTP requests.

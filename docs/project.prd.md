@@ -2,6 +2,31 @@
 
 Nov 14, 2026 · HackPrinceton Fall 2026 · Living version: https://claude.ai/artifact/8vqMLvXLKpJgb66Jc9Yf7V
 
+## Current implementation ownership (Nov 14 integration revision)
+
+The Judge interprets externally supplied frames and audio evidence and stores
+verdicts with reasons. Capture, checkpoint policy and local notification delivery
+belong to `AttentionAgent/`; the Judge has no screen-capture tools, notification
+policy endpoint, warning batches or outbox. The app reads `/timeline` for verdicts.
+This ownership clarification supersedes earlier Judge notification assignments.
+
+The Judge is now configured for Grok by default. Since its chat model takes
+text/images, waveforms use a separate xAI speech-to-text call before one Grok
+vision judgment. This is an explicit provider exception to the PRD's single
+Gemini multimodal call; embeddings are disabled in Grok mode.
+
+The server supports the PRD JPEG/AAC stream path. The current native app instead
+uploads already segmented reels to `/agent1/ingest`: one JPEG plus optional
+on-device speech text. Those uploads share the same Judge pipeline, bypass a
+second segmentation pass, and mark device transcripts as partial. Native periodic
+JPEG/AAC uploads and a certified Reels eligibility gate remain pending; legacy
+uploads are development-only and rejected in production. PostgreSQL/Tiger Data
+is the implemented database. Approved values default to Guardian's protected
+`(user_id, "guardian", "values")` records, rendered read-only by the Judge.
+Guardian implementation files remain independently owned. Its synchronous
+DataSource adapter is in `watcher_Agent/judge/integration/guardian_source.py`;
+Guardian HTTP chat wrapping and Reflector orchestration remain separate work.
+
 ## Overview
 
 An iPhone app that learns what a person wants from their short-video feed by talking with them, watches and listens to what Instagram actually plays, and tells them, with reasons, when the two drift apart. It learns over time from the user's feedback, and changes their stated values only with their approval.
@@ -76,10 +101,10 @@ iOS provides no API for drawing over another app or reading its content. The app
 Five parts connected through the backend: the iPhone app and its extensions, the ingest pipeline with the Judge, the chat agent, the Reflector, and one database.
 
 - **iPhone:** broadcast extension (1 frame every 2 s and 5 s audio chunks, uploads both, raises the batch notification); app screens (chat with approval cards, Timeline with "Not for me", inbox cards, values).
-- **Backend:** Ingest and Judge (splits reels, transcribes audio, judges frames plus transcript against values, decides to notify); chat agent (`create_agent`); Reflector (deep agent, runs after a session ends).
+- **Backend:** Ingest and Judge (splits reels, transcribes audio, judges frames plus transcript against values, stores verdicts); chat agent (`create_agent`); Reflector (deep agent, runs after a session ends).
 - **Database:** memory files; reels and feedback; questions and chat threads.
 
-Data flow: extension → `/ingest` → Judge → reels collection → (notify) → extension banner → app chat → chat agent. Session end → Reflector → memory files and question queue → app.
+Data flow: extension → `/ingest` → Judge → reels collection → app checkpoint logic → extension banner → app chat → chat agent. Session end → Reflector → memory files and question queue → app.
 
 The Judge and both agents never call each other. They share the database: the Judge writes reels and verdicts, the Reflector writes memory files and questions, and the chat agent reads both.
 
@@ -91,7 +116,7 @@ Most of the work is in these connections. Each row is a contract two owners agre
 | --- | --- | --- | --- |
 | Extension → backend: frames | `POST /ingest/frame` | session ID, timestamp, 512 px JPEG | iOS / backend |
 | Extension → backend: audio | `POST /ingest/audio` | session ID, start and end time, 16 kHz mono AAC, 5 s | iOS / backend |
-| Backend → extension: notify | Response body of either ingest call | `{"notify": {"title", "body", "reel_ids"}}` or `null` | backend / iOS |
+| Backend → app: verdicts | `GET /timeline` | Reel records with verdict, reason and IDs; native app owns notifications | backend / iOS |
 | Ingest → Judge | In-process queue | reel ID, 2–3 frames, transcript | backend / Judge |
 | Judge → database | Insert | `Reel` record (below) | Judge / database |
 | App → chat agent | `POST /chat`, `POST /chat/resume` | message, context (entry point, reel IDs), approval decisions | iOS / Guardian |
@@ -163,7 +188,7 @@ Frames alone miss talking-head reels with no captions, so each reel is judged on
 
 **Latency budget:** under about 10 seconds from the end of a reel to its verdict. Batch notifications make this budget comfortable.
 
-**Notification policy (backend, configurable)**
+**Notification policy (application layer, configurable; outside the Judge)**
 
 - Check after every 15 judged reels.
 - Notify if at least 3 of those reels conflicted with a value; otherwise stay silent.
@@ -275,7 +300,7 @@ Submission deadline: Sunday, Nov 15, 8:00 am. Feature freeze: Sunday 4:00 am.
 | M1 Ingest and Judge (6 h) | Ingest endpoints, segmentation, transcription, Judge, reel records | Backend / Judge |
 | M2 Chat agent (6 h) | Interview, approvals with the protected value-write path, then the injection guard, then explanations; `chat` / `resume` on fake data | Guardian |
 | M3 App screens (6 h) | Chat with value cards, Timeline with "Not for me", inbox, read-only Values screen | iOS |
-| M4 Notifications and feedback (4 h) | Notification policy, `/feedback`, `/questions` | Backend |
+| M4 Notifications and feedback (4 h) | Native notification policy, `/feedback`, `/questions` | iOS / Backend |
 | M5 Reflector (4 h) | Session review, memory updates, "What I learned" and value-change cards | Guardian |
 | M6 Integration and ship (4 h) | End-to-end on the demo phone, hosted backend, README, demo | All |
 

@@ -1,0 +1,113 @@
+GUARDIAN -> JUDGE SAMPLE EXECUTIONS
+===================================
+No Reflector is used, and Guardian implementation files are unchanged.
+
+1. The approved values are real Guardian outputs
+------------------------------------------------
+The sample runner calls Guardian's install_initial_values(), which records
+invented onboarding statements, creates proposals and approves them through
+its normal protected write path. render_values() supplies the exact Markdown:
+  V1: Fitness without body comparison
+  V2: News without outrage
+  V3: Cooking I can actually make
+PostgreSQL tests do the same using the actual LangGraph PostgresStore. The
+Judge reads that Store through its SELECT-only role, writes reel outcomes
+in judge.*, and reads the outcomes back. A direct values UPDATE by the
+Judge role must fail. The Judge never approves or rewrites user values.
+
+2. Seven labeled examples from Guardian's demo session (not held-out data)
+-------------------------------------------------------------------------
+  rl_013  Simple pasta recipe             aligned  V3
+  rl_014  Body transformation montage     conflict V1
+  rl_015  Physique rating, speech only    conflict V1
+  rl_016  Outrage/shouting politics       conflict V2
+  rl_017  Coastal travel footage          neutral  no values
+  rl_019  Calm science explainer, audio   aligned  V2
+  rl_020  Extreme calorie challenge       conflict V3
+
+Inputs are invented storyboards, encoded into real MP4 and decoded back to
+JPEG samples, plus independent AAC chunks at 16kHz mono. The runner ingests
+both streams, ends the session, waits for the shared worker, and reads the
+stored decision/thumbnail/coverage. MP4 is only a test fixture: production
+still uploads sampled JPEG/AAC, not full video, and never captures itself.
+For rl_015 and rl_019 the storyboard has no semantic captions, so real model
+classification needs the supplied speech. The reference labels are not
+sent in the model request. The generated clips do not reproduce real people.
+
+3. Confirming or denying an arbitrary decision
+---------------------------------------------
+judge/evaluation.py compares a stored verdict AND cited value IDs against an
+independently supplied reference pinned to the same values hash. It confirms
+matches, denies mismatches and reports inconclusive when judgment/values are
+unavailable. Different owners or values revisions cannot be compared.
+It is not a truth detector and does not use a model to approve itself.
+
+Each sample is also checked with all three arbitrary candidate verdicts:
+one should match its reference; two deliberately wrong choices must be denied.
+Incorrect value citations are tested separately. These checks are read-only;
+they never overwrite the actual stored verdict or approved values.
+
+4. Run deterministic checks
+---------------------------
+  .venv/bin/pytest -q watcher_Agent/tests/unit/test_guardian_decisions.py \
+    watcher_Agent/tests/unit/test_grok.py
+
+  .venv/bin/python watcher_Agent/scripts/generate_sample_speech.py \
+    --output-dir /tmp/judge-sample-speech
+
+  .venv/bin/python watcher_Agent/scripts/run_guardian_judge_samples.py \
+    --speech-dir /tmp/judge-sample-speech --report /tmp/judge-replay.json
+
+The speech generator uses macOS's local say command; it never records audio.
+Without --speech-dir, replay uses synthetic tones to exercise audio codecs.
+--provider replay (default) explicitly REPLAYS recorded model responses:
+this proves approval, codec, queue, validation, storage and comparison wiring,
+NOT transcription or inflammatory-content recognition by a real model.
+
+For an existing DISPOSABLE test database, add --postgres and set
+TEST_DATABASE_URL. The script applies migrations/setup-store but does not
+drop the database. PostgreSQL pytest fixtures rebuild the Judge schema, so
+never point them at an application database with data you want to keep.
+  TEST_DATABASE_URL=postgresql://USER@127.0.0.1:PORT/judge_test \
+    .venv/bin/pytest -q watcher_Agent/tests/storage
+
+The checked-in examples/guardian_judge_replay.json records actual executions
+with generated spoken audio, decoded MP4 samples and PostgreSQL round trips.
+Its replay designation and model_id=fake-understanding are intentional.
+Grok HTTP contract tests separately exercise the real adapter with mocked
+xAI responses, including its STT -> vision sequence and error handling.
+
+5. Configure the real Grok model
+--------------------------------
+Enter your key ONLY in watcher_Agent/.env (git-ignored):
+  PROVIDER_MODE=grok
+  XAI_API_KEY=<your real key>
+  GROK_MODEL_ID=grok-4.7
+  GROK_TRANSCRIPTION_MODEL=grok-voice-transcribe-2.0
+  EMBEDDING_INDEXING_ENABLED=false
+Do not paste the key into chat, source code, reports or .env.example.
+The prepared local config uses development/memory mode. Use the existing
+PostgreSQL and native eligibility configuration for production.
+
+Grok chat/vision accepts text/images. Uploaded waveform audio goes to xAI's
+/v1/stt endpoint before one structured vision judgment. Native transcripts
+skip STT. This provider-specific two-request audio path replaces the original
+one-call Gemini path without discarding audio. STT text is retained verbatim;
+empty text means unintelligible, never proof of silence/music. No embeddings
+or Gemini credentials are needed. Grok does not receive capture or agent tools.
+
+After setting the key, run the seven real recognition examples:
+  .venv/bin/python watcher_Agent/scripts/run_guardian_judge_samples.py \
+    --provider grok --speech-dir /tmp/judge-sample-speech \
+    --report /tmp/judge-grok-live.json
+Or one explicit live outrage-recognition test:
+  JUDGE_SAMPLE_SPEECH_DIR=/tmp/judge-sample-speech \
+    .venv/bin/pytest -q watcher_Agent/tests/unit/test_live_grok.py -m live
+These make real, billable xAI calls with synthetic media. A failed comparison
+is reported as denied/inconclusive and makes the runner exit nonzero. Seven
+examples are a small sanity check, not a general accuracy estimate.
+
+Provider references verified for this implementation:
+  https://docs.x.ai/developers/models/grok-4.7
+  https://docs.x.ai/developers/model-capabilities/audio/speech-to-text
+  https://docs.x.ai/developers/model-capabilities/text/structured-outputs

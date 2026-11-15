@@ -1,0 +1,112 @@
+{
+  "$defs": {
+    "SessionCompletedPayload": {
+      "additionalProperties": false,
+      "description": "Payload of the lifecycle event written when a session completes.",
+      "properties": {
+        "conflict_count": {
+          "minimum": 0,
+          "title": "Conflict Count",
+          "type": "integer"
+        },
+        "end_reason": {
+          "$ref": "#/$defs/SessionEndReason"
+        },
+        "ended_at": {
+          "format": "date-time",
+          "title": "Ended At",
+          "type": "string"
+        },
+        "excluded_count": {
+          "minimum": 0,
+          "title": "Excluded Count",
+          "type": "integer"
+        },
+        "judged_count": {
+          "minimum": 0,
+          "title": "Judged Count",
+          "type": "integer"
+        },
+        "reel_count": {
+          "minimum": 0,
+          "title": "Reel Count",
+          "type": "integer"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reel_count",
+        "judged_count",
+        "conflict_count",
+        "excluded_count",
+        "end_reason",
+        "started_at",
+        "ended_at"
+      ],
+      "title": "SessionCompletedPayload",
+      "type": "object"
+    },
+    "SessionEndReason": {
+      "description": "Why a session stopped accepting ingest.",
+      "enum": [
+        "client_end",
+        "idle_timeout"
+      ],
+      "title": "SessionEndReason",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Lifecycle event for future consumers. Writing it invokes nobody.",
+  "properties": {
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "session_completed",
+      "default": "session_completed",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "owner_id": {
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/SessionCompletedPayload"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "session_id",
+    "owner_id",
+    "payload",
+    "created_at"
+  ],
+  "title": "SessionEvent",
+  "type": "object",
+  "x-contract-version": "1"
+}

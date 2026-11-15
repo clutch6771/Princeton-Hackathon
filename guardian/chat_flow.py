@@ -32,6 +32,12 @@ SUGGESTED_WORDING_NOTE = (
 
 USER_ID = re.compile(r"^[A-Za-z0-9_-]+$")
 CONTEXT_ENTRIES = ("onboarding", "chat", "drift_notification", "reel", "learned")
+MAX_STATED_GOALS_CHARS = 2000
+# Written into the CONTEXT block with the goal the user typed when setting up the app.
+START_FROM_STATED_GOALS = (
+    "The user typed this goal when they set up the app. Start from it: do not ask "
+    "again for what it already says, and you may quote it as their own words."
+)
 
 ERROR_INVALID_USER = "The user ID is missing or not valid."
 ERROR_WRONG_THREAD = "This conversation does not belong to this user."
@@ -81,7 +87,14 @@ def context_error(context: Any) -> str | None:
         return ERROR_BAD_CONTEXT
     if not isinstance(context.get("session_id", ""), str):
         return ERROR_BAD_CONTEXT
+    goals = context.get("stated_goals", "")
+    if not isinstance(goals, str) or len(goals) > MAX_STATED_GOALS_CHARS:
+        return ERROR_BAD_CONTEXT
     return None
+
+
+def stated_goals(context: ChatContext | None) -> str:
+    return (context or {}).get("stated_goals", "").strip()
 
 
 def context_block(deps: Deps, user_id: str, context: ChatContext | None) -> str:
@@ -97,7 +110,20 @@ def context_block(deps: Deps, user_id: str, context: ChatContext | None) -> str:
         lines.append(LOOK_UP_REELS_FIRST)
     if context.get("session_id"):
         lines.append(f"session_id: {context['session_id']}")
+    if stated_goals(context):
+        lines.append(f'stated_goals: "{stated_goals(context)}"')
+        lines.append(START_FROM_STATED_GOALS)
     return "\n".join([*lines, "END CONTEXT"])
+
+
+def record_stated_goals(deps: Deps, user_id: str, context: ChatContext | None) -> None:
+    """Keep the user's stated goals with their other words, once, so the quote check
+    accepts a quote from them."""
+    goals = stated_goals(context)
+    if goals and goals not in records.user_chat_messages(deps.store, user_id):
+        records.append_chat_turn(
+            deps.store, user_id, records.ROLE_USER, goals, deps.clock()
+        )
 
 
 def chat(
@@ -121,6 +147,7 @@ def chat(
     text = message.strip()
     block = context_block(deps, user_id, context)
     # Recorded before the agent runs, so the quote check can find what the user just said.
+    record_stated_goals(deps, user_id, context)
     records.append_chat_turn(deps.store, user_id, records.ROLE_USER, text, deps.clock())
     content = f"{block}\n\n{text}" if block else text
     return run(
@@ -213,6 +240,14 @@ def run(
             deps.store, user_id, records.ROLE_GUARDIAN, reply, deps.clock()
         )
     return respond(reply=reply, pending=proposals.card(waiting) if waiting else None)
+
+
+def pending_card(deps: Deps, user_id: str, thread_id: str) -> Interrupt | None:
+    """The value card waiting on this user's thread, or None. Changes nothing."""
+    if thread_error(user_id, thread_id):
+        return None
+    waiting = proposals.pending_for_thread(deps.store, user_id, thread_id)
+    return proposals.card(waiting) if waiting else None
 
 
 def has_suggested_wording(proposal: proposals.Proposal) -> bool:

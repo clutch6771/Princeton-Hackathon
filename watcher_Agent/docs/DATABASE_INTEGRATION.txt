@@ -1,0 +1,102 @@
+TIGER DATA (POSTGRESQL) INTEGRATION TUTORIAL
+============================================
+Tiger Data is PostgreSQL. The Judge uses ordinary tables in schema "judge",
+the psycopg 3 driver and plain-SQL migrations. Hypertables and pgvectorscale
+are optional and unused. Commands run from the repository root.
+
+Replacing MongoDB: the earlier design stored LangGraph memory in MongoDBStore.
+Here the same logical memory lives in the LangGraph PostgreSQL Store
+(langgraph-checkpoint-postgres), table "store". No MongoDB code or data
+existed in this repository, so nothing is migrated. PostgresSaver (chat
+checkpoints) is only a future seam for conversational components; the Judge
+has no checkpointer.
+
+1. Provision the service
+   Create a PostgreSQL service in the Tiger Data console. Note the host,
+   port, database and the admin role (tsdbadmin).
+
+2. Configure a TLS DATABASE_URL
+   postgresql://USER:PASSWORD@HOST:PORT/DBNAME?sslmode=require
+   In production a URL without TLS is refused; a missing sslmode becomes
+   "require". Keep URLs in .env (git-ignored), never in the repository.
+     MIGRATION_DATABASE_URL = owner role (steps 5, 7, 8)
+     DATABASE_URL           = limited runtime role (step 6, used by the API)
+
+3. Verify or enable pgvector
+     SELECT name, default_version FROM pg_available_extensions
+     WHERE name = 'vector';
+   No row: enable the extension for the service, or run without vectors
+   (step 5, --without-vector) and set EMBEDDING_INDEXING_ENABLED=false.
+   Do not assume it is enabled; check on your actual service.
+
+4. Verify the embedding model and dimension
+   Defaults: gemini-embedding-001, 768 dimensions, SEMANTIC_SIMILARITY.
+   Migration 0004 creates vector(768). Confirm with the opt-in live test:
+     GEMINI_API_KEY=... .venv/bin/pytest watcher_Agent/tests -m live
+   A different model, dimension or task is a different vector space: add a
+   new versioned migration and profile; never change it in place.
+
+5. Run migrations with the migration (owner) role
+     .venv/bin/python watcher_Agent/migrations/migrate.py status
+     .venv/bin/python watcher_Agent/migrations/migrate.py up
+     (or: up --without-vector)
+
+6. Configure limited runtime permissions
+     CREATE ROLE judge_runtime LOGIN PASSWORD '...';      -- as admin
+     .venv/bin/python watcher_Agent/migrations/migrate.py setup-store
+     .venv/bin/python watcher_Agent/migrations/migrate.py grant \
+         --runtime-role judge_runtime
+   The runtime role gets SELECT/INSERT/UPDATE/DELETE on judge.* and SELECT
+   only on the Store. Run "grant" after "setup-store".
+
+7. The PostgreSQL memory adapter
+   "setup-store" creates the LangGraph Store tables (owner role). The memory
+   owner (Guardian) writes namespace (user_id, "guardian", "values"),
+   one Vn key with {text, updated} per approved value.
+   VALUES_STORE_LAYOUT=guardian is the default. Select document explicitly
+   only for the legacy (user_id, "memories")/values.md deployment; no fallback.
+   The Judge reads it with one parameterized SELECT
+   (judge/values/postgres_source.py). It does not use AsyncPostgresStore.aget
+   because that statement includes a TTL-refresh UPDATE, which PostgreSQL
+   refuses for a SELECT-only role (verified by an integration test).
+
+8. Seed synthetic approved values (development only)
+     MIGRATION_DATABASE_URL=... DEMO_USER_ID=demo-user \
+       .venv/bin/python watcher_Agent/scripts/seed_dev_values.py
+
+9. Start the API and workers (one process)
+     .venv/bin/python -m uvicorn judge.api.app_api:create_app --factory \
+         --app-dir watcher_Agent --host 0.0.0.0 --port 8000 --workers 1
+   Workers and the maintenance tick run inside this process. Check
+   GET /readyz. Use exactly one worker: media buffers are in process memory.
+
+10. Inspect records, vectors and session completion
+     SELECT order_seq, evaluation_status, verdict, value_ids, reason
+       FROM judge.reels WHERE owner_id = 'demo-user' ORDER BY start_ms DESC;
+     SELECT reel_id, status, attempts FROM judge.reel_embeddings;
+     SELECT reel_id, embedding <=> (SELECT embedding FROM
+            judge.reel_embedding_vectors LIMIT 1) AS distance
+       FROM judge.reel_embedding_vectors
+       WHERE profile_id = 'gemini-embedding-001:768:SEMANTIC_SIMILARITY:v1'
+       ORDER BY distance LIMIT 5;
+     SELECT event_type, payload FROM judge.session_events;
+
+11. Deletion and rollback
+     curl -X DELETE -H "X-Demo-User-Id: demo-user" https://HOST/data
+     .venv/bin/python watcher_Agent/migrations/migrate.py down --to 0
+   "down --to 0" drops every Judge table. It does not drop the Store.
+
+12. Local PostgreSQL + pgvector integration tests
+     brew install postgresql@17 pgvector        (or any PostgreSQL with vector)
+     createdb judge_test
+     TEST_DATABASE_URL=postgresql://USER@127.0.0.1:5432/judge_test \
+       watcher_Agent/scripts/verify.sh
+   The tests rebuild schema "judge" in that database and create a role
+   judge_runtime_test. Use a disposable database. Without TEST_DATABASE_URL
+   they skip with a stated reason; without pgvector the vector tests skip.
+
+Migration compatibility: never edit already applied migrations 0001-0005.
+0005 notification tables/columns are dormant and preserved; runtime has no
+notification repository. 0006 adds fine to the feedback label constraint.
+Its rollback intentionally fails if fine rows exist: migrate/export those
+explicit user responses before downgrading; they are never silently relabeled.

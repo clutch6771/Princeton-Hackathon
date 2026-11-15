@@ -1,0 +1,213 @@
+{
+  "$defs": {
+    "ValueEntry": {
+      "additionalProperties": false,
+      "description": "One approved value, keeping the user's own wording verbatim.",
+      "properties": {
+        "approved_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approved At"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence"
+        },
+        "in_my_words": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In My Words"
+        },
+        "raw_markdown": {
+          "description": "The entry exactly as approved.",
+          "title": "Raw Markdown",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/ValueStatus",
+          "default": "active"
+        },
+        "strength": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Strength"
+        },
+        "superseded_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Superseded By"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "unless": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exception clause. Never truncated.",
+          "title": "Unless"
+        },
+        "value_id": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,31}$",
+          "title": "Value Id",
+          "type": "string"
+        },
+        "want_less": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Want Less"
+        },
+        "want_more": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Want More"
+        }
+      },
+      "required": [
+        "value_id",
+        "title",
+        "raw_markdown"
+      ],
+      "title": "ValueEntry",
+      "type": "object"
+    },
+    "ValueStatus": {
+      "description": "Lifecycle of one approved value entry.",
+      "enum": [
+        "active",
+        "superseded",
+        "deleted"
+      ],
+      "title": "ValueStatus",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Immutable snapshot of the approved values used for one judgment.",
+  "properties": {
+    "approved_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved At"
+    },
+    "content": {
+      "title": "Content",
+      "type": "string"
+    },
+    "content_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Content Sha256",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/ValueEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "loaded_at": {
+      "format": "date-time",
+      "title": "Loaded At",
+      "type": "string"
+    },
+    "owner_id": {
+      "title": "Owner Id",
+      "type": "string"
+    },
+    "revision": {
+      "minLength": 1,
+      "title": "Revision",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "owner_id",
+    "revision",
+    "content_sha256",
+    "content",
+    "entries",
+    "loaded_at",
+    "source"
+  ],
+  "title": "ApprovedValuesSnapshot",
+  "type": "object",
+  "x-contract-version": "1"
+}

@@ -1,0 +1,133 @@
+{
+  "$defs": {
+    "ValuesApprovalMetadata": {
+      "description": "Approval evidence written by the approval owner (never by the Judge).",
+      "properties": {
+        "approved_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Approved At"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "ValuesApprovalMetadata",
+      "type": "object"
+    },
+    "ValuesLifecycleMetadata": {
+      "description": "Document-level lifecycle written by the memory owner.",
+      "properties": {
+        "status": {
+          "default": "active",
+          "enum": [
+            "active",
+            "deleted"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "superseded_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Superseded By"
+        }
+      },
+      "title": "ValuesLifecycleMetadata",
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Payload of the ``values.md`` Store item.\n\n``content`` is the canonical Markdown, either one string or a list of\nlines (the form file-style Store backends write). ``sha256`` is the hex\nSHA-256 of the canonical content encoded as UTF-8.",
+  "properties": {
+    "approval": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValuesApprovalMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "content": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      ],
+      "title": "Content"
+    },
+    "lifecycle": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValuesLifecycleMetadata"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "revision": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revision"
+    },
+    "sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-fA-F]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sha256"
+    }
+  },
+  "required": [
+    "content"
+  ],
+  "title": "ValuesStoreItem",
+  "type": "object",
+  "x-contract-version": "1"
+}

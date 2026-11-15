@@ -147,6 +147,16 @@ def test_stamp_approved_appends_the_date_once():
     )
 
 
+def test_stamp_approved_removes_an_earlier_stamp_anywhere_in_the_line():
+    day = date(2026, 11, 15)
+    carried = "said at onboarding; approved 2026-11-14; fb_001, fb_003"
+
+    assert formats.stamp_approved(carried, day) == (
+        "said at onboarding; fb_001, fb_003; approved 2026-11-15"
+    )
+    assert formats.stamp_approved("approved 2026-11-14", day) == "approved 2026-11-15"
+
+
 def test_same_text_ignores_case_and_spacing():
     assert formats.same_text("Gym  stuff\nis GREAT", "gym stuff is great")
     assert not formats.same_text("gym stuff", "gym things")

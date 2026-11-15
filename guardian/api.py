@@ -17,32 +17,57 @@ from typing import Any
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.store.base import BaseStore
 
-from guardian import chat_flow, config, models
+from guardian import chat_flow, config, inbox_flow, models, reflect_flow, storage
 from guardian.chat_agent import build_chat_agent
 from guardian.datasource import DataSource
 from guardian.deps import Deps
+from guardian.memory import locks as lock_provider
 from guardian.memory import notes, reflector_files, values
-from guardian.types import ChatContext, Decision, GuardianResponse
+from guardian.memory.locks import Locks
+from guardian.types import (
+    Answer,
+    AnswerResult,
+    ChatContext,
+    Decision,
+    GuardianResponse,
+    Interrupt,
+    Question,
+)
 
 _deps: Deps | None = None
 _chat_agent: Any | None = None
 
 
 def configure(
-    store: BaseStore,
-    checkpointer: BaseCheckpointSaver,
-    datasource: DataSource,
+    store: BaseStore | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
+    datasource: DataSource | None = None,
     clock: Callable[[], datetime] | None = None,
     *,
     chat_model: Any | None = None,
     reflector_model: Any | None = None,
+    locks: Locks | None = None,
 ) -> None:
-    """Supply the store, checkpointer and data source. Call once before any entry point.
+    """Supply the data source and, optionally, the storage. Call once before any entry point.
+
+    With no `store` and `checkpointer`, storage comes from the environment: Postgres
+    when GUARDIAN_DATABASE_URL or DATABASE_URL is set (in the environment or the
+    repository's .env), otherwise in memory. Pass your own `store` and `checkpointer`
+    to share ones you already have; pass `locks` too if several processes share them.
 
     `clock` defaults to the current UTC time. The models default to the ones named by
     GUARDIAN_CHAT_MODEL and GUARDIAN_REFLECTOR_MODEL; pass instances to override them.
     """
     global _deps, _chat_agent
+    if datasource is None:
+        raise config.ConfigError("configure() needs a datasource.")
+    if (store is None) != (checkpointer is None):
+        raise config.ConfigError("Pass both a store and a checkpointer, or neither.")
+    if store is None or checkpointer is None:
+        opened = storage.open_from_env()
+        store, checkpointer, locks = opened.store, opened.checkpointer, opened.locks
+    if locks is not None:
+        lock_provider.set_provider(locks)
     _deps = Deps(
         store=store,
         checkpointer=checkpointer,
@@ -87,6 +112,47 @@ def resume(user_id: str, thread_id: str, decision: Decision) -> GuardianResponse
     """Apply the user's decision (approve, edit or reject) to the value card pending on a thread."""
     deps = _require_deps()
     return chat_flow.resume(deps, _agent(deps), user_id, thread_id, decision)
+
+
+def pending_card(user_id: str, thread_id: str) -> Interrupt | None:
+    """The value card waiting on a thread, or None. Read-only.
+
+    An addition to the spec's entry points, for a chat adapter that shows the card
+    as text: it needs to know a card is waiting without sending a message.
+    """
+    return chat_flow.pending_card(_require_deps(), user_id, thread_id)
+
+
+def reflect_pending(user_id: str) -> int:
+    """Review every finished session that has not been reviewed; returns how many.
+
+    Safe to call at any time (broadcast stop, app open, a 10-minute timer): it is
+    idempotent and returns 0 if a review is already running. It can take 1 to 3
+    minutes, so run it as a background job, never inside a request the app waits on.
+    """
+    deps = _require_deps()
+
+    def build_model() -> Any:
+        return deps.reflector_model or models.build_model(
+            config.reflector_model_name(), background=True
+        )
+
+    return reflect_flow.reflect_pending(deps, user_id, build_model)
+
+
+def get_questions(user_id: str) -> list[Question]:
+    """The inbox: "What I learned" cards and value-change cards waiting for the user."""
+    return inbox_flow.get_questions(_require_deps(), user_id)
+
+
+def answer_question(user_id: str, question_id: str, answer: Answer) -> AnswerResult:
+    """Apply the user's answer to an inbox card.
+
+    A value-change card takes approve, edit (with edited_text) or reject; a "What I
+    learned" card takes dismiss. Anything else, a card already answered, or another
+    user's card returns ok=False with an error and changes nothing.
+    """
+    return inbox_flow.answer_question(_require_deps(), user_id, question_id, answer)
 
 
 def get_values(user_id: str) -> str:

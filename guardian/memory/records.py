@@ -35,7 +35,7 @@ def append_chat_turn(
 
 def chat_turns(store: BaseStore, user_id: str) -> list[dict[str, Any]]:
     """Every kept turn, oldest first."""
-    items = store.search(keys.namespace(user_id, keys.CHATLOG), limit=keys.SEARCH_LIMIT)
+    items = keys.items(store, keys.namespace(user_id, keys.CHATLOG))
     return [
         turn
         for item in sorted(items, key=lambda item: item.key)
@@ -61,6 +61,6 @@ def chat_turns_since(
 
 def _drop_old_days(store: BaseStore, namespace: tuple[str, ...], today: date) -> None:
     cutoff = today - timedelta(days=CHATLOG_DAYS)
-    for item in store.search(namespace, limit=keys.SEARCH_LIMIT):
+    for item in keys.items(store, namespace):
         if date.fromisoformat(item.key) < cutoff:
             store.delete(namespace, item.key)
