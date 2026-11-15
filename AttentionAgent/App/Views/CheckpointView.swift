@@ -8,9 +8,9 @@ struct CheckpointView: View {
         List {
             if let r = session.latestReport {
                 Section {
-                    Text(r.headline).font(.headline)
+                    Text(r.headline).font(IrisUI.font(.headline))
                     Text(r.createdAt.formatted(date: .abbreviated, time: .shortened))
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(IrisUI.font(.caption)).foregroundStyle(.secondary)
                 }
                 Section("Numbers") {
                     LabeledContent("Reels", value: "\(r.reelCount)")
@@ -26,7 +26,7 @@ struct CheckpointView: View {
                 }
                 Section {
                     Text("This report describes what was observed. It does not change or block anything on Instagram.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                        .font(IrisUI.font(.footnote)).foregroundStyle(.secondary)
                 }
             } else {
                 Text("No checkpoint yet.").foregroundStyle(.secondary)

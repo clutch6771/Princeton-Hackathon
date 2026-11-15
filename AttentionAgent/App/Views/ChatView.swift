@@ -12,7 +12,7 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 18) {
                         DisclosureGroup {
-                            Text(session.userGoal).font(.subheadline).padding(.vertical, 8)
+                            Text(session.userGoal).font(IrisUI.font(.subheadline)).padding(.vertical, 8)
                             ScrollView(.horizontal, showsIndicators: false) {
                                 HStack(alignment: .top) {
                                     ForEach(session.activeDigest?.flaggedReels ?? []) { event in
@@ -20,27 +20,27 @@ struct ChatView: View {
                                             Text(event.topic).foregroundStyle(Vigil.coral)
                                             if let quote = event.transcriptText { Label(quote, systemImage: "waveform").lineLimit(3) }
                                             Text("\(event.dwellSeconds)s • \(event.emotionTag)").foregroundStyle(.secondary)
-                                        }.font(.caption).padding(12).frame(width: 190, alignment: .leading).background(Vigil.canvas, in: RoundedRectangle(cornerRadius: 14))
+                                        }.font(IrisUI.font(.caption)).padding(12).frame(width: 190, alignment: .leading).background(Vigil.canvas, in: RoundedRectangle(cornerRadius: 14))
                                     }
                                 }
                             }
-                        } label: { Label("Shared Memory", systemImage: "shield.checkered").font(.subheadline.weight(.semibold)) }.vigilCard()
+                        } label: { Label("Shared Memory", systemImage: "shield.checkered").font(IrisUI.font(.subheadline).weight(.semibold)) }.vigilCard()
                         if let digest = session.activeDigest {
                             VStack(alignment: .leading, spacing: 14) {
-                                Text("GOAL VS. REALITY").font(.caption.weight(.semibold)).tracking(2).foregroundStyle(Vigil.coral)
-                                Text("\(digest.flaggedReels.count) / \(digest.totalReelsWatched) Divisive").font(.title2.weight(.semibold)).fontDesign(.rounded).monospacedDigit()
-                                Text(digest.userGoalConflict ?? "Your feed is aligned with your goal.").font(.subheadline)
+                                Text("GOAL VS. REALITY").font(IrisUI.font(.caption).weight(.semibold)).tracking(2).foregroundStyle(Vigil.coral)
+                                Text("\(digest.flaggedReels.count) / \(digest.totalReelsWatched) Divisive").font(IrisUI.font(.title2).weight(.semibold)).fontDesign(.rounded).monospacedDigit()
+                                Text(digest.userGoalConflict ?? "Your feed is aligned with your goal.").font(IrisUI.font(.subheadline))
                                 VStack(alignment: .leading, spacing: 8) {
-                                    Text("Recommended Action").font(.caption.weight(.bold)).foregroundStyle(Vigil.cyan)
-                                    Text(digest.suggestedAction).font(.subheadline)
-                                    Button("60-Second Feed Reset") { Vigil.tap(); breathe = true }.font(.subheadline.weight(.semibold)).padding(.top, 6)
+                                    Text("Recommended Action").font(IrisUI.font(.caption).weight(.bold)).foregroundStyle(Vigil.cyan)
+                                    Text(digest.suggestedAction).font(IrisUI.font(.subheadline))
+                                    Button("60-Second Feed Reset") { Vigil.tap(); breathe = true }.font(IrisUI.font(.subheadline).weight(.semibold)).padding(.top, 6)
                                 }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Vigil.indigo, in: RoundedRectangle(cornerRadius: 16))
                             }.vigilCard()
                         }
                         ForEach(session.messages) { message in
                             HStack {
                                 if message.isUser { Spacer(minLength: 40) }
-                                Text(message.text).font(.body).padding(16)
+                                Text(message.text).font(IrisUI.font(.body)).padding(16)
                                     .background(message.isUser ? Vigil.indigo : Color.clear, in: UnevenRoundedRectangle(topLeadingRadius: 20, bottomLeadingRadius: message.isUser ? 20 : 5, bottomTrailingRadius: message.isUser ? 5 : 20, topTrailingRadius: 20))
                                     .overlay(RoundedRectangle(cornerRadius: 20).stroke(message.isUser ? Vigil.cyan.opacity(0.25) : Color.clear))
                                 if !message.isUser { Spacer(minLength: 40) }
@@ -73,7 +73,7 @@ struct ChatView: View {
         .onAppear { if session.showReset { breathe = true; session.showReset = false } }
     }
     private func chip(_ title: String, action: @escaping () -> Void) -> some View {
-        Button { Vigil.tap(); action() } label: { Text(title).font(.caption.weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 11).background(Vigil.indigo, in: Capsule()) }
+        Button { Vigil.tap(); action() } label: { Text(title).font(IrisUI.font(.caption).weight(.semibold)).padding(.horizontal, 16).padding(.vertical, 11).background(Vigil.indigo, in: Capsule()) }
     }
 }
 struct BreathingResetView: View {
@@ -85,13 +85,13 @@ struct BreathingResetView: View {
             let remaining = max(0, Int(ceil(deadline.timeIntervalSince(context.date))))
             let inhale = remaining % 8 >= 4
             VStack(spacing: 32) {
-                Text(remaining == 0 ? "A fresh start" : "Make a little space").font(.title2.weight(.semibold))
+                Text(remaining == 0 ? "A fresh start" : "Make a little space").font(IrisUI.font(.title2).weight(.semibold))
                 ZStack {
                     Circle().fill(Vigil.indigo).frame(width: 220, height: 220).scaleEffect(inhale && !reduceMotion ? 1.1 : 0.9).animation(.easeInOut(duration: 4), value: inhale)
                     Circle().stroke(Vigil.cyan.opacity(0.6), lineWidth: 2).frame(width: 220, height: 220)
-                    VStack { Text(remaining == 0 ? "Ready" : inhale ? "Breathe in" : "Breathe out").font(.title3); Text("\(remaining)s").monospacedDigit().foregroundStyle(.secondary) }
+                    VStack { Text(remaining == 0 ? "Ready" : inhale ? "Breathe in" : "Breathe out").font(IrisUI.font(.title3)); Text("\(remaining)s").monospacedDigit().foregroundStyle(.secondary) }
                 }
-                Text("Choose what deserves your attention next.").font(.subheadline).foregroundStyle(.secondary)
+                Text("Choose what deserves your attention next.").font(IrisUI.font(.subheadline)).foregroundStyle(.secondary)
                 Button(remaining == 0 ? "Done" : "End reset") { dismiss() }.buttonStyle(.bordered)
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Vigil.canvas).tint(Vigil.cyan)
         }.preferredColorScheme(.dark)

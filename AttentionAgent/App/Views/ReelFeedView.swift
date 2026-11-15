@@ -37,7 +37,7 @@ struct ReelFeedView: View {
         HStack(spacing: 6) {
             Circle().fill(session.isMonitoring ? Color.red : Color.gray).frame(width: 8, height: 8)
             Text(session.isMonitoring ? "Monitoring  \(session.reelCount)" : "Not monitoring")
-                .font(.caption.bold())
+                .font(IrisUI.font(.caption).bold())
         }
         .padding(.horizontal, 10).padding(.vertical, 6)
         .background(.ultraThinMaterial, in: Capsule())
@@ -85,7 +85,7 @@ struct ReelCardView: View {
                     Image(systemName: "paperplane")
                     Image(systemName: "ellipsis")
                 }
-                .font(.title)
+                .font(IrisUI.font(.title))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .padding(.trailing, 16)

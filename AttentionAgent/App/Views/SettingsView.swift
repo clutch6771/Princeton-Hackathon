@@ -23,11 +23,11 @@ struct SettingsView: View {
                 permission("Allow Speech", icon: "waveform")
                 permission("Allow Screen Recording", icon: "record.circle")
             } footer: { Text("Permissions open Apple Settings. Screen recording is approved each time you start a broadcast.") }
-        }.scrollContentBackground(.hidden).background(Vigil.background).navigationTitle("Settings")
+        }.scrollContentBackground(.hidden).background(IrisUI.liveBackdrop ? AnyShapeStyle(.clear) : AnyShapeStyle(Vigil.background)).navigationTitle("Settings")
     }
     private func permission(_ title: String, icon: String) -> some View {
         Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
-            HStack { Label(title, systemImage: icon); Spacer(); Image(systemName: "arrow.up.right").font(.caption).foregroundStyle(.secondary) }
+            HStack { Label(title, systemImage: icon); Spacer(); Image(systemName: "arrow.up.right").font(IrisUI.font(.caption)).foregroundStyle(.secondary) }
         }.foregroundStyle(.primary)
     }
 }
@@ -50,19 +50,19 @@ struct NotificationPreferencesView: View {
                 }.accessibilityValue(fields.split(separator: ",").contains(Substring(key)) ? "Selected" : "Not selected")
             }
             Section("Notification delivery") {
-                Text(bannerStatus).font(.subheadline)
-                Text("Reels detected this broadcast: \(SharedStore.broadcastReelCount)").font(.caption)
+                Text(bannerStatus).font(IrisUI.font(.subheadline))
+                Text("Reels detected this broadcast: \(SharedStore.broadcastReelCount)").font(IrisUI.font(.caption))
                 if let scheduled = SharedStore.lastNotificationScheduled {
-                    Text("Last scheduled: \(scheduled.formatted(date: .abbreviated, time: .standard))").font(.caption)
-                } else { Text("No notification scheduled yet.").font(.caption) }
-                if !deliveryStatus.isEmpty { Text(deliveryStatus).font(.caption) }
+                    Text("Last scheduled: \(scheduled.formatted(date: .abbreviated, time: .standard))").font(IrisUI.font(.caption))
+                } else { Text("No notification scheduled yet.").font(IrisUI.font(.caption)) }
+                if !deliveryStatus.isEmpty { Text(deliveryStatus).font(IrisUI.font(.caption)) }
             }
             Section("Try your preferences") {
                 let sample = CheckpointDigest(totalReelsWatched: 15, flaggedReels: (0..<3).map { _ in FlaggedReelEvent(id: UUID(), timestamp: Date(), topic: "Debate", emotionTag: "anger", dwellSeconds: 12) }, userGoalConflict: nil, coachHookMessage: "Some reels felt heated. Take a moment to reset your feed.", suggestedAction: "Pause for a breath.")
                 if let preview = try? AgentNotification.content(for: sample) {
-                    Text(preview.title).font(.headline)
-                    if !preview.subtitle.isEmpty { Text(preview.subtitle).font(.caption) }
-                    Text(preview.body).font(.subheadline)
+                    Text(preview.title).font(IrisUI.font(.headline))
+                    if !preview.subtitle.isEmpty { Text(preview.subtitle).font(IrisUI.font(.caption)) }
+                    Text(preview.body).font(IrisUI.font(.subheadline))
                 }
                 Button("Send Test Notification") {
                     Task {
@@ -79,8 +79,8 @@ struct NotificationPreferencesView: View {
                         } catch { testStatus = error.localizedDescription }
                     }
                 }
-                if let testStatus { Text(testStatus).font(.caption) }
-                if let error = SharedStore.notificationError { Text(error).font(.caption).foregroundStyle(Vigil.coral) }
+                if let testStatus { Text(testStatus).font(IrisUI.font(.caption)) }
+                if let error = SharedStore.notificationError { Text(error).font(IrisUI.font(.caption)).foregroundStyle(Vigil.coral) }
             }
         }.navigationTitle("Notification Preferences")
             .task { await refreshNotificationStatus() }

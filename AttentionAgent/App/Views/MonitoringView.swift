@@ -9,7 +9,7 @@ struct MonitoringView: View {
             VStack(alignment: .leading, spacing: 24) {
                 if recent.isEmpty { ContentUnavailableView("Your sessions will appear here", systemImage: "chart.bar", description: Text("Start monitoring to record your first session.")) }
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Flagged per session").font(.headline)
+                    Text("Flagged per session").font(IrisUI.font(.headline))
                     Chart(Array(recent.enumerated()), id: \.element.id) { index, item in
                         BarMark(x: .value("Session", "\(index + 1)"), y: .value("Flagged", Double(item.flagged) / Double(max(1, item.total))))
                             .foregroundStyle(Vigil.coral).cornerRadius(5)
@@ -17,7 +17,7 @@ struct MonitoringView: View {
                         .chartXAxisLabel("Last seven sessions · oldest to newest").frame(height: 220)
                 }.vigilCard()
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Reels per session").font(.headline)
+                    Text("Reels per session").font(IrisUI.font(.headline))
                     Chart(Array(recent.enumerated()), id: \.element.id) { index, item in
                         BarMark(x: .value("Session", "\(index + 1)"), y: .value("Reels", item.flagged)).foregroundStyle(by: .value("Type", "Flagged"))
                         BarMark(x: .value("Session", "\(index + 1)"), y: .value("Reels", max(0, item.total - item.flagged))).foregroundStyle(by: .value("Type", "Neutral"))

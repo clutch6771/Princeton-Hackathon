@@ -14,9 +14,11 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
-            FriendlyEye(open: session.isMonitoring).frame(width: 150, height: 90)
-                .accessibilityLabel(session.isMonitoring ? "Eye open, monitoring" : "Eye closed, resting")
-                .padding(.bottom, 44)
+            Group {
+                // Opens once the system broadcast prompt is confirmed, closes when monitoring stops.
+                if IrisUI.irisEye { IrisEye(open: session.isMonitoring).frame(width: 150, height: 122).padding(.bottom, 28) }
+                else { FriendlyEye(open: session.isMonitoring).frame(width: 150, height: 90).padding(.bottom, 44) }
+            }.accessibilityElement().accessibilityLabel(session.isMonitoring ? "Eye open, monitoring" : "Eye closed, resting")
             Button {
                 Vigil.tap()
                 if session.isMonitoring { session.stop() }
@@ -25,7 +27,7 @@ struct HomeView: View {
                 }
             } label: {
                 Text(session.isMonitoring ? "STOP" : "START")
-                    .font(.system(size: 30, weight: .bold, design: .rounded)).tracking(2)
+                    .font(IrisUI.font(size: 30)).tracking(2)
                     .foregroundStyle(Vigil.canvas).frame(width: 190, height: 190)
                     .background(session.isMonitoring ? LinearGradient(colors: [Vigil.coral, Vigil.indigo], startPoint: .topLeading, endPoint: .bottomTrailing) : Vigil.accent, in: Circle())
                     .shadow(color: (session.isMonitoring ? Vigil.coral : .green).opacity(0.18), radius: 28, y: 8)
@@ -39,14 +41,14 @@ struct HomeView: View {
                 .animation(Vigil.spring, value: ratio)
                 .accessibilityLabel("Flagged share of watched reels").accessibilityValue("\(Int(ratio * 100)) percent")
             HStack {
-                VStack(spacing: 5) { Text("\(session.sessionFlagged)").foregroundStyle(Vigil.coral); Text("Flagged").font(.caption).foregroundStyle(.secondary) }
+                VStack(spacing: 5) { Text("\(session.sessionFlagged)").foregroundStyle(Vigil.coral); Text("Flagged").font(IrisUI.font(.caption)).foregroundStyle(.secondary) }
                 Spacer()
-                VStack(spacing: 5) { Text("\(max(0, session.sessionTotal - session.sessionFlagged))"); Text("Unflagged").font(.caption).foregroundStyle(.secondary) }
+                VStack(spacing: 5) { Text("\(max(0, session.sessionTotal - session.sessionFlagged))"); Text("Unflagged").font(IrisUI.font(.caption)).foregroundStyle(.secondary) }
                 Spacer()
-                VStack(spacing: 5) { Text("\(session.sessionTotal)"); Text("Watched").font(.caption).foregroundStyle(.secondary) }
-            }.font(.headline.monospacedDigit()).frame(maxWidth: 300).padding(.top, 18)
+                VStack(spacing: 5) { Text("\(session.sessionTotal)"); Text("Watched").font(IrisUI.font(.caption)).foregroundStyle(.secondary) }
+            }.font(IrisUI.font(.headline).monospacedDigit()).frame(maxWidth: 300).padding(.top, 18)
             Text(session.sessionTotal == 0 ? "No completed reels detected yet" : "Most recent session")
-                .font(.caption).foregroundStyle(.secondary).padding(.top, 12)
+                .font(IrisUI.font(.caption)).foregroundStyle(.secondary).padding(.top, 12)
             Spacer(minLength: 24)
         }.frame(maxWidth: .infinity).toolbar(.hidden, for: .navigationBar)
             .alert("Some features are unavailable", isPresented: $showPermissionNotice) {

@@ -10,6 +10,9 @@ enum Vigil {
     static let background = LinearGradient(colors: [canvas, Color(red: 0.10, green: 0.11, blue: 0.30), Color(red: 0.16, green: 0.10, blue: 0.32), Color(red: 0.03, green: 0.23, blue: 0.26)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let accent = LinearGradient(colors: [.blue, Color(red: 0.5, green: 0.35, blue: 0.95), cyan, Color(red: 0.3, green: 0.9, blue: 0.65)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let spring = Animation.spring(response: 0.45, dampingFraction: 0.8)
+    @ViewBuilder static var backdrop: some View {
+        if IrisUI.liveBackdrop { IrisBackdrop().ignoresSafeArea() } else { Rectangle().fill(background).ignoresSafeArea() }
+    }
     static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
 }
 extension View {
@@ -23,25 +26,27 @@ struct RootView: View {
     @AppStorage("vigilDigestArchive", store: UserDefaults(suiteName: AppConfig.appGroupID)) private var archiveData = Data()
     @Environment(\.scenePhase) private var phase
     @State private var wasBackground = false
+    init() { IrisUI.install() }
     var body: some View {
-        VStack(spacing: 0) {
-            NavigationStack {
-                Group {
-                    switch session.selectedTab {
-                    case .coach: ChatView()
-                    case .session: MonitoringView()
-                    case .settings: SettingsView()
-                    default: HomeView()
-                    }
-                }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Vigil.background)
-            }.id(session.selectedTab)
+        NavigationStack {
+            Group {
+                switch session.selectedTab {
+                case .coach: ChatView()
+                case .session: MonitoringView()
+                case .settings: SettingsView()
+                default: HomeView()
+                }
+            }.frame(maxWidth: .infinity, maxHeight: .infinity).background { Vigil.backdrop }
+        }.id(session.selectedTab)
+        // The tab bar floats over the screen's backdrop so the backdrop is one continuous surface.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             HStack {
                 tab(.home, "house", "Home")
                 tab(.coach, "bubble.left.and.bubble.right", "Chat")
                 tab(.session, "chart.bar", "Statistics")
                 tab(.settings, "gearshape", "Settings")
-            }.padding(.vertical, 18).background(Vigil.background)
-        }.background(Vigil.background).tint(Vigil.cyan).preferredColorScheme(.dark)
+            }.padding(.vertical, 18)
+        }.background(Vigil.background).font(IrisUI.font(.body)).tint(Vigil.cyan).preferredColorScheme(.dark)
         .onChange(of: phase) { _, value in
             if value == .active { session.refreshBroadcastState() }
             if value == .background { wasBackground = true; session.saveConversationMemory() }
