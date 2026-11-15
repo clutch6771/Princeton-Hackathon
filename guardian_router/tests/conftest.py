@@ -122,3 +122,11 @@ def clean_process_state() -> Iterator[None]:
     yield
     locks.set_provider(locks.LocalLocks())
     background.reset()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    # Shared with guardian/tests, whose fixtures these tests import.
+    config.addinivalue_line(
+        "markers",
+        "postgres: needs TEST_DATABASE_URL pointing at a disposable Postgres database.",
+    )
