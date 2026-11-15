@@ -28,24 +28,23 @@ struct RootView: View {
     @State private var wasBackground = false
     init() { IrisUI.install() }
     var body: some View {
-        NavigationStack {
-            Group {
-                switch session.selectedTab {
-                case .coach: ChatView()
-                case .session: MonitoringView()
-                case .settings: SettingsView()
-                default: HomeView()
-                }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background { Vigil.backdrop }
-        }.id(session.selectedTab)
-        // The tab bar floats over the screen's backdrop so the backdrop is one continuous surface.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        VStack(spacing: 0) {
+            NavigationStack {
+                Group {
+                    switch session.selectedTab {
+                    case .coach: ChatView()
+                    case .session: MonitoringView()
+                    case .settings: SettingsView()
+                    default: HomeView()
+                    }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity).background { Vigil.backdrop }
+            }.id(session.selectedTab)
             HStack {
                 tab(.home, "house", "Home")
                 tab(.coach, "bubble.left.and.bubble.right", "Chat")
                 tab(.session, "chart.bar", "Statistics")
                 tab(.settings, "gearshape", "Settings")
-            }.padding(.vertical, 18)
+            }.padding(.vertical, 18).background(Vigil.background)
         }.background(Vigil.background).font(IrisUI.font(.body)).tint(Vigil.cyan).preferredColorScheme(.dark)
         .onChange(of: phase) { _, value in
             if value == .active { session.refreshBroadcastState() }

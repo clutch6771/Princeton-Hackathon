@@ -27,12 +27,12 @@ final class IrisBackdropView: UIView {
     }
 
     private static let plan = [
-        Glow(color: IrisUI.purple, alpha: 0.50,
-             route: [CGPoint(x: 0.85, y: 0.15), CGPoint(x: 0.35, y: 0.30), CGPoint(x: 0.60, y: 0.65), CGPoint(x: 1.00, y: 0.45)], period: 37),
-        Glow(color: IrisUI.teal, alpha: 0.26,
-             route: [CGPoint(x: 0.10, y: 0.85), CGPoint(x: 0.55, y: 0.95), CGPoint(x: 0.30, y: 0.55), CGPoint(x: -0.05, y: 0.60)], period: 47),
-        Glow(color: IrisUI.mint, alpha: 0.15,
-             route: [CGPoint(x: 0.95, y: 0.90), CGPoint(x: 0.65, y: 0.75), CGPoint(x: 0.80, y: 1.05), CGPoint(x: 1.10, y: 0.80)], period: 59),
+        Glow(color: IrisUI.purple, alpha: 0.64,
+             route: [CGPoint(x: 0.85, y: 0.15), CGPoint(x: 0.35, y: 0.30), CGPoint(x: 0.60, y: 0.65), CGPoint(x: 1.00, y: 0.45)], period: 25),
+        Glow(color: IrisUI.teal, alpha: 0.42,
+             route: [CGPoint(x: 0.10, y: 0.85), CGPoint(x: 0.55, y: 0.95), CGPoint(x: 0.30, y: 0.55), CGPoint(x: -0.05, y: 0.60)], period: 32),
+        Glow(color: IrisUI.mint, alpha: 0.27,
+             route: [CGPoint(x: 0.95, y: 0.90), CGPoint(x: 0.65, y: 0.75), CGPoint(x: 0.80, y: 1.05), CGPoint(x: 1.10, y: 0.80)], period: 40),
     ]
 
     override init(frame: CGRect) {
@@ -114,9 +114,9 @@ final class IrisBackdropView: UIView {
         dust.isHidden = still
         guard !still else { return }
 
-        base.add(sweep("colors", from: Self.restColors, to: Self.driftColors, period: 19), forKey: "colors")
-        base.add(sweep("startPoint", from: CGPoint(x: 0, y: 0), to: CGPoint(x: 0.4, y: 0), period: 23), forKey: "start")
-        base.add(sweep("endPoint", from: CGPoint(x: 1, y: 1), to: CGPoint(x: 0.6, y: 1), period: 23), forKey: "end")
+        base.add(sweep("colors", from: Self.restColors, to: Self.driftColors, period: 11), forKey: "colors")
+        base.add(sweep("startPoint", from: CGPoint(x: 0, y: 0), to: CGPoint(x: 0.4, y: 0), period: 14), forKey: "start")
+        base.add(sweep("endPoint", from: CGPoint(x: 1, y: 1), to: CGPoint(x: 0.6, y: 1), period: 14), forKey: "end")
 
         for (layer, glow) in zip(glows, Self.plan) {
             let drift = CAKeyframeAnimation(keyPath: "position")
@@ -158,10 +158,10 @@ final class IrisBackdropView: UIView {
     }
 
     private static let restColors: [CGColor] = [
-        blend(IrisUI.deep, .black, 0.5), IrisUI.deep.cgColor, blend(IrisUI.deep, IrisUI.purple, 0.45),
+        blend(IrisUI.deep, .black, 0.65), IrisUI.deep.cgColor, blend(IrisUI.deep, IrisUI.purple, 0.6),
     ]
     private static let driftColors: [CGColor] = [
-        IrisUI.deep.cgColor, blend(IrisUI.deep, IrisUI.purple, 0.3), blend(IrisUI.deep, IrisUI.teal, 0.3),
+        blend(IrisUI.deep, IrisUI.purple, 0.25), blend(IrisUI.deep, IrisUI.teal, 0.3), blend(IrisUI.deep, IrisUI.mint, 0.4),
     ]
 
     // Soft 12 pt dot, about 2 KB.
