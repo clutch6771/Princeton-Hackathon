@@ -12,6 +12,8 @@ Three short conversations against the real model, each on a fresh standalone ser
      reflection question, a note saved from the answer, a refinement after a
      disagreement, and reopening the chat without a new model call.
   C. A session review: the Reflector's cards arrive through the chat.
+  D. Returning to the app: a message that arrives with a new digest, or with a
+     "What I learned" card waiting, is answered in the same reply.
 
 It prints every reply. Uses API quota and takes several minutes. Nothing is stored
 outside this process.
@@ -24,11 +26,14 @@ import sys
 import threading
 import time
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 import uvicorn
+from langgraph.store.memory import InMemoryStore
 
+from guardian.memory import inbox
 from guardian_router.chat_adapter import CARD_ENDING
 from guardian_router.standalone import create_app
 
@@ -54,6 +59,17 @@ ONBOARDING_ANSWERS = (
     "scroll late at night when I'm stressed about exams.",
     "That's everything. Please write it up.",
     "Yes, go ahead.",
+)
+
+
+# A "What I learned" card as the Reflector wrote it in an earlier live review.
+LEARNED_CARD = (
+    "- You disagreed with several flags on injury rehab reels, because they are about "
+    "recovery rather than physique comparison. [fb_001, fb_003, fb_005, fb_006, fb_008]\n"
+    "- You marked dropshipping and crypto hustle content as not for you. "
+    "[fb_002, fb_004, fb_007]\n\n"
+    "What makes injury recovery progress feel motivating rather than comparable to "
+    "aesthetic transformations?"
 )
 
 
@@ -199,8 +215,35 @@ def review(port: int) -> None:
     print(f"\nvalues.md after the review:\n{memory(client, 'values.md')}")
 
 
+def returning(port: int) -> None:
+    section("D. Returning to the app: the first message is always answered")
+    print(
+        "\n--- D1. A message that arrives with a new digest and is not about the reels"
+    )
+    client = serve(port, seeded=True, launch=no_background)
+    flagged = digest("rl_014", "rl_015")
+    say(client, "Can you remind me what my values are?", flagged)
+    say(client, "Yes please", flagged)
+
+    print("\n--- D2. A message that arrives while a 'What I learned' card is waiting")
+    print("(the card is placed in the inbox directly; no review is run here)")
+    store = InMemoryStore()
+    client = serve(port + 10, seeded=True, launch=no_background, store=store)
+    card = inbox.new_card(
+        "demo-user",
+        inbox.KIND_LEARNED,
+        LEARNED_CARD,
+        datetime.now(UTC),
+        card_id=inbox.learned_card_id("s_001"),
+        session_id="s_001",
+    )
+    inbox.add_card(store, card)
+    say(client, "Quick question: how do I change one of my values?")
+    say(client, "The rehab ones feel like progress, not showing off.")
+
+
 def main() -> int:
-    runs = {"A": onboarding, "B": reflection, "C": review}
+    runs = {"A": onboarding, "B": reflection, "C": review, "D": returning}
     ports = {name: FIRST_PORT + offset for offset, name in enumerate(runs)}
     for name in sys.argv[1:] or list(runs):
         runs[name](ports[name])
