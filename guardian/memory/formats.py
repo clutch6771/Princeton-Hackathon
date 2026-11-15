@@ -22,7 +22,7 @@ QUOTE_CHARACTERS = "\"'“”‘’"
 
 FORMAT_HELP = """A value entry has exactly these six lines:
 ## V<number>: <title> (strength: low | medium | high)
-- Want more: ...
+- Want more: ... (or "none")
 - Want less: ...
 - Unless: ... (or "none")
 - In my words: "<exact quote of the user>"
@@ -45,6 +45,7 @@ _WORDING = re.compile(
 )
 _VALUE_ID = re.compile(r"^V[1-9]\d*$")
 _APPROVED_STAMP = re.compile(r"approved \d{4}-\d{2}-\d{2}")
+_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 _CANONICAL_LABEL = {label.lower(): label for label in WORDING_LABELS}
 
 
@@ -162,6 +163,11 @@ def stamp_approved(evidence: str, day: date) -> str:
     parts = [part.strip(" .") for part in _APPROVED_STAMP.sub("", evidence).split(";")]
     kept = [part for part in parts if part]
     return "; ".join([*kept, f"approved {day.isoformat()}"])
+
+
+def dates_written(evidence: str) -> list[str]:
+    """Dates in an Evidence line other than the approval stamp, which code writes."""
+    return _DATE.findall(_APPROVED_STAMP.sub("", evidence))
 
 
 def same_text(first: str, second: str) -> bool:

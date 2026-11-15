@@ -53,6 +53,8 @@ Request:
 {"message": "hi", "context": null}
 ```
 
+**An empty message** (`"message": ""`) means the app has just opened the chat screen. The Guardian speaks first: a greeting and its first question during onboarding, the explanation when `context` carries a drift notification, otherwise a follow-up on something the user said or a question about one of their values. If its last message is still unanswered, the same message comes back again without a model call.
+
 Response, a plain reply:
 
 ```json

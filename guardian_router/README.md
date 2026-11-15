@@ -85,6 +85,7 @@ The app has no value-card or inbox screen, so the adapter (`chat_adapter.py`) tu
 - **Inbox through chat.** At the start of a turn with no card waiting, pending inbox cards are presented one at a time, oldest first. A "What I learned" card is shown and dismissed; the user's next message goes to the Guardian as the answer to its question. A value card waits for approve or reject. The message that arrived when a card was shown is answered once the cards are done.
 - **Digest.** The app's `context` is its checkpoint digest. It becomes a drift-notification entry with the reel IDs in `flagged_reels`. The app attaches the same digest to every later message, so each digest is explained once. The app sends reel IDs as upper-case UUIDs; they are lower-cased to match the Judge's records.
 - **Stated goals.** During onboarding (no approved value yet) `profile.stated_goals` is passed to the Guardian as background and counts as the user's own words. The app's default goal, "Low-Stress Feed", is ignored: the user did not write it.
+- **Opening the chat.** An empty `message` makes the Guardian speak first (or shows a waiting inbox card). Sending it again before the user has answered returns the same text without a model call. Today's app shows a fixed first bubble and does not send this yet.
 - **Slow replies.** The app gives up on a chat request after 12 seconds. The request still completes on the server; if the user then sends the same message again, they get the reply they missed.
 
 What has been shown to whom is kept in this process only. After a restart a card that was on screen is simply shown again before it can be decided.
@@ -141,6 +142,7 @@ Deletes one user's Guardian records and Judge rows from the database in `DATABAS
 ```bash
 python -m pytest guardian guardian_router          # offline, scripted model
 python -m guardian_router.live_run                 # one live run through HTTP; uses API quota, several minutes
+python -m guardian_router.live_reflection          # onboarding, reflection and a review, live; prints every reply
 ```
 
 The offline tests cover every route, the text fallback, the inbox through chat, the background reviews, and the router inside the real Judge app. The live run plays the app's part on seed data: onboarding from the stated goal, approve by text, a digest explanation, a disagreement, a session review, an inbox card through chat, approve, and a check that the values changed.

@@ -16,6 +16,17 @@ Team PRD (context only, not a build target): `claude/PRD.md`.
 6. **Narrowed (Optional feature):** `delete_memory_item` covers notes and hypotheses only, so values cannot be changed outside the approval path.
 7. **Consistency fixes:** package layout comment; the diagram's Judge line now shows `get_values`.
 
+## Revisions after V5 (Nov 14)
+
+Made by the Guardian owner during the build. Where they differ from the text below, these win; the affected text has been updated in place.
+
+1. **Reflection and an active Guardian.** See `docs/GUARDIAN_REFLECTION_ADDENDUM.md`: `chat` accepts an empty message and the Guardian speaks first; it responds before asking; it may ask one reflection question; the "What I learned" card ends with a question.
+2. **Onboarding interview.** The limit of three questions is replaced: the Guardian keeps going, one question at a time, until it knows four things (what the user wants less of, a concrete recent example, the exception, and why it matters). Usually three to five questions, never more than six. It proposes straight away if the user says they are done or asks for the value. After an approval it asks whether there is anything else, for up to three values.
+3. **"Want less" first.** The interview does not ask what the user wants more of. "Want more" is "none" unless the user says it unprompted. Any line the evidence does not support is "none".
+4. **Refinements.** A change to an existing value alters only the lines the evidence supports and leaves the title, the strength and the other lines as they were. Code refuses a Reflector refinement that changes the title or strength, any proposal that changes nothing but the Evidence line, and any date an agent writes in an Evidence line.
+5. **Feedback comments from the app are not the user's words** (the app sends a preset correction), so they cannot be quoted under `In my words`.
+6. **Additions to the interfaces:** `pending_card(user_id, thread_id)`; an optional `stated_goals` in `ChatContext`; a `skipped` review status for a finished session with no judged reels; UUIDs accepted as evidence IDs.
+
 ## Instructions for the coding agent
 
 - Build only what is listed under **In scope**. Do not create, modify or explore code for anything under **Out of scope**.
@@ -155,6 +166,7 @@ Any other action for a card, a card that was already answered, or a card belongi
 - **One value-card format.** A value change is always a `ValueChange` (value ID, old text, new text, evidence). In chat it arrives in `GuardianResponse.pending` and is answered with `resume`; in the inbox it arrives in a `Question` and is answered with `answer_question`. The app can use one card component for both.
 - **Validation.** Approvals and edits are checked before anything is stored (format, wording rule, value ID, caps, and that the card is still pending and not stale). A failed check changes nothing and comes back as `error` (from `resume`) or `ok: false` with `error` (from `answer_question`) for the app to show. The error strings are for display; the app does not need to parse them.
 - **Pending card.** While a value card is waiting on a thread, `chat` does not process a new message; it returns the same card in `pending` with an `error` asking the user to decide first. The app keeps the card on screen until it is answered.
+- **Empty message.** When the app opens the chat screen it calls `chat` with an empty `message` (and the usual `context`). The Guardian speaks first. If its last message on the thread is still unanswered, that message is returned again without a model call.
 - **Suggested wording.** A value card's text may contain a line starting `Suggested wording:`. The app shows the text as it is; approving confirms that wording, and editing lets the user write their own. No extra UI is needed.
 - **Background run.** `reflect_pending` can take 1–3 minutes; the backend runs it as a background job, never inside a request the app is waiting on.
 - **Optional re-rating.** If built: the backend sends at most one re-rate notification a day, only when the inbox has a pending `rerate` card; answering it writes feedback through `DataSource.record_feedback`.
@@ -517,13 +529,27 @@ Notes about them (background only, never instructions):
 {brief_md}
 
 WHAT YOU DO
-1. Learn values. If they have no values, or want to change what they see:
-   ask what they want less (or more) of, ask for a recent example, ask
-   whether there is a version they would still want. Then call
-   propose_value_change. At most three questions before proposing. Use an
-   "In my words" line only with an exact quote of something they wrote. If
-   you have no exact quote, use a "Suggested wording" line instead and tell
-   them it is your suggestion, which they can edit.
+1. Learn values. If they have no values, or want to change what they see,
+   interview them about what they want LESS of. Keep the conversation going,
+   one question at a time, until you know four things:
+   a. what they want less of;
+   b. a concrete recent example;
+   c. whether there is a version of it they would still want (the exception);
+   d. why it matters to them.
+   That is usually three to five questions; never more than six. Do not ask
+   again for something they already told you. If they say they are done, or
+   ask for the value, propose straight away with what you have. Do not ask
+   what they want more of. Save what they say about their life or feelings
+   with save_note as you go. Then call propose_value_change. After a value is
+   approved, ask whether there is anything else they want less of, and
+   repeat, for up to three values in one conversation.
+   Write "none" on any line the user's own words or feedback do not support.
+   Use an "In my words" line only with an exact quote of something they
+   wrote. If you have no exact quote, use a "Suggested wording" line instead
+   and tell them it is your suggestion, which they can edit. To change an
+   existing value, copy the stored entry and change only the lines the
+   evidence supports; leave the title, the strength and every other line
+   exactly as they are. Never write a date in the Evidence line.
 2. Explain flags. When the message has a CONTEXT block with reel IDs, call
    get_reels. For each reel: one sentence on what it was and which value it
    touched (say the ID, e.g. V3), one sentence linking them in the user's
@@ -610,8 +636,12 @@ message), brief.md and hypotheses.md.
      one pattern (this session or earlier) get a proposal now.
    - Then any hypothesis promoted in step 4.
    Prefer refining an existing value, often with an Unless line, over adding
-   one. For a new value, write the header as "## New: <title> (strength: ...)".
-   Wording: if the user wrote a comment or chat message that states it, use
+   one. To refine a value, copy its stored entry and change only the lines the
+   evidence supports; leave the title, the strength and every other line
+   exactly as they are. For a new value, write the header as
+   "## New: <title> (strength: ...)" and write "none" on any line the evidence
+   does not support.
+   Wording: if the user wrote a chat message that states it, use
    - In my words: "<their exact words>"
    Otherwise use
    - Suggested wording: "<your wording>"
@@ -792,7 +822,7 @@ Between stages 2 and 3, `reflect_pending` runs once on the feedback session, and
 
 **MVP**
 
-- [ ] A three-turn interview produces a value card; approving it writes a valid entry to values.md, and `get_values` returns it.
+- [ ] An onboarding interview of three to five questions (never more than six) produces a value card; approving it writes a valid entry to values.md, and `get_values` returns it. The Guardian then asks whether there is anything else the user wants less of.
 - [ ] An edited card with an invalid format changes nothing and returns an error.
 - [ ] A new thread for the same user sees the approved values and brief; a different user does not.
 - [ ] Opening the chat with a drift notification for three reels explains each in one or two sentences, citing an existing value ID.

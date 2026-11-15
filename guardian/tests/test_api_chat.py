@@ -346,7 +346,6 @@ def test_card_can_be_decided_even_if_the_paused_run_was_lost(start, store, datas
         (USER, "2026-11-14", "hi"),
         ("", ":2026-11-14", "hi"),
         ("bad:user", "bad:user:2026-11-14", "hi"),
-        (USER, THREAD, "   "),
     ],
 )
 def test_chat_rejects_invalid_input_without_calling_the_model(

@@ -43,6 +43,7 @@ EMPTY_FILE = "(empty)"
 QUIT_COMMANDS = ("/quit", "/exit")
 
 HELP = """Type a message to chat. Commands:
+  /open      open the chat without typing, so the Guardian speaks first
   /drift     open the chat from a drift notification on reels rl_014, rl_015, rl_016
   /approve   approve the value card that is waiting
   /edit      edit the waiting card: paste the new entry, then an empty line
@@ -173,6 +174,8 @@ def handle(session: Session, line: str, read_block: Callable[[], str]) -> list[s
     command = text.split()[0].lower()
     if command == "/help":
         return [HELP]
+    if command == "/open":
+        return render(api.chat(user_id, thread_id, ""))
     if command == "/drift":
         context = ChatContext(entry="drift_notification", reel_ids=list(DRIFT_REELS))
         return render(api.chat(user_id, thread_id, DRIFT_QUESTION, context=context))

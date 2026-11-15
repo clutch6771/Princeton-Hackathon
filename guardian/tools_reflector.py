@@ -15,7 +15,7 @@ from langchain.tools import tool
 
 from guardian.datasource import Feedback, Reel, parse_time
 from guardian.deps import Deps, ReflectorRun
-from guardian.memory import inbox, notes, proposals, records
+from guardian.memory import formats, inbox, notes, proposals, records, values
 from guardian.tools_chat import REFUSED_PREFIX, excerpt, format_profile
 
 SESSION_FILE = "/scratch/session.jsonl"
@@ -165,6 +165,31 @@ def _queue_question_tool(deps: Deps, run: ReflectorRun) -> Any:
     return queue_question
 
 
+def refinement_problem(deps: Deps, user_id: str, change: dict[str, Any]) -> str | None:
+    """Why a change to an existing value goes further than a refinement, if it does.
+
+    Nobody is there to ask for a new title or strength during a review, so a
+    refinement must keep both. Which other lines it may change depends on the
+    evidence, which the skill covers.
+    """
+    stored = values.get_value(deps.store, user_id, change["value_id"])
+    proposed = formats.parse_entry(change["new_text"]).entry
+    current = formats.parse_entry(stored.text).entry if stored else None
+    if current is None or proposed is None:
+        return None  # a new value, or a format problem reported by the checks below
+    if not formats.same_text(proposed.title, current.title):
+        return (
+            f'a refinement keeps the value\'s title, "{current.title}". Copy the '
+            "stored entry and change only the lines your evidence supports."
+        )
+    if proposed.strength.lower() != current.strength.lower():
+        return (
+            f"a refinement keeps the value's strength ({current.strength}). Copy the "
+            "stored entry and change only the lines your evidence supports."
+        )
+    return None
+
+
 def stage_value_change(
     deps: Deps, run: ReflectorRun, prompt: str, value_change: dict[str, Any] | None
 ) -> str:
@@ -186,6 +211,10 @@ def stage_value_change(
             f"{REFUSED_PREFIX}the user's inbox already holds {inbox.MAX_PENDING} cards, "
             "the maximum. Queue nothing more this run."
         )
+
+    kept = refinement_problem(deps, run.user_id, change)
+    if kept:
+        return f"{REFUSED_PREFIX}{kept}"
 
     now = deps.clock()
     created = proposals.create_proposal(

@@ -32,7 +32,14 @@ message), brief.md and hypotheses.md.
      propose a new value for it with "Suggested wording".
    - Then any hypothesis promoted in step 4.
    Prefer refining an existing value, often with an Unless line, over adding
-   one. For a new value, write the header as "## New: <title> (strength: ...)".
+   one. To refine a value, copy its stored entry and change only the lines the
+   evidence supports, usually one. Leave the title, the strength and every
+   other line exactly as they are, word for word; a refinement that changes
+   the title or the strength is refused.
+   For a new value, write the header as "## New: <title> (strength: ...)" and
+   write "none" on any line the evidence does not support: "Want more" is
+   "none" unless the user said what they want more of, and "Unless" is "none"
+   unless the user stated an exception. Never invent either.
    Wording: if the user wrote a chat message that states it (see
    /scratch/chats.md), use
    - In my words: "<their exact words>"
@@ -67,12 +74,15 @@ The IDs in these examples (V7, fb_101, s_020 and so on) are made up. Use the
 real IDs from this user's files; made-up IDs are refused.
 
 A value entry has exactly six lines. For a change to an existing value, copy
-the stored entry and change only what the evidence supports; keep its wording
-line exactly as it is unless you have an exact quote of the user.
+the stored entry and change only the lines the evidence supports; keep its
+title, strength and wording line exactly as they are. A line the evidence
+does not support is "none". In the Evidence line, add the new feedback or
+reel IDs after what is already there. Never write a date; the app adds the
+approval date.
 
 ```
 ## V7: <title> (strength: low | medium | high)
-- Want more: ...
+- Want more: ... (or "none")
 - Want less: ...
 - Unless: ... (or "none")
 - In my words: "<exact quote>"        (or: - Suggested wording: "<your wording>")

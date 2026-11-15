@@ -89,5 +89,17 @@ def test_redact_secrets_removes_the_key_from_text(clean_env):
     assert "status=429" in redacted
 
 
+def test_the_judges_provider_keys_are_redacted_too(clean_env, monkeypatch):
+    # The Judge runs in the same process and reads the same .env.
+    monkeypatch.setenv("XAI_API_KEY", "xai-not-a-real-key-1234")
+    monkeypatch.setenv("GEMINI_API_KEY", "gem-not-a-real-key-5678")
+
+    redacted = config.redact_secrets(
+        "failed with xai-not-a-real-key-1234 and gem-not-a-real-key-5678"
+    )
+
+    assert "not-a-real-key" not in redacted
+
+
 def test_redact_secrets_leaves_text_unchanged_without_a_key(clean_env):
     assert config.redact_secrets("nothing secret here") == "nothing secret here"

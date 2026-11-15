@@ -107,8 +107,49 @@ def test_profile_and_context_may_be_left_out(serve):
 
 def test_a_guardian_error_becomes_the_message_text(serve):
     server = serve()
+    body = {"message": "hi", "profile": {"stated_goals": ""}}
+    bad_user = {"X-Demo-User-Id": "not a valid id!"}
 
-    assert server.say("   ") == chat_flow.ERROR_EMPTY_MESSAGE
+    response = server.client.post("/agent2/chat", json=body, headers=bad_user)
+
+    assert response.status_code == 200
+    assert response.json()["text"] == chat_flow.ERROR_INVALID_USER
+
+
+# --- The Guardian speaks first ---------------------------------------------------------------
+
+
+def test_an_empty_message_gets_the_guardians_opening(serve):
+    server = serve([reply("Hi! What would you like to see less of in your feed?")])
+
+    text = server.say("")
+
+    assert text == "Hi! What would you like to see less of in your feed?"
+    assert chat_flow.OPENED_CHAT in sent_to_model(server)
+
+
+def test_opening_the_chat_twice_does_not_ask_the_model_twice(serve):
+    server = serve([reply("Does V1 still fit?")], seeded=True)
+
+    assert server.say("") == server.say("  ") == "Does V1 still fit?"
+    assert len(server.model.calls) == 1
+
+
+def test_an_opening_during_onboarding_starts_from_the_stated_goals(serve):
+    server = serve([reply("You wrote that you want less gym comparison. An example?")])
+
+    server.say("", profile={"stated_goals": "less gym comparison stuff"})
+
+    opening = sent_to_model(server)
+    assert "less gym comparison stuff" in opening and chat_flow.OPENED_CHAT in opening
+
+
+def test_opening_the_chat_with_a_card_in_the_inbox_shows_the_card(serve):
+    server = serve([reply("unused")], seeded=True)
+    server.add_learned_card()
+
+    assert server.say("").endswith("What made them easy to skip?")
+    assert server.model.calls == []
 
 
 def test_a_model_failure_is_a_readable_message_with_status_200(serve):
@@ -275,11 +316,15 @@ def test_a_digest_is_explained_once_though_the_app_sends_it_with_every_message(s
     assert "reel_ids: rl_016" in sent_to_model(server, 2)
 
 
-def test_a_digest_that_failed_is_tried_again(serve):
+def test_a_digest_that_failed_is_tried_again(serve, monkeypatch):
     server = serve([reply("Explained.")], seeded=True)
     first = digest("rl_014", digest_id="D1")
+    real_chat = api.chat
+    failed = {"reply": None, "pending": None, "error": chat_flow.ERROR_UNAVAILABLE}
+    monkeypatch.setattr(api, "chat", lambda *args: failed)
 
-    assert server.say("", context=first) == chat_flow.ERROR_EMPTY_MESSAGE
+    assert server.say("why?", context=first) == chat_flow.ERROR_UNAVAILABLE
+    monkeypatch.setattr(api, "chat", real_chat)
     server.say("why?", context=first)
 
     assert "drift_notification" in sent_to_model(server)

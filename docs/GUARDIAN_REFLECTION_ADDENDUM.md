@@ -24,6 +24,18 @@ Limits, so this scaffolds and does not steer:
 6. An opener is not repeated. If the Guardian's last message in the thread is still unanswered, `chat` with an empty `message` returns that message again without calling the model. While a value card is pending it returns the card, as before.
 7. Reaching the user while the app is closed is not this package's job and needs no new card: the "What I learned" card already carries a question. The app may schedule a local notification when the inbox holds an unread card (remote push is not available on a free developer account).
 
+## As built (Nov 14)
+
+All five behaviours are in. Differences from the text of this addendum, and additions the owner asked for at the same time:
+
+- **The opener's repeat rule knows about notifications.** `chat` keeps the Guardian's last reply per thread while it is unanswered. An empty message returns it again, with no model call, unless the context names different reels or a different session card: a new drift notification is explained even when an older message is unanswered, and opening it twice explains it once.
+- **An empty message is sent to the model as a CONTEXT block** that says the user has just opened the chat. Nothing is added to the chat log, so the quote check never sees words the user did not write.
+- **With nothing to follow up on, the opener names one value** and asks whether it still fits.
+- **After a reflection answer the Guardian asks before proposing.** If the user says a value still fits, it proposes nothing; code also refuses a card that changes nothing but the Evidence line.
+- **Onboarding interview (replaces "at most three questions").** One question at a time until four things are known: what the user wants less of, a concrete recent example, the exception, and why it matters. Usually three to five questions, never more than six; straight to the card if the user says they are done. Notes are saved along the way. After an approval the Guardian asks whether there is anything else, for up to three values.
+- **"Want less" first, and "none" for unsupported lines.** The interview does not ask what the user wants more of.
+- **A refinement changes only the lines the evidence supports.** Title, strength and the other lines stay as they were.
+
 ## Text to add to the Guardian system prompt
 
 Under WHAT YOU DO (item 0 before item 1, item 4 after item 3), and at the top of RULES:
