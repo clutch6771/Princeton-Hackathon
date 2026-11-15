@@ -59,6 +59,42 @@ def frame_text_guard(trusted_tools: frozenset[str]) -> AgentMiddleware:
     return guard
 
 
+# --- Tool allowlist -------------------------------------------------------------------
+
+
+def _tool_name(tool: Any) -> str:
+    if isinstance(tool, dict):
+        return str(tool.get("name") or tool.get("function", {}).get("name") or "")
+    return str(getattr(tool, "name", ""))
+
+
+class ToolAllowlist(AgentMiddleware):
+    """Hide every tool that is not on the list, and refuse a call to one anyway.
+
+    A deep agent comes with tools the Reflector must not have (`task`, `delete`).
+    The list fails closed: a tool added by a library upgrade stays hidden.
+    """
+
+    def __init__(self, allowed: frozenset[str]) -> None:
+        super().__init__()
+        self._allowed = allowed
+
+    def wrap_model_call(self, request: Any, handler: Callable[[Any], Any]) -> Any:
+        visible = [tool for tool in request.tools if _tool_name(tool) in self._allowed]
+        return handler(request.override(tools=visible))
+
+    def wrap_tool_call(self, request: Any, handler: Callable[[Any], Any]) -> Any:
+        name = request.tool_call["name"]
+        if name in self._allowed:
+            return handler(request)
+        return ToolMessage(
+            content=f"The tool {name} is not available.",
+            tool_call_id=request.tool_call["id"],
+            name=name,
+            status="error",
+        )
+
+
 # --- Value-citation check ---------------------------------------------------------------
 
 

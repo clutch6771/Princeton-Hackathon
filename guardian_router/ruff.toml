@@ -1,0 +1,7 @@
+# Extends the team's lint config in ../pyproject.toml (black, ruff E/F/I/B/UP/S, 88 columns).
+# Code is wrapped at 88 by black. E501 is ignored here because the lines black cannot wrap
+# are prompt text, messages shown to users, docstrings and seed data, which read worse split.
+extend = "../pyproject.toml"
+
+[lint]
+ignore = ["E501"]

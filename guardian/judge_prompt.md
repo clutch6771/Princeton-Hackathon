@@ -1,6 +1,6 @@
 # Judge prompt (draft for the Judge owner)
 
-The Judge is not built in this package. This draft lives here because it must stay in step with the values.md format and the reel record. The Judge owner adapts and owns it from here. It is copied from the appendix of the Guardian build spec (V5).
+The Judge is not built in this package. This draft lives here because it must stay in step with the values.md format and the reel record. The Judge owner adapts and owns it from here. It is copied from the appendix of the Guardian build spec (V5), with one sentence added in step 4: a line that says "none" has nothing to match. "Want more: none" is the usual case, because the Guardian's interview is about what the user wants less of.
 
 Get the values text with `guardian.api.get_values(user_id)`. It returns `""` when the user has no values; in that case return "neutral" for every reel.
 
@@ -28,6 +28,7 @@ DO THIS
    - "conflict": it matches a "Want less" line and no "Unless" line applies.
    - "aligned": it matches a "Want more" line.
    - "neutral": neither. Most reels are neutral.
+   A line that says "none" has nothing to match.
    Their past reactions to similar reels outweigh your own reading.
 5. Give the value IDs you relied on and one sentence of reason addressed to
    the person, in their terms: "Shows body comparison, which V3 says you

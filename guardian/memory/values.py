@@ -32,7 +32,7 @@ def values_namespace(user_id: str) -> tuple[str, ...]:
 
 def list_values(store: BaseStore, user_id: str) -> list[StoredValue]:
     """The user's approved values, in ID order."""
-    items = store.search(values_namespace(user_id), limit=keys.SEARCH_LIMIT)
+    items = keys.items(store, values_namespace(user_id))
     stored = [
         StoredValue(id=item.key, text=item.value["text"], updated=item.value["updated"])
         for item in items

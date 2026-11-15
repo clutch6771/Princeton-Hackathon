@@ -13,7 +13,7 @@ from datetime import datetime
 from langgraph.store.base import BaseStore
 
 from guardian.datasource import DataSource
-from guardian.memory import checks, formats, keys
+from guardian.memory import checks, formats, keys, locks
 
 MAX_NOTES = 40
 MAX_NOTE_CHARACTERS = 300
@@ -41,7 +41,7 @@ def _number(note_id: str) -> int:
 
 def list_notes(store: BaseStore, user_id: str) -> list[Note]:
     """The user's notes, in ID order."""
-    items = store.search(keys.namespace(user_id, keys.NOTES), limit=keys.SEARCH_LIMIT)
+    items = keys.items(store, keys.namespace(user_id, keys.NOTES))
     found = [
         Note(
             id=item.key,
@@ -62,7 +62,7 @@ def render_notes(store: BaseStore, user_id: str) -> str:
     )
 
 
-def save_note(
+def _save_note(
     store: BaseStore,
     datasource: DataSource,
     user_id: str,
@@ -105,6 +105,19 @@ def save_note(
         {"text": cleaned, "evidence": quote, "created": now.isoformat()},
     )
     return NoteResult(note_id, None)
+
+
+def save_note(
+    store: BaseStore,
+    datasource: DataSource,
+    user_id: str,
+    text: str,
+    evidence: str,
+    now: datetime,
+) -> NoteResult:
+    """Validate and store one note, one at a time per user, so note IDs never collide."""
+    with locks.hold(user_id, locks.NOTES):
+        return _save_note(store, datasource, user_id, text, evidence, now)
 
 
 def _allocate_note_id(store: BaseStore, user_id: str, existing: list[Note]) -> str:

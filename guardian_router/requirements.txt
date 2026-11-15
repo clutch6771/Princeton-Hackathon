@@ -1,0 +1,6 @@
+# The Guardian router: the Guardian package plus a web framework.
+# The Judge server already has fastapi and uvicorn; it needs only the first line.
+-r ../guardian/requirements.txt
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+httpx>=0.27,<1

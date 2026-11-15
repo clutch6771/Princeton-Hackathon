@@ -17,6 +17,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from guardian_router import router as guardian_router
 from judge import __version__
 from judge.api.deps import DemoHeaderResolver, describe_validation
 from judge.api.native_api import router as native_router
@@ -128,4 +129,7 @@ def create_app(
     app.add_exception_handler(Exception, _unexpected)
     app.include_router(router)
     app.include_router(native_router)
+    # Guardian-owned routes; kept out of this server's OpenAPI document, which
+    # describes the Judge-owned contracts only.
+    app.include_router(guardian_router, include_in_schema=False)
     return app

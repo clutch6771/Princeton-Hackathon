@@ -7,7 +7,6 @@ the proposal's ID and the user's decision, never text supplied by a model.
 
 from __future__ import annotations
 
-import threading
 import uuid
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
@@ -15,9 +14,10 @@ from datetime import datetime
 from langgraph.store.base import BaseStore
 
 from guardian.datasource import DataSource
-from guardian.memory import checks, formats, keys, values
+from guardian.memory import checks, formats, keys, locks, values
 from guardian.types import Interrupt, ValueChange
 
+STATUS_STAGED = "staged"  # queued by a Reflector run that has not finished
 STATUS_PENDING = "pending"
 STATUS_APPROVED = "approved"
 STATUS_REJECTED = "rejected"
@@ -36,8 +36,6 @@ ACTIONS = (ACTION_APPROVE, ACTION_EDIT, ACTION_REJECT)
 TARGET_NEW = "new"
 SOURCE_CHAT = "chat"
 SOURCE_REFLECTOR = "reflector"
-
-_DECIDE_LOCK = threading.Lock()  # one decision at a time within this process
 
 
 @dataclass(frozen=True)
@@ -99,9 +97,7 @@ def get_proposal(store: BaseStore, user_id: str, proposal_id: str) -> Proposal |
 
 
 def list_proposals(store: BaseStore, user_id: str) -> list[Proposal]:
-    items = store.search(
-        keys.namespace(user_id, keys.PROPOSALS), limit=keys.SEARCH_LIMIT
-    )
+    items = keys.items(store, keys.namespace(user_id, keys.PROPOSALS))
     return sorted(
         (Proposal(**item.value) for item in items),
         key=lambda proposal: (proposal.created, proposal.id),
@@ -138,10 +134,25 @@ def _save(store: BaseStore, proposal: Proposal) -> None:
     )
 
 
+def commit_staged(store: BaseStore, user_id: str, run_id: str) -> None:
+    """Make a successful Reflector run's staged proposals pending."""
+    for proposal in list_proposals(store, user_id):
+        if proposal.status == STATUS_STAGED and proposal.source.get("run_id") == run_id:
+            _save(store, replace(proposal, status=STATUS_PENDING))
+
+
+def discard_staged(store: BaseStore, user_id: str) -> None:
+    """Drop every staged proposal: a failed or crashed run leaves nothing behind."""
+    namespace = keys.namespace(user_id, keys.PROPOSALS)
+    for proposal in list_proposals(store, user_id):
+        if proposal.status == STATUS_STAGED:
+            store.delete(namespace, proposal.id)
+
+
 # --- Creating ------------------------------------------------------------------------
 
 
-def create_proposal(
+def _check_and_record(
     store: BaseStore,
     datasource: DataSource,
     user_id: str,
@@ -151,8 +162,9 @@ def create_proposal(
     evidence: str,
     source: dict[str, str],
     now: datetime,
+    status: str = STATUS_PENDING,
 ) -> CreateResult:
-    """Check a proposed value change and record it as pending.
+    """Check a proposed value change and record it (pending, or staged for a Reflector run).
 
     Returns the proposal, or an error written for the agent that proposed it.
     """
@@ -186,12 +198,43 @@ def create_proposal(
         evidence=evidence.strip(),
         old_text=old_text,
         fingerprint=values.fingerprint(old_text),
-        status=STATUS_PENDING,
+        status=status,
         source=dict(source),
         created=now.isoformat(),
     )
     _save(store, proposal)
     return CreateResult(proposal, None)
+
+
+def create_proposal(
+    store: BaseStore,
+    datasource: DataSource,
+    user_id: str,
+    *,
+    value_id: str,
+    new_text: str,
+    evidence: str,
+    source: dict[str, str],
+    now: datetime,
+    status: str = STATUS_PENDING,
+) -> CreateResult:
+    """Check a proposed value change and record it, one at a time per user.
+
+    The lock is the one `decide` takes, so the duplicate and one-card-per-thread
+    checks cannot race with another process.
+    """
+    with locks.hold(user_id, locks.VALUES):
+        return _check_and_record(
+            store,
+            datasource,
+            user_id,
+            value_id=value_id,
+            new_text=new_text,
+            evidence=evidence,
+            source=source,
+            now=now,
+            status=status,
+        )
 
 
 def _normalize_target(value_id: str) -> str | None:
@@ -287,7 +330,7 @@ def _duplicate_error(
             existing.proposed_text, text
         ):
             continue
-        if existing.status == STATUS_PENDING:
+        if existing.status in (STATUS_PENDING, STATUS_STAGED):
             return "The same change is already waiting for the user's decision."
         if existing.status == STATUS_REJECTED:
             return "The user already rejected this change. Do not propose it again in the same form."
@@ -315,7 +358,7 @@ def decide(
     This is the only code that changes approved values. A failed check changes
     nothing and leaves the card pending, except a stale card, which is superseded.
     """
-    with _DECIDE_LOCK:
+    with locks.hold(user_id, locks.VALUES):
         proposal = get_proposal(store, user_id, proposal_id)
         if proposal is None:
             return _failed("This card does not exist.")
@@ -395,7 +438,7 @@ def _final_entry(
         return None, "An edit needs the edited text of the value."
     parsed = formats.parse_entry(edited_text or "")
     if parsed.entry is None:
-        return None, parsed.error
+        return None, f"{parsed.reason} {formats.EDIT_HELP}"
     if parsed.entry.header_id != proposed.header_id:
         return (
             None,

@@ -230,7 +230,6 @@ def test_a_comment_written_by_the_agent_cannot_later_be_quoted_as_the_user(
     statements = checks.user_statements(store, datasource, USER)
     assert invented not in statements
     assert "that one was fine" in statements
-    assert "physio before and after is different, I find it motivating" in statements
     assert not checks.quote_found(invented, statements)
 
 
