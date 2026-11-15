@@ -5,6 +5,7 @@ import SwiftUI
 // Paths are only recomputed while the transition is running.
 struct IrisEye: View {
     let open: Bool
+    var color: Color = .white.opacity(0.95)
 
     var body: some View {
         let amount: CGFloat = open ? 1 : 0
@@ -13,7 +14,7 @@ struct IrisEye: View {
             IrisEyePart(part: .upperLid, openness: amount)
             IrisEyePart(part: .iris, openness: amount)
         }
-        .foregroundStyle(.white.opacity(0.95))
+        .foregroundStyle(color)
         .animation(open ? .spring(response: 0.6, dampingFraction: 0.72) : .easeInOut(duration: 0.4), value: open)
     }
 }

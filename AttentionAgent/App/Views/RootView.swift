@@ -2,19 +2,19 @@ import SwiftUI
 
 // UI-only styling and archive; capture and backend ownership stay in SessionManager.
 enum Vigil {
-    static let canvas = Color(red: 9/255, green: 13/255, blue: 38/255)
-    static let indigo = Color(red: 20/255, green: 25/255, blue: 74/255)
-    static let card = Color(red: 17/255, green: 22/255, blue: 59/255)
-    static let cyan = Color(red: 0, green: 229/255, blue: 1)
-    static let coral = Color(red: 0.65, green: 0.61, blue: 0.86)
-    static let background = LinearGradient(colors: [canvas, Color(red: 0.10, green: 0.11, blue: 0.30), Color(red: 0.16, green: 0.10, blue: 0.32), Color(red: 0.03, green: 0.23, blue: 0.26)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let accent = LinearGradient(colors: [.blue, Color(red: 0.5, green: 0.35, blue: 0.95), cyan, Color(red: 0.3, green: 0.9, blue: 0.65)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    static let monitoringButton = LinearGradient(
-        colors: [Color(uiColor: IrisUI.teal), Color(uiColor: IrisUI.purple), Color(uiColor: IrisUI.deep)],
-        startPoint: .topLeading, endPoint: .bottomTrailing)
+    // Colours come from the theme in use, so switching themes recolours every screen.
+    private static var theme: IrisTheme { IrisThemeStore.shared.theme }
+    static var canvas: Color { theme.canvas }
+    static var indigo: Color { theme.surface }
+    static var card: Color { theme.card }
+    static var cyan: Color { theme.accent }
+    static var coral: Color { theme.flag }
+    static var background: LinearGradient { theme.background }
+    static var accent: LinearGradient { theme.startButton }
+    static var monitoringButton: LinearGradient { theme.stopButton }
     static let spring = Animation.spring(response: 0.45, dampingFraction: 0.8)
     @ViewBuilder static var backdrop: some View {
-        if IrisUI.liveBackdrop { IrisBackdrop().ignoresSafeArea() } else { Rectangle().fill(background).ignoresSafeArea() }
+        if IrisUI.liveBackdrop { IrisBackdrop(theme: theme).ignoresSafeArea() } else { Rectangle().fill(background).ignoresSafeArea() }
     }
     static func tap() { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
 }
@@ -29,6 +29,7 @@ struct RootView: View {
     @AppStorage("vigilDigestArchive", store: UserDefaults(suiteName: AppConfig.appGroupID)) private var archiveData = Data()
     @Environment(\.scenePhase) private var phase
     @State private var wasBackground = false
+    @State private var launching = true
     init() { IrisUI.install() }
     var body: some View {
         VStack(spacing: 0) {
@@ -50,6 +51,11 @@ struct RootView: View {
             }.padding(.vertical, 18).background(Vigil.background)
         }.background(Vigil.background).font(IrisUI.font(.body)).tint(Vigil.cyan).preferredColorScheme(.dark)
         .scrollDismissesKeyboard(.interactively)
+        .overlay { if launching { IrisSplash().transition(.opacity) } }
+        .task {
+            try? await Task.sleep(for: .seconds(2.4))
+            withAnimation(.easeOut(duration: 0.5)) { launching = false }
+        }
         .onChange(of: phase) { _, value in
             if value == .active { session.refreshBroadcastState() }
             if value == .background { wasBackground = true; session.saveConversationMemory() }

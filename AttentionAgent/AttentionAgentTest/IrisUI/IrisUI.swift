@@ -9,11 +9,11 @@ enum IrisUI {
     static let irisEye = true
     static let silverCountry = true
 
-    // Gradient stops from userInterface/IrisBranding/Default.svg.
-    static let mint = UIColor(red: 36/255, green: 222/255, blue: 151/255, alpha: 1)
-    static let teal = UIColor(red: 39/255, green: 188/255, blue: 163/255, alpha: 1)
-    static let purple = UIColor(red: 121/255, green: 50/255, blue: 153/255, alpha: 1)
-    static let deep = UIColor(red: 29/255, green: 16/255, blue: 70/255, alpha: 1)
+    // Brand colours, taken from the theme in use.
+    static var mint: UIColor { IrisThemeStore.shared.theme.stops[0] }
+    static var teal: UIColor { IrisThemeStore.shared.theme.stops[1] }
+    static var purple: UIColor { IrisThemeStore.shared.theme.stops[2] }
+    static var deep: UIColor { IrisThemeStore.shared.theme.base }
 
     private static let fontName = "SilverCountryRegular"
 

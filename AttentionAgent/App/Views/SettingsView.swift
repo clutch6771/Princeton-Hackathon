@@ -6,6 +6,22 @@ struct SettingsView: View {
     @Environment(\.openURL) private var openURL
     var body: some View {
         Form {
+            Section("Theme") {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 16) {
+                        ForEach(IrisTheme.presets) { theme in
+                            let selected = IrisThemeStore.shared.theme == theme
+                            Button { Vigil.tap(); withAnimation(Vigil.spring) { IrisThemeStore.shared.select(theme) } } label: {
+                                VStack(spacing: 8) {
+                                    Circle().fill(theme.swatch).frame(width: 52, height: 52)
+                                        .overlay(Circle().stroke(.white.opacity(selected ? 0.95 : 0.15), lineWidth: selected ? 3 : 1))
+                                    Text(theme.name).font(IrisUI.font(.caption)).foregroundStyle(selected ? .primary : .secondary)
+                                }
+                            }.buttonStyle(.plain).accessibilityLabel("\(theme.name) theme").accessibilityAddTraits(selected ? .isSelected : [])
+                        }
+                    }.padding(.vertical, 6)
+                }
+            }
             Section {
                 NavigationLink("Set Checkpoints") {
                     Form {

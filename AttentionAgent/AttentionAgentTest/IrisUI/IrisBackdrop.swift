@@ -5,8 +5,10 @@ import UIKit
 // Everything is a Core Animation layer animated by the system render server, so the app
 // does no per-frame work and keeps no bitmaps beyond one 24 px particle dot.
 struct IrisBackdrop: UIViewRepresentable {
-    func makeUIView(context: Context) -> IrisBackdropView { IrisBackdropView() }
-    func updateUIView(_ view: IrisBackdropView, context: Context) {}
+    var theme = IrisThemeStore.shared.theme
+    var dust = true
+    func makeUIView(context: Context) -> IrisBackdropView { IrisBackdropView(theme: theme, dust: dust) }
+    func updateUIView(_ view: IrisBackdropView, context: Context) { view.theme = theme }
 }
 
 final class IrisBackdropView: UIView {
@@ -19,39 +21,41 @@ final class IrisBackdropView: UIView {
     private let dust = CAEmitterLayer()
     private var laidOutSize = CGSize.zero
 
+    var theme: IrisTheme {
+        didSet { if theme != oldValue { recolor(); if laidOutSize != .zero { animate() } } }
+    }
+
     private struct Glow {
-        let color: UIColor
+        let stop: Int // index into the theme's gradient colours
         let alpha: CGFloat
         let route: [CGPoint] // unit coordinates, closed loop
         let period: CFTimeInterval
     }
 
     private static let plan = [
-        Glow(color: IrisUI.purple, alpha: 0.64,
+        Glow(stop: 2, alpha: 0.64,
              route: [CGPoint(x: 0.85, y: 0.15), CGPoint(x: 0.35, y: 0.30), CGPoint(x: 0.60, y: 0.65), CGPoint(x: 1.00, y: 0.45)], period: 25),
-        Glow(color: IrisUI.teal, alpha: 0.42,
+        Glow(stop: 1, alpha: 0.42,
              route: [CGPoint(x: 0.10, y: 0.85), CGPoint(x: 0.55, y: 0.95), CGPoint(x: 0.30, y: 0.55), CGPoint(x: -0.05, y: 0.60)], period: 32),
-        Glow(color: IrisUI.mint, alpha: 0.27,
+        Glow(stop: 0, alpha: 0.27,
              route: [CGPoint(x: 0.95, y: 0.90), CGPoint(x: 0.65, y: 0.75), CGPoint(x: 0.80, y: 1.05), CGPoint(x: 1.10, y: 0.80)], period: 40),
     ]
 
-    override init(frame: CGRect) {
-        glows = Self.plan.map { glow in
+    init(theme: IrisTheme, dust showsDust: Bool) {
+        self.theme = theme
+        glows = Self.plan.map { _ in
             let layer = CAGradientLayer()
             layer.type = .radial
             layer.startPoint = CGPoint(x: 0.5, y: 0.5)
             layer.endPoint = CGPoint(x: 1, y: 1)
-            layer.colors = [glow.alpha, glow.alpha * 0.4, 0].map { glow.color.withAlphaComponent($0).cgColor }
             layer.locations = [0, 0.45, 1]
             return layer
         }
-        super.init(frame: frame)
+        super.init(frame: .zero)
         isUserInteractionEnabled = false
         isOpaque = true
         clipsToBounds = true
-        backgroundColor = IrisUI.deep
 
-        base.colors = Self.restColors
         base.startPoint = CGPoint(x: 0, y: 0)
         base.endPoint = CGPoint(x: 1, y: 1)
         layer.addSublayer(base)
@@ -76,7 +80,20 @@ final class IrisBackdropView: UIView {
         dust.emitterCells = [mote]
         dust.seed = 7
         dust.beginTime = Self.epoch
-        layer.addSublayer(dust)
+        if showsDust { layer.addSublayer(dust) }
+        recolor()
+    }
+
+    private func recolor() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        backgroundColor = theme.base
+        base.colors = restColors
+        for (layer, glow) in zip(glows, Self.plan) {
+            let alpha = glow.alpha * theme.glow
+            layer.colors = [alpha, alpha * 0.4, 0].map { theme.stops[glow.stop].withAlphaComponent($0).cgColor }
+        }
+        CATransaction.commit()
     }
 
     @available(*, unavailable)
@@ -114,7 +131,7 @@ final class IrisBackdropView: UIView {
         dust.isHidden = still
         guard !still else { return }
 
-        base.add(sweep("colors", from: Self.restColors, to: Self.driftColors, period: 11), forKey: "colors")
+        base.add(sweep("colors", from: restColors, to: driftColors, period: 11), forKey: "colors")
         base.add(sweep("startPoint", from: CGPoint(x: 0, y: 0), to: CGPoint(x: 0.4, y: 0), period: 14), forKey: "start")
         base.add(sweep("endPoint", from: CGPoint(x: 1, y: 1), to: CGPoint(x: 0.6, y: 1), period: 14), forKey: "end")
 
@@ -149,20 +166,13 @@ final class IrisBackdropView: UIView {
         CGPoint(x: bounds.width * unit.x, y: bounds.height * unit.y)
     }
 
-    private static func blend(_ a: UIColor, _ b: UIColor, _ t: CGFloat) -> CGColor {
-        var (r1, g1, b1, a1): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
-        var (r2, g2, b2, a2): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
-        a.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
-        b.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
-        return UIColor(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t, alpha: 1).cgColor
+    private var restColors: [CGColor] {
+        [theme.base.mixed(with: .black, 0.65), theme.base, theme.base.mixed(with: theme.stops[2], 0.6 * theme.glow)].map(\.cgColor)
     }
-
-    private static let restColors: [CGColor] = [
-        blend(IrisUI.deep, .black, 0.65), IrisUI.deep.cgColor, blend(IrisUI.deep, IrisUI.purple, 0.6),
-    ]
-    private static let driftColors: [CGColor] = [
-        blend(IrisUI.deep, IrisUI.purple, 0.25), blend(IrisUI.deep, IrisUI.teal, 0.3), blend(IrisUI.deep, IrisUI.mint, 0.4),
-    ]
+    private var driftColors: [CGColor] {
+        [theme.base.mixed(with: theme.stops[2], 0.25), theme.base.mixed(with: theme.stops[1], 0.3 * theme.glow),
+         theme.base.mixed(with: theme.stops[0], 0.4 * theme.glow)].map(\.cgColor)
+    }
 
     // Soft 12 pt dot, about 2 KB.
     private static let dot: CGImage? = {
