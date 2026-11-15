@@ -88,6 +88,7 @@ def get_runtime(request: Request) -> Runtime:
             if datasource is None:
                 raise HTTPException(status_code=503, detail=NO_DATASOURCE)
             api.configure(datasource=datasource)
+            background.mark_ready()
             existing = state.guardian_runtime = new_runtime()
     return cast(Runtime, existing)
 

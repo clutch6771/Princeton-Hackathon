@@ -66,6 +66,7 @@ def create_app(
     if seeded if seeded is not None else os.environ.get(SEEDED_VAR) == "1":
         install_initial_values(store, datasource, DEFAULT_USER, now())
 
+    background.mark_ready()
     app = FastAPI(title="Guardian router, standalone on seed data")
     app.state.guardian_datasource = datasource
     app.state.guardian_runtime = new_runtime(now, launch)

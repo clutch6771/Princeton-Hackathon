@@ -19,7 +19,7 @@ from langgraph.store.memory import InMemoryStore
 
 from guardian import api, config, storage
 from guardian.tests.fakes import ScriptedChatModel, reply, tool_call
-from guardian_router import review_sessions, router
+from guardian_router import router
 from guardian_router.chat_adapter import CARD_ENDING
 
 app_api = pytest.importorskip("judge.api.app_api")
@@ -133,11 +133,36 @@ def test_a_digest_from_the_timeline_reaches_the_judges_reel_through_the_chat(
     assert reel["description"] in str(looked_up.content)
 
 
-def test_the_session_end_function_runs_against_the_judges_sessions(judge_server):
+def test_reflect_pending_runs_against_the_judges_sessions(judge_server):
     app, client = judge_server
     upload_one_reel(app, client)
     assert client.get("/status", headers=HEADERS).status_code == 200  # configures
 
     # The session is still open, so there is nothing to review yet, and no model runs.
     assert api.reflect_pending(USER) == 0
-    assert callable(review_sessions)
+
+
+def test_the_router_is_already_included_by_the_judge_app_factory(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "DEFAULT_ENV_PATH", tmp_path / "missing.env")
+    for name in (storage.DATABASE_URL_VAR, storage.GUARDIAN_DATABASE_URL_VAR):
+        monkeypatch.delenv(name, raising=False)
+
+    with TestClient(app_api.create_app(settings.make_settings())) as client:
+        assert client.get("/status", headers=HEADERS).json() == {"has_values": False}
+
+
+def test_ending_a_session_starts_a_review_once_the_guardian_is_configured(
+    judge_server, monkeypatch
+):
+    app, client = judge_server
+    reel = upload_one_reel(app, client)
+    reviewed: list[str] = []
+    monkeypatch.setattr(api, "reflect_pending", lambda user: reviewed.append(user) or 1)
+    end = {"session_id": reel["session_id"]}
+
+    before = client.post("/session/end", json=end, headers=HEADERS)
+    assert client.get("/status", headers=HEADERS).status_code == 200  # configures
+    after = client.post("/session/end", json=end, headers=HEADERS)
+
+    assert before.status_code == after.status_code == 200
+    assert reviewed == [USER]  # only the call after the Guardian was configured

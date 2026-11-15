@@ -11,9 +11,22 @@ from guardian_router.tests.conftest import HEADERS, USER
 
 @pytest.fixture
 def no_sleep(monkeypatch):
+    """The Guardian is configured in this process, and waiting takes no time."""
     waits: list[float] = []
     monkeypatch.setattr(background, "_sleep", waits.append)
+    background.mark_ready()
     return waits
+
+
+def test_review_sessions_does_nothing_until_the_guardian_is_configured(monkeypatch):
+    # The Judge server calls it on every session end, including before the first
+    # Guardian request and in its own tests, where no Guardian is set up.
+    calls: list[str] = []
+    monkeypatch.setattr(api, "reflect_pending", lambda user_id: calls.append(user_id))
+    monkeypatch.setattr(background, "_sleep", calls.append)
+
+    assert review_sessions(USER) == 0
+    assert calls == []
 
 
 def test_review_sessions_returns_how_many_sessions_were_reviewed(monkeypatch, no_sleep):

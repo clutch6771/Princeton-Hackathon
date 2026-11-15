@@ -8,9 +8,10 @@ from __future__ import annotations
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Query, Request, Response
 from pydantic import BaseModel
 
+from guardian_router import review_sessions
 from judge.api.deps import (
     ApiOwnerDep,
     IngestOwnerDep,
@@ -134,10 +135,16 @@ async def ingest_audio(
 
 @router.post("/session/end", response_model=SessionEndResponse, tags=["capture"])
 async def end_session(
-    body: SessionEndRequest, runtime: RuntimeDep, owner_id: IngestOwnerDep
+    body: SessionEndRequest,
+    runtime: RuntimeDep,
+    owner_id: IngestOwnerDep,
+    background_tasks: BackgroundTasks,
 ) -> SessionEndResponse:
     """Idempotently end a session and flush its bounded tail."""
-    return await runtime.lifecycle.end_session(owner_id, body)
+    ended = await runtime.lifecycle.end_session(owner_id, body)
+    # Guardian's Reflector reviews the finished session; it never blocks the reply.
+    background_tasks.add_task(review_sessions, owner_id)
+    return ended
 
 
 @router.get("/timeline", response_model=Envelope[TimelinePage], tags=["app"])

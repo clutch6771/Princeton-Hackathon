@@ -29,12 +29,21 @@ Launcher = Callable[[Callable[[], Any]], Any]
 _sleep = time.sleep
 _in_flight: set[str] = set()
 _guard = threading.Lock()
+_ready = False  # whether the router has configured the Guardian in this process
+
+
+def mark_ready() -> None:
+    """Called once the Guardian is configured, so session-end reviews may run."""
+    global _ready
+    _ready = True
 
 
 def reset() -> None:
-    """Forget which reviews are running. For tests."""
+    """Forget which reviews are running and that the Guardian is configured. For tests."""
+    global _ready
     with _guard:
         _in_flight.clear()
+    _ready = False
 
 
 def _review(user_id: str, attempts: int) -> int:
@@ -65,7 +74,13 @@ def review_sessions(user_id: str) -> int:
     Run it as a background task when a session ends, from a worker thread (a plain
     `def` passed to FastAPI's BackgroundTasks runs in one). It blocks for minutes,
     never raises, and is safe to call at any time: extra calls return 0.
+
+    Until the router has configured the Guardian (on its first request) it does
+    nothing; the review then starts with the user's next chat message instead.
     """
+    if not _ready:
+        logger.info("session review skipped: the Guardian is not configured yet")
+        return 0
     return _review(user_id, SESSION_END_ATTEMPTS)
 
 
