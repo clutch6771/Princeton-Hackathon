@@ -82,9 +82,10 @@ The app sends `{message, profile, context}` and decodes a `ChatMessage`:
 
 The app has no value-card or inbox screen, so the adapter (`chat_adapter.py`) turns everything into chat text:
 
-- **Removal card as text.** When the user asks to delete a value, the card is one line: "Remove V2: News without outrage? Reply approve or reject." It is decided the same way.
-- **Value card as text.** A pending card is shown as plain text ending "Reply approve or reject." The decision is read in code, not by the model: exactly `approve` or `yes`, `reject` or `no`, in any case. Any other reply shows the card again. Editing is not offered; a card with suggested wording says to reject it and say it in your own words.
-- **Inbox through chat.** At the start of a turn with no card waiting, pending inbox cards are presented one at a time, oldest first. A "What I learned" card is shown and dismissed; the user's next message goes to the Guardian as the answer to its question. A value card waits for approve or reject. The message that arrived when a card was shown is answered once the cards are done.
+- **Removal card as text.** When the user asks to delete a value, the card is one line: "Remove V2: News without outrage? Reply approve or reject." It is decided the same way. When several values are removed, each approval is confirmed ("Removed V1.") above the next card.
+- **Value card as text.** A pending card is shown as plain text ending "Reply approve or reject." The decision is read in code, not by the model: a reply of at most four words made only of a decision word (`approve`, `yes`, `ok`, `sure`, … or `reject`, `no`, `nope`, `cancel`, …) and polite fillers, so "yes please" and "no thanks" count. Any other reply is a message, and it is answered: the card is set aside without storing anything ("I've set that card aside, so nothing has changed."), the Guardian replies to what the user wrote, and it may propose the card again. Opening the chat with an empty message shows the card as it was. Editing is not offered; a card with suggested wording says to reject it and say it in your own words.
+- **Inbox through chat.** At the start of a turn with no card waiting, pending inbox cards are presented one at a time, oldest first. A "What I learned" card is shown and dismissed; the user's next message goes to the Guardian as the answer to its question. A value card waits for approve or reject; a message sent instead is answered, with the card shown again under the answer. The message that arrived when a card was shown is answered once the cards are done.
+- **A reply is never empty.** If the model ends a turn with no text, it is asked once more for the reply; if it still writes nothing, the user gets a fixed message that says what the Guardian can help with.
 - **Digest.** The app's `context` is its checkpoint digest. It becomes a drift-notification entry with the reel IDs in `flagged_reels`. The app attaches the same digest to every later message, so each digest is explained once. The app sends reel IDs as upper-case UUIDs; they are lower-cased to match the Judge's records.
 - **Stated goals.** During onboarding (no approved value yet) `profile.stated_goals` is passed to the Guardian as background and counts as the user's own words. The app's default goal, "Low-Stress Feed", is ignored: the user did not write it.
 - **Opening the chat.** An empty `message` makes the Guardian speak first (or shows a waiting inbox card). Sending it again before the user has answered returns the same text without a model call. Today's app opens the chat empty and does not send this yet; one call when the chat screen appears would do it.
@@ -109,6 +110,7 @@ All are read from the environment or the root `.env` (git-ignored). Never commit
 | `GUARDIAN_REQUESTS_PER_MINUTE` | No | Chat model calls per minute. Default 12 |
 | `GUARDIAN_REFLECTOR_REQUESTS_PER_MINUTE` | No | Reflector model calls per minute, on a separate limiter so a review cannot slow a chat reply. Default half the chat rate |
 | `GUARDIAN_ALLOW_RESET` | No | `1` enables `POST /account/reset`, which erases one user's data. Off by default |
+| `GUARDIAN_DEV_COMMANDS` | No | `1` enables the `/dev` chat commands below, including the ones that delete data. Off by default |
 | `GUARDIAN_TIMEZONE` | No | Where a chat day starts and ends (an IANA name). Default `America/New_York`. Each user has one chat thread per local day |
 | `GUARDIAN_DEV_SEEDED` | No | Standalone server only: `1` starts with three approved values |
 | `TEST_DATABASE_URL` | No | Tests only. A disposable database; tests delete rows from it, and the Judge's tests drop and rebuild its schema there. Guardian's tests refuse to run if it equals `DATABASE_URL`. Never point it at the team database |
@@ -133,6 +135,23 @@ curl -s localhost:8000/agent2/chat -H 'Content-Type: application/json' -H 'X-Dem
   -d '{"message": "why were these flagged?", "profile": {"stated_goals": ""},
        "context": {"id": "d1", "flagged_reels": [{"id": "rl_014"}, {"id": "rl_015"}]}}'
 ```
+
+## Developer commands
+
+Typed into the Guardian chat (the app's chat screen, or `message` in `POST /agent2/chat`). They are handled in code (`dev_commands.py`): a `/dev` message never reaches the model and is not kept in the chat log. They work on in-memory storage and on Postgres. They answer only when the server runs with `GUARDIAN_DEV_COMMANDS=1`; otherwise every `/dev` message gets one line saying they are off.
+
+| Command | What it does |
+| --- | --- |
+| `/dev help` | Lists the commands |
+| `/dev whoami` | Your user ID, today's thread, the storage in use, your value IDs, and whether a card is waiting |
+| `/dev users` | Every user profile the Guardian holds a record for, with its value IDs |
+| `/dev values` | Your approved values, as the Judge reads them |
+| `/dev memory` | Everything the Guardian holds about you: values, brief, hypotheses and notes |
+| `/dev wipe-values` | Force deletes your approved values: no card, no confirmation |
+| `/dev wipe-values all` | Force deletes the approved values of **every** user profile |
+| `/dev reset` | Erases everything stored about you (values, cards, notes, chat, reviews, and on Postgres the Judge's rows), as `POST /account/reset` does. Refused while a recording or a review is open |
+
+The wipe and reset commands cannot be undone. A wipe deletes values only: notes, the chat and waiting cards stay, and a card about a deleted value answers "this value has changed" when it is decided. Deleted IDs are never given to another value. After a wipe the user has no values, so the app blocks recording and the Guardian starts onboarding again.
 
 ## Starting a demo clean
 

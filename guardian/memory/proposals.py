@@ -29,6 +29,7 @@ OUTCOME_EDITED = "edited"
 OUTCOME_REJECTED = "rejected"
 OUTCOME_SUPERSEDED = "superseded"
 OUTCOME_REMOVED = "removed"
+OUTCOME_SET_ASIDE = "set_aside"  # the user wrote something else instead of deciding
 
 KIND_CHANGE = "change"  # add a value or change one
 KIND_REMOVAL = "removal"  # delete one value
@@ -628,6 +629,33 @@ def _stored_wording_label(
     if proposed.wording_label == formats.WORDING_SUGGESTED:
         return formats.WORDING_AGREED
     return proposed.wording_label
+
+
+def set_aside(store: BaseStore, user_id: str, proposal_id: str, now: datetime) -> bool:
+    """Close a waiting card the user did not decide. Nothing is stored. Unlike a
+    rejection, the same change may be proposed again later."""
+    with locks.hold(user_id, locks.VALUES):
+        proposal = get_proposal(store, user_id, proposal_id)
+        if proposal is None or proposal.status != STATUS_PENDING:
+            return False
+        _save(
+            store, replace(proposal, status=STATUS_SUPERSEDED, decided=now.isoformat())
+        )
+        return True
+
+
+def force_remove_all(store: BaseStore, user_id: str) -> list[str]:
+    """Developer command: delete every approved value of one user, with no card and
+    no approval. Returns the deleted IDs, which are never used again.
+
+    Cards that are waiting are left as they are: one about a deleted value answers
+    "this value has changed" when it is decided, and changes nothing.
+    """
+    with locks.hold(user_id, locks.VALUES):
+        stored = values.list_values(store, user_id)
+        for value in stored:
+            values._delete_value(store, user_id, value.id)
+        return [value.id for value in stored]
 
 
 def _failed(error: str | None) -> DecisionResult:

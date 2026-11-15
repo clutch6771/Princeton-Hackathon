@@ -4,8 +4,11 @@ The app has a chat screen and nothing else: no value-card component, no inbox an
 resume call. So this adapter turns the Guardian's structured responses into chat text:
 
 - A value card is shown as plain text ending "Reply approve or reject." The decision
-  is read in code, never by the model: exactly approve / yes or reject / no. Anything
-  else shows the card again. Editing is not offered here.
+  is read in code, never by the model: a short reply that says only approve / yes or
+  reject / no. Anything else is a message: a chat card is set aside and the Guardian
+  answers what the user wrote; an inbox card stays and is shown again under the
+  answer. Editing is not offered here.
+- A message that starts with "/dev" is a developer command (see dev_commands.py).
 - Inbox cards from the Reflector are presented at the start of a turn, one at a time,
   oldest first. A "What I learned" card is shown and dismissed; a value card waits for
   approve or reject.
@@ -20,6 +23,7 @@ from __future__ import annotations
 
 import os
 import re
+import string
 import threading
 import time
 import uuid
@@ -40,10 +44,19 @@ from guardian.types import (
     Question,
     ValueChange,
 )
+from guardian_router import dev_commands
 
 CARD_ENDING = "Reply approve or reject."
-APPROVE_WORDS = frozenset({"approve", "yes"})
-REJECT_WORDS = frozenset({"reject", "no"})
+APPROVE_WORDS = frozenset(
+    {"approve", "approved", "yes", "y", "yeah", "yep", "yup", "sure", "ok", "okay"}
+)
+REJECT_WORDS = frozenset({"reject", "rejected", "no", "n", "nope", "nah", "cancel"})
+# Words that may stand beside a decision word without changing it: "yes please".
+DECISION_FILLERS = frozenset({"please", "thanks", "thank", "you", "it", "that", "this"})
+MAX_DECISION_WORDS = 4  # anything longer is a message, not a decision
+# Said before the Guardian's answer when a message arrived instead of a decision.
+CARD_SET_ASIDE = "I've set that card aside, so nothing has changed."
+INBOX_STILL_WAITING = "The suggestion from your last session is still here:"
 SUGGESTED_WORDING_NOTE = (
     "The wording is my suggestion. To put it in your own words, reply reject and "
     "tell me how you would say it."
@@ -77,7 +90,7 @@ SHORT_MESSAGE_WORDS = 4
 INBOX_APPROVED = "Saved. It is now part of your values."
 INBOX_REJECTED = "Okay, I left your values as they were."
 INBOX_FAILED = "That card could not be applied."
-NOTHING_TO_SAY = "I have nothing to add just now."
+NOTHING_TO_SAY = chat_flow.EMPTY_REPLY_FALLBACK
 # The goal the app sends when the user has not typed one. It is not the user's words.
 APP_DEFAULT_GOAL = "low-stress feed"
 INBOX_KINDS = ("learned", "value_change")
@@ -146,11 +159,22 @@ def offer_line(count: int) -> str:
 
 
 def parse_decision(text: str) -> str | None:
-    """approve, reject, or None. Exactly one of the four words, in any case."""
-    word = text.strip().lower()
-    if word in APPROVE_WORDS:
-        return "approve"
-    return "reject" if word in REJECT_WORDS else None
+    """approve, reject, or None.
+
+    A decision is a short reply made only of decision words and polite fillers:
+    "yes", "Approve.", "yes please", "no thanks". A reply that says both, or says
+    anything else, is None: it is a message, and nothing is decided by guessing.
+    """
+    words = [word.strip(string.punctuation).lower() for word in text.split()]
+    words = [word for word in words if word]
+    if not words or len(words) > MAX_DECISION_WORDS:
+        return None
+    approves = any(word in APPROVE_WORDS for word in words)
+    rejects = any(word in REJECT_WORDS for word in words)
+    known = APPROVE_WORDS | REJECT_WORDS | DECISION_FILLERS
+    if approves == rejects or any(word not in known for word in words):
+        return None
+    return "approve" if approves else "reject"
 
 
 def canonical_reel_id(raw: str) -> str:
@@ -193,11 +217,11 @@ def pending_text(pending: Interrupt) -> str:
     return card_text(pending["value_change"])
 
 
-def question_text(question: Question) -> str:
+def question_text(question: Question, lead_in: str = INBOX_LEAD_IN) -> str:
     """An inbox value card as plain text."""
     change = question["value_change"]
     body = card_text(change) if change else CARD_ENDING
-    return f"{INBOX_LEAD_IN}\n{question['prompt']}\n\n{body}"
+    return f"{lead_in}\n{question['prompt']}\n\n{body}"
 
 
 def response_text(response: GuardianResponse) -> str:
@@ -221,9 +245,13 @@ class ChatAdapter:
         self,
         clock: Callable[[], datetime],
         timer: Callable[[], float] = time.monotonic,
+        database_url: str | None = None,
     ) -> None:
         self._clock = clock
         self._timer = timer
+        # The Guardian's Postgres connection, for the developer reset command; None
+        # when storage is in memory. Never returned or logged.
+        self._database_url = database_url
         self._conversations: dict[str, Conversation] = {}
         self._locks: dict[str, threading.Lock] = {}
         self._guard = threading.Lock()
@@ -284,20 +312,32 @@ class ChatAdapter:
 
     def _turn(self, user_id: str, text: str, goals: str, digest: Digest | None) -> str:
         thread = self.thread_id(user_id)
+        if dev_commands.is_command(text):
+            caller = dev_commands.Caller(
+                user_id, thread, self._database_url, self.forget
+            )
+            return dev_commands.run(text, caller)
         decision = parse_decision(text)
 
         chat_card = api.pending_card(user_id, thread)
         if chat_card is not None:
-            if decision is None:
+            if decision is not None:
+                answer = Decision(action=decision, edited_text=None)  # type: ignore[typeddict-item]
+                return response_text(api.resume(user_id, thread, answer))
+            if not text:  # the chat was opened: the card is still the question
                 return pending_text(chat_card)
-            answer = Decision(action=decision, edited_text=None)  # type: ignore[typeddict-item]
-            return response_text(api.resume(user_id, thread, answer))
+            # Anything else is a message. The card is set aside and the message answered.
+            self._update(user_id, offer_open=False)
+            answered = response_text(api.reply_instead(user_id, thread, text))
+            return f"{CARD_SET_ASIDE}\n\n{answered}"
 
         shown = self._question_on_screen(user_id)
         if shown is not None:
-            if decision is None:
+            if decision is not None:
+                return self._decide(user_id, shown, decision, goals, digest)
+            if not text:
                 return question_text(shown)
-            return self._decide(user_id, shown, decision, goals, digest)
+            return self._answer_beside(user_id, shown, text, goals, digest)
 
         if not self._state(user_id).answering_learned:
             card = self._next_inbox_card(user_id)
@@ -348,6 +388,18 @@ class ChatAdapter:
         if answer.endswith(CARD_ENDING):  # a value card must stay last
             return f"{LEARNED_LEAD_IN}\n{card['prompt']}\n\n{answer}"
         return f"{answer}\n\n{LEARNED_AFTER_ANSWER}\n{card['prompt']}"
+
+    def _answer_beside(
+        self, user_id: str, card: Question, text: str, goals: str, digest: Digest | None
+    ) -> str:
+        """Answer a message that arrived instead of a decision on the inbox card on
+        screen. The card is not decided by a message: it is shown again under the
+        answer, unless the answer brought a card of its own, which comes first."""
+        answer = self._ask_guardian(user_id, text, goals, digest)
+        if answer.endswith(CARD_ENDING):
+            self._update(user_id, awaiting_question=None)
+            return answer
+        return f"{answer}\n\n{question_text(card, INBOX_STILL_WAITING)}"
 
     def _decide(
         self,

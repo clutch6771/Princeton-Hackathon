@@ -22,7 +22,14 @@ from guardian.chat_agent import build_chat_agent
 from guardian.datasource import DataSource
 from guardian.deps import Deps
 from guardian.memory import locks as lock_provider
-from guardian.memory import notes, reflector_files, user_erase, values
+from guardian.memory import (
+    notes,
+    proposals,
+    reflector_files,
+    reviews,
+    user_erase,
+    values,
+)
 from guardian.memory.locks import Locks
 from guardian.types import (
     Answer,
@@ -114,6 +121,17 @@ def resume(user_id: str, thread_id: str, decision: Decision) -> GuardianResponse
     return chat_flow.resume(deps, _agent(deps), user_id, thread_id, decision)
 
 
+def reply_instead(user_id: str, thread_id: str, message: str) -> GuardianResponse:
+    """Answer a message written while a value card was waiting, instead of deciding it.
+
+    The card is set aside without storing anything, and the Guardian replies to the
+    message. An addition to the spec's entry points, for a chat adapter that has no
+    card screen: there, anything that is not a decision is a message to answer.
+    """
+    deps = _require_deps()
+    return chat_flow.reply_instead(deps, _agent(deps), user_id, thread_id, message)
+
+
 def pending_card(user_id: str, thread_id: str) -> Interrupt | None:
     """The value card waiting on a thread, or None. Read-only.
 
@@ -164,6 +182,44 @@ def erase_user(user_id: str) -> dict[str, int]:
     if not chat_flow.is_valid_user_id(user_id):
         return {"store": 0, "threads": 0}
     return user_erase.erase_user(deps.store, deps.checkpointer, user_id)
+
+
+def list_users() -> list[str]:
+    """Every user the store holds a record for, in order. For developer commands."""
+    deps = _require_deps()
+    found = deps.store.list_namespaces(max_depth=1, limit=user_erase.SEARCH_LIMIT)
+    named = {
+        space[0] for space in found if space and chat_flow.is_valid_user_id(space[0])
+    }
+
+    def has_records(user_id: str) -> bool:
+        # A store may still list the namespace of a user whose records were all
+        # deleted, and a prefix search may match a longer ID; check an exact record.
+        items = deps.store.search((user_id,), limit=user_erase.SEARCH_LIMIT)
+        return any(item.namespace[0] == user_id for item in items)
+
+    return sorted(user for user in named if has_records(user))
+
+
+def force_delete_values(user_id: str) -> list[str]:
+    """Developer command: delete every approved value of one user, with no card and
+    no approval. Returns the deleted IDs. Nothing else about the user is touched."""
+    deps = _require_deps()
+    if not chat_flow.is_valid_user_id(user_id):
+        return []
+    return proposals.force_remove_all(deps.store, user_id)
+
+
+def is_recording(user_id: str) -> bool:
+    """Whether the user has a session that has not ended."""
+    deps = _require_deps()
+    if not chat_flow.is_valid_user_id(user_id):
+        return False
+    now = deps.clock()
+    return any(
+        not reviews.is_finished(session, now)
+        for session in deps.datasource.list_sessions(user_id)
+    )
 
 
 def get_values(user_id: str) -> str:

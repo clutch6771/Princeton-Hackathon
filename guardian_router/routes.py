@@ -78,7 +78,7 @@ def new_runtime(
     return Runtime(
         clock=now,
         launch=launch or background.thread_launcher,
-        adapter=ChatAdapter(now),
+        adapter=ChatAdapter(now, database_url=database_url),
         database_url=database_url,
     )
 

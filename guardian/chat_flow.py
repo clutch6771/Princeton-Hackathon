@@ -35,6 +35,20 @@ SUGGESTED_WORDING_NOTE = (
     "words, or approve it as it is."
 )
 
+# Sent to the agent when a turn ended with no text, so the user is never left with
+# nothing. Marked the same way as the citation check's request to rewrite.
+WRITE_THE_REPLY = (
+    "[App check, not the user] Your last turn had no text, so the user saw nothing. "
+    "Write your reply to their last message now, in plain text: answer what they "
+    "said, then ask at most one question."
+)
+# Shown only if the agent still wrote nothing.
+EMPTY_REPLY_FALLBACK = (
+    "Sorry, I lost my thread there and have no proper answer yet. Could you say "
+    "that once more? If it helps: I can change or remove one of your values, go "
+    "over a reel that was flagged, or just talk through how your feed has felt."
+)
+
 USER_ID = re.compile(r"[A-Za-z0-9_-]+")  # the whole ID; used with fullmatch
 CONTEXT_ENTRIES = ("onboarding", "chat", "drift_notification", "reel", "learned")
 MAX_STATED_GOALS_CHARS = 2000
@@ -250,6 +264,54 @@ def resume(
         # The decision was applied but the Guardian could not reply. Say what
         # happened in plain words, so the user is not left wondering.
         response = respond(reply=plain_confirmation(outcome))
+    elif response["pending"] and not response["reply"] and not response["error"]:
+        # The next card arrived with no words (the next of several removals, say).
+        # Confirm the decision just made before showing it.
+        response = respond(
+            reply=plain_confirmation(outcome), pending=response["pending"]
+        )
+    return remembered(deps, user_id, thread_id, response, None)
+
+
+def reply_instead(
+    deps: Deps, agent: Any, user_id: str, thread_id: str, message: str
+) -> GuardianResponse:
+    """Answer a message the user wrote while a card was waiting, instead of deciding it.
+
+    The card is set aside (nothing is stored, and it may be proposed again) and the
+    paused run is resumed with the user's words, so the Guardian replies to what
+    they actually said. With no card waiting this is an ordinary chat turn.
+    """
+    error = thread_error(user_id, thread_id)
+    if error is None and not isinstance(message, str):
+        error = ERROR_BAD_MESSAGE
+    if error:
+        return respond(error=error)
+    text = message.strip()
+    waiting = proposals.pending_for_thread(deps.store, user_id, thread_id)
+    if waiting is None or not text:
+        return chat(deps, agent, user_id, thread_id, message, None)
+
+    proposals.set_aside(deps.store, user_id, waiting.id, deps.clock())
+    last_reply.forget(deps.store, user_id, thread_id)
+    records.append_chat_turn(deps.store, user_id, records.ROLE_USER, text, deps.clock())
+    outcome = {
+        "outcome": proposals.OUTCOME_SET_ASIDE,
+        "value_id": None,
+        "message": text,
+    }
+    try:
+        state = agent.get_state({"configurable": {"thread_id": thread_id}})
+        graph_input: Any = (
+            Command(resume=outcome)
+            if state.interrupts
+            else {"messages": [{"role": "user", "content": text}]}  # the run was lost
+        )
+        response = run(deps, agent, user_id, thread_id, graph_input)
+    except Exception as error:  # noqa: BLE001 - the card is already set aside
+        detail = config.redact_secrets(f"{type(error).__name__}: {error}")
+        logger.error("could not answer on thread %s: %s", thread_id, detail)
+        response = respond(error=ERROR_UNAVAILABLE)
     return remembered(deps, user_id, thread_id, response, None)
 
 
@@ -277,12 +339,16 @@ def run(
     deps: Deps, agent: Any, user_id: str, thread_id: str, graph_input: Any
 ) -> GuardianResponse:
     """Run or resume the agent and turn the result into a response. Never raises for a model failure."""
-    try:
-        result = agent.invoke(
-            graph_input,
+
+    def invoke(given: Any) -> dict[str, Any]:
+        return agent.invoke(
+            given,
             config={"configurable": {"thread_id": thread_id}},
             context=ChatRunContext(user_id=user_id, thread_id=thread_id),
         )
+
+    try:
+        result = invoke(graph_input)
     except (
         Exception
     ) as error:  # noqa: BLE001 - provider, retry and call-limit failures all end here
@@ -291,6 +357,19 @@ def run(
         return respond(error=ERROR_UNAVAILABLE)
 
     reply = last_reply_text(result)
+    if not reply and not result.get("__interrupt__"):
+        # The turn ended with no text and no card. Ask once for the reply; if that
+        # fails too, the user still gets an answer they can act on.
+        try:
+            result = invoke(
+                {"messages": [{"role": "user", "content": WRITE_THE_REPLY}]}
+            )
+            reply = last_reply_text(result)
+        except Exception as error:  # noqa: BLE001 - the first run's work is kept
+            detail = config.redact_secrets(f"{type(error).__name__}: {error}")
+            logger.error("no reply text on thread %s: %s", thread_id, detail)
+        if not reply and not result.get("__interrupt__"):
+            reply = EMPTY_REPLY_FALLBACK
     waiting = (
         proposals.pending_for_thread(deps.store, user_id, thread_id)
         if result.get("__interrupt__")

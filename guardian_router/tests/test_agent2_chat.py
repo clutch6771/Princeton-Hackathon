@@ -248,15 +248,64 @@ def test_reject_in_any_case_stores_nothing(serve):
         assert api.pending_card(USER, f"{USER}:2026-11-14") is None
 
 
-def test_any_other_reply_returns_the_card_again_without_calling_the_model(serve):
+def test_a_short_polite_decision_is_still_a_decision(serve):
+    for word in ("approve please", "yes!", "ok", "Approve.", "yes, thank you", "yep"):
+        server = serve([propose(), reply("Saved as V1.")])
+        server.say(f"Honestly, {QUOTE}.")
+
+        assert server.say(word) == "Saved as V1.", word
+        assert api.get_values(USER).startswith("## V1:"), word
+
+    for word in ("no thanks", "Nope.", "cancel", "no, thank you"):
+        server = serve([propose(), reply("Okay, I won't add it.")])
+        server.say(f"Honestly, {QUOTE}.")
+
+        assert server.say(word) == "Okay, I won't add it.", word
+        assert api.get_values(USER) == "", word
+
+
+def test_a_reply_that_is_not_clearly_a_decision_decides_nothing():
+    for text in (
+        "yes but change the title",
+        "no yes",
+        "not sure",
+        "okay so what does strength mean here",
+        "approve the other one instead of this",
+        "",
+    ):
+        assert chat_adapter.parse_decision(text) is None, text
+
+
+def test_opening_the_chat_while_a_card_waits_shows_the_card_again(serve):
     server = serve([propose()])
     card = server.say(f"Honestly, {QUOTE}.")
 
-    for other in ("approve please", "yes!", "ok", "change the title", "approve.", ""):
-        assert server.say(other) == card, other
-
+    assert server.say("") == card
     assert len(server.model.calls) == 1
     assert api.get_values(USER) == ""
+
+
+def test_a_message_instead_of_a_decision_is_answered_and_the_card_set_aside(serve):
+    answer = "Strength is how firmly you hold it. High means flag every time."
+    server = serve([propose(), reply(answer)])
+    server.say(f"Honestly, {QUOTE}.")
+
+    text = server.say("what does strength mean?")
+
+    assert text == f"{chat_adapter.CARD_SET_ASIDE}\n\n{answer}"
+    assert ENDING not in text
+    assert api.get_values(USER) == ""
+    assert api.pending_card(USER, f"{USER}:2026-11-14") is None
+    # The Guardian was given the user's words, so it answered them.
+    assert "what does strength mean?" in str(server.model.calls[1][-1].content)
+
+
+def test_after_a_card_is_set_aside_the_chat_carries_on_normally(serve):
+    server = serve([propose(), reply("Sure, tell me more."), reply("Got it.")])
+    server.say(f"Honestly, {QUOTE}.")
+    server.say("hang on, I want to think about it")
+
+    assert server.say("it is mostly the rating videos") == "Got it."
 
 
 def test_a_suggested_wording_card_says_how_to_use_your_own_words(serve):
@@ -302,9 +351,9 @@ def test_approving_a_suggested_wording_card_stores_agreed_wording(serve):
 # --- Removing a value by text ----------------------------------------------------------------
 
 
-def propose_removal(value_id: str = "V2"):
+def propose_removal(value_id: str = "V2", call: str = "call_1"):
     args = {"value_id": value_id, "evidence": "asked in chat"}
-    return tool_call("propose_value_removal", args)
+    return tool_call("propose_value_removal", args, call)
 
 
 def test_a_removal_card_is_one_line_naming_the_value(serve):
@@ -313,8 +362,38 @@ def test_a_removal_card_is_one_line_naming_the_value(serve):
     card = server.say("please drop the news one")
 
     assert card == "Remove V2: News without outrage? Reply approve or reject."
-    assert server.say("what does that mean?") == card
     assert "## V2:" in api.get_values(USER)
+
+
+def test_a_question_about_a_removal_is_answered_and_nothing_is_removed(serve):
+    answer = "It means V2 would stop being used to flag reels. It is still there."
+    server = serve([propose_removal(), reply(answer)], seeded=True)
+    server.say("please drop the news one")
+
+    text = server.say("what does that mean?")
+
+    assert text == f"{chat_adapter.CARD_SET_ASIDE}\n\n{answer}"
+    assert "## V2:" in api.get_values(USER)
+
+
+def test_removing_several_values_confirms_each_before_the_next_card(serve):
+    script = [
+        propose_removal("V1", "c1"),
+        propose_removal("V2", "c2"),
+        reply("Both are gone."),
+    ]
+    server = serve(script, seeded=True)
+    server.say("delete V1 and V2, I'm done with them")
+
+    second = server.say("yes please")
+    done = server.say("yes")
+
+    assert second.startswith("Removed V1.\n\nRemove V2: News without outrage?")
+    assert second.endswith(ENDING)
+    assert done == "Both are gone."
+    assert "## V1:" not in api.get_values(USER)
+    assert "## V2:" not in api.get_values(USER)
+    assert "## V3:" in api.get_values(USER)
 
 
 def test_approving_a_removal_by_text_deletes_the_value(serve):
@@ -480,10 +559,16 @@ def test_an_inbox_value_card_stays_until_it_is_decided(serve):
     server.add_value_card()
     card = server.say("hi")
 
-    assert server.say("what is this?") == card
-    assert server.say("approve it") == card
-    assert server.model.calls == []
+    answered = server.say("what is this?")
+
+    # The message is answered, and the card is still there under the answer.
+    assert answered.startswith(f"unused\n\n{chat_adapter.INBOX_STILL_WAITING}\n")
+    assert HUSTLE_PROMPT in answered and answered.endswith(ENDING)
+    assert chat_adapter.INBOX_LEAD_IN not in answered
     assert "get-rich-quick" not in api.get_values(USER)
+    assert server.say("") == card  # opening the chat shows it as it was
+    assert server.say("approve it").startswith(chat_adapter.INBOX_APPROVED)
+    assert "get-rich-quick" in api.get_values(USER)
 
 
 def test_approving_an_inbox_card_by_text_changes_the_values_then_answers_the_held_message(
@@ -546,7 +631,7 @@ def test_a_chat_card_comes_before_inbox_cards(serve):
     chat_card = server.say(f"Honestly, {QUOTE}.")
     server.add_value_card()
 
-    again = server.say("hmm")
+    again = server.say("")
     after = server.say("approve")
 
     assert again == chat_card

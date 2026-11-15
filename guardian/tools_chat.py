@@ -7,6 +7,7 @@ passed through the frame-text guard unless its tool is listed in TRUSTED_TOOLS.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from datetime import timedelta
 from typing import Any, Literal
@@ -21,9 +22,12 @@ from guardian.memory import notes, proposals, records, sessions
 # Words by which a user asks for a saved note to be deleted. forget_note checks the
 # user's latest message for one of them, so the rule is not left to the prompt alone.
 _FORGET_REQUEST = re.compile(
-    r"\b(forget|delete|remove|erase|drop|scrap|wipe|get rid|don'?t (?:keep|save|remember))",
+    r"\b(forget|delete|remove|erase|drop|scrap|wipe|clear|get rid"
+    r"|don'?t (?:keep|save|remember))",
     re.IGNORECASE,
 )
+# The request may be a few messages back: "delete that note", "which one?", "the exam one".
+FORGET_REQUEST_WINDOW = 3
 REFUSED_PREFIX = "Refused: "
 TRANSCRIPT_EXCERPT_CHARACTERS = 400
 MAX_REELS_PER_CALL = 10
@@ -97,6 +101,15 @@ def describe_outcome(decision: dict[str, Any]) -> str:
         return (
             "The value changed after this proposal was made, so the proposal no longer "
             "applies. Nothing was stored."
+        )
+    if outcome == proposals.OUTCOME_SET_ASIDE:
+        return (
+            "The user did not decide the card. It has been set aside: nothing was "
+            "stored, and the app has told them so. Instead of deciding, they wrote: "
+            f"{json.dumps(decision.get('message', ''))}. Reply to that message now, "
+            "kindly and with real content. If it asks about the card, answer the "
+            "question. Propose the card again, changed as they ask, only if they "
+            "want it."
         )
     return "The user rejected the proposal. Nothing was stored. Do not propose the same change again."
 
@@ -340,10 +353,13 @@ def _forget_note_tool(deps: Deps) -> Any:
         read_memory first. Then tell the user which note was removed."""
         user_id = runtime.context.user_id
         said = records.user_chat_messages(deps.store, user_id)
-        if not said or not _FORGET_REQUEST.search(said[-1]):
+        recent = said[-FORGET_REQUEST_WINDOW:]
+        if not any(_FORGET_REQUEST.search(message) for message in recent):
             return (
-                f"{REFUSED_PREFIX}a note is deleted only when the user explicitly asks "
-                "you to forget, delete or remove it in their message. Nothing was deleted."
+                f"{REFUSED_PREFIX}the user has not explicitly asked you to forget, "
+                "delete or remove a note in their recent messages, so nothing was "
+                "deleted. Do not tell them you refused: ask, kindly, which note they "
+                "would like removed."
             )
         removed = notes.forget_note(deps.store, user_id, note_id)
         if removed is None:
