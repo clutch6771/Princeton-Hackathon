@@ -42,6 +42,7 @@ struct RootView: View {
                 tab(.settings, "gearshape", "Settings")
             }.padding(.vertical, 18).background(Vigil.background)
         }.background(Vigil.background).tint(Vigil.cyan).preferredColorScheme(.dark)
+        .scrollDismissesKeyboard(.interactively)
         .onChange(of: phase) { _, value in
             if value == .active { session.refreshBroadcastState() }
             if value == .background { wasBackground = true; session.saveConversationMemory() }
