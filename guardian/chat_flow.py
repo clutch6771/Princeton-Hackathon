@@ -49,6 +49,7 @@ ERROR_WRONG_THREAD = "This conversation does not belong to this user."
 ERROR_BAD_MESSAGE = "The message must be text."
 ERROR_BAD_CONTEXT = "The chat context is not valid."
 ERROR_DECIDE_FIRST = "Please approve, edit or reject the value card first."
+ERROR_DECIDE_REMOVAL_FIRST = "Please approve or reject the removal first."
 ERROR_NO_CARD = "No value card is waiting in this conversation."
 ERROR_BAD_DECISION = "A value card can be answered with approve, edit or reject."
 ERROR_UNAVAILABLE = (
@@ -164,7 +165,9 @@ def chat(
 
     waiting = proposals.pending_for_thread(deps.store, user_id, thread_id)
     if waiting is not None:
-        return respond(pending=proposals.card(waiting), error=ERROR_DECIDE_FIRST)
+        removal = waiting.kind == proposals.KIND_REMOVAL
+        error = ERROR_DECIDE_REMOVAL_FIRST if removal else ERROR_DECIDE_FIRST
+        return respond(pending=proposals.card(waiting), error=error)
 
     text = message.strip()
     key = context_key(context)
@@ -263,6 +266,8 @@ def continue_run(
 def plain_confirmation(outcome: dict[str, Any]) -> str:
     if outcome["outcome"] in (proposals.OUTCOME_APPROVED, proposals.OUTCOME_EDITED):
         return f"Saved as {outcome['value_id']}."
+    if outcome["outcome"] == proposals.OUTCOME_REMOVED:
+        return f"Removed {outcome['value_id']}."
     if outcome["outcome"] == proposals.OUTCOME_SUPERSEDED:
         return "That value has changed since the card was made, so nothing was saved."
     return "Okay, nothing was changed."

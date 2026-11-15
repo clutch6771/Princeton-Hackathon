@@ -7,6 +7,7 @@ passed through the frame-text guard unless its tool is listed in TRUSTED_TOOLS.
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import timedelta
 from typing import Any, Literal
 
@@ -15,8 +16,14 @@ from langgraph.types import interrupt
 
 from guardian.datasource import FeedProfile, NewFeedback, Reel, ReelSummary
 from guardian.deps import ChatRunContext, Deps
-from guardian.memory import notes, proposals, sessions
+from guardian.memory import notes, proposals, records, sessions
 
+# Words by which a user asks for a saved note to be deleted. forget_note checks the
+# user's latest message for one of them, so the rule is not left to the prompt alone.
+_FORGET_REQUEST = re.compile(
+    r"\b(forget|delete|remove|erase|drop|scrap|wipe|get rid|don'?t (?:keep|save|remember))",
+    re.IGNORECASE,
+)
 REFUSED_PREFIX = "Refused: "
 TRANSCRIPT_EXCERPT_CHARACTERS = 400
 MAX_REELS_PER_CALL = 10
@@ -26,7 +33,9 @@ FEEDBACK_SOURCE_CHAT = "chat"
 
 # Tools whose results are written entirely by package code. Everything else may carry
 # reel text or other people's words and is labelled as untrusted data by the guard.
-TRUSTED_TOOLS = frozenset({"propose_value_change", "record_feedback", "save_note"})
+TRUSTED_TOOLS = frozenset(
+    {"propose_value_change", "propose_value_removal", "record_feedback", "save_note"}
+)
 
 
 # --- Formatting --------------------------------------------------------------------
@@ -82,6 +91,8 @@ def describe_outcome(decision: dict[str, Any]) -> str:
         return f"The user approved it. It is stored as {value_id}."
     if outcome == proposals.OUTCOME_EDITED:
         return f"The user edited the text and approved it. It is stored as {value_id}."
+    if outcome == proposals.OUTCOME_REMOVED:
+        return f"The user approved the removal. {value_id} has been deleted."
     if outcome == proposals.OUTCOME_SUPERSEDED:
         return (
             "The value changed after this proposal was made, so the proposal no longer "
@@ -287,6 +298,64 @@ def _propose_value_change_tool(deps: Deps) -> Any:
     return propose_value_change
 
 
+def _propose_value_removal_tool(deps: Deps) -> Any:
+    @tool
+    def propose_value_removal(
+        value_id: str, evidence: str, runtime: ToolRuntime[ChatRunContext]
+    ) -> str:
+        """Propose deleting one of the user's values (e.g. "V2"). Call this only when
+        the user asks to delete or drop a value. They see a card and approve or reject
+        it; nothing is deleted until they approve. `evidence` is what they said. To
+        change a value instead of deleting it, use propose_value_change."""
+        context = runtime.context
+        call_id = runtime.tool_call_id or _key_from_arguments(value_id, "removal")
+        # As with propose_value_change, this body runs again when the user decides.
+        proposal = proposals.find_by_tool_call(
+            deps.store, context.user_id, context.thread_id, call_id
+        )
+        if proposal is None:
+            created = proposals.create_removal(
+                deps.store,
+                deps.datasource,
+                context.user_id,
+                value_id=value_id,
+                evidence=evidence,
+                source=proposals.chat_source(context.thread_id, call_id),
+                now=deps.clock(),
+            )
+            if created.proposal is None:
+                return f"{REFUSED_PREFIX}{created.error}"
+            proposal = created.proposal
+        decision = interrupt({"proposal_id": proposal.id})
+        return describe_outcome(decision)
+
+    return propose_value_removal
+
+
+def _forget_note_tool(deps: Deps) -> Any:
+    @tool
+    def forget_note(note_id: str, runtime: ToolRuntime[ChatRunContext]) -> str:
+        """Delete one saved note (e.g. "N4"). Call this only when the user explicitly
+        asks you to forget something you saved about them; find its ID with
+        read_memory first. Then tell the user which note was removed."""
+        user_id = runtime.context.user_id
+        said = records.user_chat_messages(deps.store, user_id)
+        if not said or not _FORGET_REQUEST.search(said[-1]):
+            return (
+                f"{REFUSED_PREFIX}a note is deleted only when the user explicitly asks "
+                "you to forget, delete or remove it in their message. Nothing was deleted."
+            )
+        removed = notes.forget_note(deps.store, user_id, note_id)
+        if removed is None:
+            return f"{REFUSED_PREFIX}the user has no note {note_id!r}. Nothing was deleted."
+        return (
+            f'Removed note {removed.id} from the saved notes: "{removed.text}". '
+            "Tell the user which note was removed."
+        )
+
+    return forget_note
+
+
 def _key_from_arguments(value_id: str, new_text: str) -> str:
     """A stable stand-in for a tool-call ID, should a provider not supply one."""
     digest = hashlib.sha256(f"{value_id}\n{new_text}".encode()).hexdigest()
@@ -294,7 +363,7 @@ def _key_from_arguments(value_id: str, new_text: str) -> str:
 
 
 def build_chat_tools(deps: Deps) -> list[Any]:
-    """Create the chat agent's eight tools, bound to the configured store and data source."""
+    """Create the chat agent's ten tools, bound to the configured store and data source."""
     return [
         _get_reels_tool(deps),
         _find_similar_feedback_tool(deps),
@@ -304,4 +373,6 @@ def build_chat_tools(deps: Deps) -> list[Any]:
         _record_feedback_tool(deps),
         _save_note_tool(deps),
         _propose_value_change_tool(deps),
+        _propose_value_removal_tool(deps),
+        _forget_note_tool(deps),
     ]

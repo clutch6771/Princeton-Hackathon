@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Sunday Nov 15, 3:20 am. Branch: `guardian`.
+Last updated: Sunday Nov 15, 4:25 am. Branch: `guardian`.
 
 ## Where things stand
 
@@ -23,7 +23,7 @@ Last updated: Sunday Nov 15, 3:20 am. Branch: `guardian`.
 | Demo notebook (`notebooks/demo.ipynb`) | **Not built** (owner's decision). The terminal chat and `guardian_router.live_run` run the demo loop | |
 | Optional items | Not started | |
 
-Offline tests: 559 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
+Offline tests: 606 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -380,6 +380,17 @@ Not fixed (low): the value write and the proposal's status are two writes with n
 - **"Last session" is the most recently ended session with judged reels** (`guardian/memory/sessions.py`). If it has not been reviewed, the Guardian says so and answers from the Judge's records for it, stating its time and reel count; it never falls back to an older session's summary. This is the cut-down part of the session-accuracy item; the rest was not done.
 - **Quota.** The Gemini free tier's 500 requests a day for `gemini-3.5-flash-lite` ran out at 2:52 am during this round. `docs/RUN_DEMO.md` now says how to recognise that and what to do.
 - **Fallback keys** (`guardian/key_fallback.py`). `GOOGLE_API_KEY_FALLBACKS` is an optional comma-separated list of spare Gemini keys. A model-call middleware, outside the retry middleware in both agents, switches the process to the next key when a quota or rate-limit error survives the retries, repeats the call once, and stays on the new key. The only log line is "switched to fallback key N"; the fallback keys are redacted like the others. Tested with a scripted model that raises the quota error; no live run was made.
+
+## After the freeze (Nov 15, about 4:15 am)
+
+- **Removing a value through chat.** New Guardian tool `propose_value_removal(value_id, evidence)`; a removal is a kind of proposal (`proposals.create_removal`), decided through the same single write path (`proposals.decide`, which now also deletes). Decided once, superseded if the value changed since, per user, and the ID is never reused: deleting raises the ID counter to at least the removed ID. The card has `kind: "value_removal"`; through `/agent2/chat` it reads "Remove V2: <title>? Reply approve or reject." An edit is refused. The Reflector has no route to a removal.
+- **An emptied value is refused.** A change proposal with "none" on Want more, Want less and Unless together is refused, with a message to propose a removal.
+- **Forgetting a note.** New Guardian tool `forget_note(note_id)`, for an explicit request only; the note's ID is not reused.
+- **The citation check accepts removed IDs,** so the Guardian can say "I removed V2".
+- **Checked in code, not only in the prompt:** `forget_note` refuses unless the user's latest message asks to forget, delete or remove something.
+- **Reviewed before commit** by four reviewers with a verifier per finding: 13 findings confirmed, none critical or high. Fixed: ordinary proposal records are stored without the new `kind` field, so a server on an older checkout can still read them; the forget-note rule is checked in code; other spellings of "none" count as an emptied value; removing a value closes other waiting cards about it; a waiting removal card asks for approve or reject only. Left: the citation check's correction message lists a removed ID among the stored ones; the emptied-value refusal names `propose_value_removal` even to the Reflector, which has no such tool; when a provider sends no tool-call ID, a second removal request for the same value reuses the decided proposal; forgetting a note does not remove what the brief or the chat log already say.
+- **Erasing a user's data.** `POST /account/reset` on the router, body `{"confirm": "DELETE"}`: on Postgres it runs the `reset_demo` code for the header's user (Guardian records and Judge rows), in memory it uses the new `api.erase_user`. Off unless `GUARDIAN_ALLOW_RESET=1`; no default user; refused while that user has a recording session open or a review running; it also clears the process's chat state for the user and waits for a chat turn in progress. The app change it needs is written up in the handover page; no app file was edited. No live run was needed: it makes no model call.
+- Live through `/agent2/chat` (Flash-Lite, paid tier): "Please delete my news value" gave the card "Remove V2: News without outrage? Reply approve or reject."; "approve" deleted V2; a note about exam stress was saved and then removed on "please forget what I told you about exams".
 
 ## Conventions
 

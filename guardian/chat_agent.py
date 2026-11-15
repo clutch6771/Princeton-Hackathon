@@ -14,7 +14,7 @@ from langchain.agents.middleware import (
 
 from guardian import config, key_fallback, middleware, models, prompts
 from guardian.deps import ChatRunContext, Deps
-from guardian.memory import reflector_files, values
+from guardian.memory import proposals, reflector_files, values
 from guardian.tools_chat import TRUSTED_TOOLS, build_chat_tools
 
 CHAT_MODEL_CALL_LIMIT = 6  # model calls per user message
@@ -36,7 +36,10 @@ def build_chat_agent(deps: Deps, model: Any) -> Any:
         )
 
     def stored_value_ids(user_id: str) -> list[str]:
-        return [value.id for value in values.list_values(deps.store, user_id)]
+        """IDs a reply may name: the stored values, and ones the user has removed
+        (the Guardian must be able to say "I removed V2")."""
+        stored = [value.id for value in values.list_values(deps.store, user_id)]
+        return [*stored, *proposals.removed_value_ids(deps.store, user_id)]
 
     def with_key(api_key: str) -> Any:
         return models.build_model(config.chat_model_name(), api_key=api_key)

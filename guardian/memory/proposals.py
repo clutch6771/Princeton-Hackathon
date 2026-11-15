@@ -7,6 +7,7 @@ the proposal's ID and the user's decision, never text supplied by a model.
 
 from __future__ import annotations
 
+import string
 import uuid
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
@@ -27,6 +28,15 @@ OUTCOME_APPROVED = "approved"
 OUTCOME_EDITED = "edited"
 OUTCOME_REJECTED = "rejected"
 OUTCOME_SUPERSEDED = "superseded"
+OUTCOME_REMOVED = "removed"
+
+KIND_CHANGE = "change"  # add a value or change one
+KIND_REMOVAL = "removal"  # delete one value
+CARD_VALUE_CHANGE = "value_change"
+CARD_VALUE_REMOVAL = "value_removal"
+REMOVAL_ACTIONS_ERROR = "A removal card can be answered with approve or reject."
+EMPTY_LINE = "none"
+_AROUND_A_WORD = string.punctuation + " \t“”‘’"  # so "none." and "(none)" count as none
 
 ACTION_APPROVE = "approve"
 ACTION_EDIT = "edit"
@@ -54,9 +64,10 @@ class Proposal:
     created: str
     decided: str | None = None
     result_value_id: str | None = None
+    kind: str = KIND_CHANGE  # a removal has no proposed text
 
     def to_value_change(self) -> ValueChange:
-        """The card shown to the user."""
+        """The card shown to the user. For a removal, `new_text` is empty."""
         return ValueChange(
             value_id=self.target,
             old_text=self.old_text,
@@ -129,9 +140,13 @@ def pending_for_thread(
 
 
 def _save(store: BaseStore, proposal: Proposal) -> None:
-    store.put(
-        keys.namespace(proposal.user_id, keys.PROPOSALS), proposal.id, asdict(proposal)
-    )
+    """Store a proposal. `kind` is written only for a removal, so that an ordinary
+    record stays readable by code from before removals existed (a teammate's
+    server on an older checkout, on the same database)."""
+    record = asdict(proposal)
+    if proposal.kind == KIND_CHANGE:
+        del record["kind"]
+    store.put(keys.namespace(proposal.user_id, keys.PROPOSALS), proposal.id, record)
 
 
 def commit_staged(store: BaseStore, user_id: str, run_id: str) -> None:
@@ -198,7 +213,8 @@ def _check_and_record(
     current = values.get_value(store, user_id, target) if target != TARGET_NEW else None
 
     error = (
-        _target_error(store, user_id, target, entry, current)
+        _emptied_error(entry)
+        or _target_error(store, user_id, target, entry, current)
         or _wording_error(store, datasource, user_id, entry, current)
         or _evidence_error(datasource, user_id, entry, evidence)
         or _date_error(entry, current)
@@ -222,6 +238,79 @@ def _check_and_record(
     )
     _save(store, proposal)
     return CreateResult(proposal, None)
+
+
+def _emptied_error(entry: formats.ValueEntry) -> str | None:
+    """A value with nothing on any of its three lines is not a value: that is a removal."""
+    lines = (entry.want_more, entry.want_less, entry.unless)
+    if all(line.strip(_AROUND_A_WORD).lower() == EMPTY_LINE for line in lines):
+        return (
+            'A value cannot have "none" on Want more, Want less and Unless together. '
+            "To drop a value, call propose_value_removal instead."
+        )
+    return None
+
+
+def create_removal(
+    store: BaseStore,
+    datasource: DataSource,
+    user_id: str,
+    *,
+    value_id: str,
+    evidence: str,
+    source: dict[str, str],
+    now: datetime,
+) -> CreateResult:
+    """Check and record a proposal to delete one stored value.
+
+    Only the Guardian may propose one, in a chat with the user. Nothing is deleted
+    here: `decide` deletes the value if the user approves.
+    """
+    with locks.hold(user_id, locks.VALUES):
+        if source.get("kind") != SOURCE_CHAT:
+            return CreateResult(
+                None, "Only the Guardian, in chat, can propose a removal."
+            )
+        target = normalize_target(value_id)
+        current = (
+            values.get_value(store, user_id, target)
+            if target and target != TARGET_NEW
+            else None
+        )
+        if target is None or current is None:
+            return CreateResult(
+                None, f"{value_id!r} is not one of the user's stored values."
+            )
+        if not (evidence or "").strip():
+            return CreateResult(
+                None, "Evidence is required: quote what the user asked for."
+            )
+        missing = checks.missing_evidence_ids(datasource, user_id, evidence)
+        if missing:
+            return CreateResult(
+                None, f"These IDs do not exist for this user: {', '.join(missing)}."
+            )
+        if pending_for_thread(store, user_id, source.get("thread_id", "")):
+            return CreateResult(
+                None,
+                "A value card is already waiting in this conversation. Ask the user "
+                "to decide on it first.",
+            )
+        proposal = Proposal(
+            id=f"p_{uuid.uuid4().hex[:12]}",
+            user_id=user_id,
+            target=target,
+            proposed_text="",
+            evidence=evidence.strip(),
+            old_text=current.text,
+            fingerprint=values.fingerprint(current.text),
+            status=STATUS_PENDING,
+            source=dict(source),
+            created=now.isoformat(),
+            kind=KIND_REMOVAL,
+        )
+        _save(store, proposal)
+        return CreateResult(proposal, None)
 
 
 def create_proposal(
@@ -415,7 +504,49 @@ def decide(
             return DecisionResult(
                 ok=True, outcome=OUTCOME_REJECTED, value_id=None, error=None
             )
+        if proposal.kind == KIND_REMOVAL:
+            return _remove(store, proposal, action, now)
         return _apply(store, proposal, action, edited_text, now)
+
+
+def _remove(
+    store: BaseStore, proposal: Proposal, action: str, now: datetime
+) -> DecisionResult:
+    """Delete the value an approved removal names, if it is still as it was."""
+    if action != ACTION_APPROVE:
+        return _failed(REMOVAL_ACTIONS_ERROR)
+    user_id = proposal.user_id
+    current = values.get_value(store, user_id, proposal.target)
+    if values.fingerprint(current.text if current else None) != proposal.fingerprint:
+        _save(
+            store, replace(proposal, status=STATUS_SUPERSEDED, decided=now.isoformat())
+        )
+        return DecisionResult(
+            ok=False,
+            outcome=OUTCOME_SUPERSEDED,
+            value_id=None,
+            error="This value has changed since the card was made, so the card no longer applies.",
+        )
+    values._delete_value(store, user_id, proposal.target)
+    _save(
+        store,
+        replace(
+            proposal,
+            status=STATUS_APPROVED,
+            decided=now.isoformat(),
+            result_value_id=proposal.target,
+        ),
+    )
+    # Other cards about the removed value could now only fail; close them.
+    for other in list_proposals(store, user_id):
+        waiting = other.status in (STATUS_PENDING, STATUS_STAGED)
+        if waiting and other.target == proposal.target and other.id != proposal.id:
+            _save(
+                store, replace(other, status=STATUS_SUPERSEDED, decided=now.isoformat())
+            )
+    return DecisionResult(
+        ok=True, outcome=OUTCOME_REMOVED, value_id=proposal.target, error=None
+    )
 
 
 def _apply(
@@ -505,4 +636,14 @@ def _failed(error: str | None) -> DecisionResult:
 
 def card(proposal: Proposal) -> Interrupt:
     """The `Interrupt` payload for a pending chat proposal."""
-    return Interrupt(kind="value_change", value_change=proposal.to_value_change())
+    kind = CARD_VALUE_REMOVAL if proposal.kind == KIND_REMOVAL else CARD_VALUE_CHANGE
+    return Interrupt(kind=kind, value_change=proposal.to_value_change())  # type: ignore[typeddict-item]
+
+
+def removed_value_ids(store: BaseStore, user_id: str) -> list[str]:
+    """IDs of values the user removed. They may still be named, but never reused."""
+    return [
+        proposal.target
+        for proposal in list_proposals(store, user_id)
+        if proposal.kind == KIND_REMOVAL and proposal.status == STATUS_APPROVED
+    ]

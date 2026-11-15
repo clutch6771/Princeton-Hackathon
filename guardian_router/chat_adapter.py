@@ -30,11 +30,13 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from guardian import api, chat_flow
+from guardian.memory import formats
 from guardian.types import (
     Answer,
     ChatContext,
     Decision,
     GuardianResponse,
+    Interrupt,
     Question,
     ValueChange,
 )
@@ -177,6 +179,20 @@ def card_text(change: ValueChange) -> str:
     return "\n\n".join([*parts, CARD_ENDING])
 
 
+def removal_text(change: ValueChange) -> str:
+    """A removal card as one line: "Remove V2: <title>? Reply approve or reject." """
+    stored = formats.parse_entry(change["old_text"] or "").entry
+    title = f": {stored.title}" if stored else ""
+    return f"Remove {change['value_id']}{title}? {CARD_ENDING}"
+
+
+def pending_text(pending: Interrupt) -> str:
+    """The card waiting in the chat, as text."""
+    if pending["kind"] == "value_removal":
+        return removal_text(pending["value_change"])
+    return card_text(pending["value_change"])
+
+
 def question_text(question: Question) -> str:
     """An inbox value card as plain text."""
     change = question["value_change"]
@@ -194,7 +210,7 @@ def response_text(response: GuardianResponse) -> str:
     if error:
         parts.append(error)
     if pending:
-        parts.append(card_text(pending["value_change"]))
+        parts.append(pending_text(pending))
     return "\n\n".join(parts) or NOTHING_TO_SAY
 
 
@@ -225,6 +241,19 @@ class ChatAdapter:
         updated = replace(self._state(user_id), **changes)
         self._conversations = {**self._conversations, user_id: updated}
         return updated
+
+    def exclusive(self, user_id: str) -> threading.Lock:
+        """The lock that serializes this user's chat turns, for use in a `with` block."""
+        return self._lock(user_id)
+
+    def forget(self, user_id: str) -> None:
+        """Drop what this process remembers about one user's chat (after an account reset)."""
+        with self._guard:
+            self._conversations = {
+                user: state
+                for user, state in self._conversations.items()
+                if user != user_id
+            }
 
     def thread_id(self, user_id: str) -> str:
         """One chat thread per user per local day."""
@@ -260,7 +289,7 @@ class ChatAdapter:
         chat_card = api.pending_card(user_id, thread)
         if chat_card is not None:
             if decision is None:
-                return card_text(chat_card["value_change"])
+                return pending_text(chat_card)
             answer = Decision(action=decision, edited_text=None)  # type: ignore[typeddict-item]
             return response_text(api.resume(user_id, thread, answer))
 

@@ -61,6 +61,7 @@ The user comes from the `X-Demo-User-Id` header and defaults to `demo-user`. The
 | `GET /memory` | `api.get_memory` | none |
 | `GET /questions` | `api.get_questions` | none; also starts a background review |
 | `POST /questions/{id}/answer` | `api.answer_question` | `{"action": "...", "edited_text": "..."}` |
+| `POST /account/reset` | `reset_demo` on Postgres, `api.erase_user` in memory | `{"confirm": "DELETE"}`. Erases the header's user. Off unless `GUARDIAN_ALLOW_RESET=1`; refused while a recording or a review is open |
 
 The JSON routes return the function's result unchanged, with errors in the body and status 200. Exact request and response JSON is in `docs/GUARDIAN_BACKEND_HANDOVER.md`. They are for a later card UI; today's app uses only `/agent2/chat`.
 
@@ -81,6 +82,7 @@ The app sends `{message, profile, context}` and decodes a `ChatMessage`:
 
 The app has no value-card or inbox screen, so the adapter (`chat_adapter.py`) turns everything into chat text:
 
+- **Removal card as text.** When the user asks to delete a value, the card is one line: "Remove V2: News without outrage? Reply approve or reject." It is decided the same way.
 - **Value card as text.** A pending card is shown as plain text ending "Reply approve or reject." The decision is read in code, not by the model: exactly `approve` or `yes`, `reject` or `no`, in any case. Any other reply shows the card again. Editing is not offered; a card with suggested wording says to reject it and say it in your own words.
 - **Inbox through chat.** At the start of a turn with no card waiting, pending inbox cards are presented one at a time, oldest first. A "What I learned" card is shown and dismissed; the user's next message goes to the Guardian as the answer to its question. A value card waits for approve or reject. The message that arrived when a card was shown is answered once the cards are done.
 - **Digest.** The app's `context` is its checkpoint digest. It becomes a drift-notification entry with the reel IDs in `flagged_reels`. The app attaches the same digest to every later message, so each digest is explained once. The app sends reel IDs as upper-case UUIDs; they are lower-cased to match the Judge's records.
@@ -106,6 +108,7 @@ All are read from the environment or the root `.env` (git-ignored). Never commit
 | `GUARDIAN_REFLECTOR_MODEL` | No | Default `google_genai:gemini-3.5-flash-lite` |
 | `GUARDIAN_REQUESTS_PER_MINUTE` | No | Chat model calls per minute. Default 12 |
 | `GUARDIAN_REFLECTOR_REQUESTS_PER_MINUTE` | No | Reflector model calls per minute, on a separate limiter so a review cannot slow a chat reply. Default half the chat rate |
+| `GUARDIAN_ALLOW_RESET` | No | `1` enables `POST /account/reset`, which erases one user's data. Off by default |
 | `GUARDIAN_TIMEZONE` | No | Where a chat day starts and ends (an IANA name). Default `America/New_York`. Each user has one chat thread per local day |
 | `GUARDIAN_DEV_SEEDED` | No | Standalone server only: `1` starts with three approved values |
 | `TEST_DATABASE_URL` | No | Tests only. A disposable database; tests delete rows from it, and the Judge's tests drop and rebuild its schema there. Guardian's tests refuse to run if it equals `DATABASE_URL`. Never point it at the team database |

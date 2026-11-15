@@ -120,6 +120,19 @@ def save_note(
         return _save_note(store, datasource, user_id, text, evidence, now)
 
 
+def forget_note(store: BaseStore, user_id: str, note_id: str) -> Note | None:
+    """Delete one of this user's notes and return it; None if they have no such note.
+
+    The note counter is left as it is, so the ID is never given to another note.
+    """
+    with locks.hold(user_id, locks.NOTES):
+        wanted = (note_id or "").strip().upper()
+        found = next((n for n in list_notes(store, user_id) if n.id == wanted), None)
+        if found is not None:
+            store.delete(keys.namespace(user_id, keys.NOTES), found.id)
+        return found
+
+
 def _allocate_note_id(store: BaseStore, user_id: str, existing: list[Note]) -> str:
     """Take the next note ID. The counter only increases, so an ID is never reused."""
     namespace = keys.namespace(user_id, keys.META)
