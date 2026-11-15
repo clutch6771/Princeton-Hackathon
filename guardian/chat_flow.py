@@ -35,7 +35,7 @@ SUGGESTED_WORDING_NOTE = (
     "words, or approve it as it is."
 )
 
-USER_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+USER_ID = re.compile(r"[A-Za-z0-9_-]+")  # the whole ID; used with fullmatch
 CONTEXT_ENTRIES = ("onboarding", "chat", "drift_notification", "reel", "learned")
 MAX_STATED_GOALS_CHARS = 2000
 # Written into the CONTEXT block with the goal the user typed when setting up the app.
@@ -65,7 +65,7 @@ def respond(
 
 
 def is_valid_user_id(user_id: Any) -> bool:
-    return isinstance(user_id, str) and bool(USER_ID.match(user_id))
+    return isinstance(user_id, str) and bool(USER_ID.fullmatch(user_id))
 
 
 def thread_error(user_id: Any, thread_id: Any) -> str | None:
@@ -235,9 +235,18 @@ def resume(
         return respond(pending=proposals.card(waiting), error=result.error)
 
     outcome = {"outcome": result.outcome, "value_id": result.value_id}
-    response = continue_run(deps, agent, user_id, thread_id, outcome)
+    try:
+        response = continue_run(deps, agent, user_id, thread_id, outcome)
+    except Exception as error:  # noqa: BLE001 - the decision is already stored
+        detail = config.redact_secrets(f"{type(error).__name__}: {error}")
+        logger.error("could not resume thread %s: %s", thread_id, detail)
+        response = respond(error=ERROR_UNAVAILABLE)
     if stale:
         return GuardianResponse(**{**response, "error": result.error})
+    if response["error"] and not response["pending"]:
+        # The decision was applied but the Guardian could not reply. Say what
+        # happened in plain words, so the user is not left wondering.
+        response = respond(reply=plain_confirmation(outcome))
     return remembered(deps, user_id, thread_id, response, None)
 
 

@@ -50,7 +50,7 @@ Until the router has configured the Guardian (on its first request after the ser
 
 ## Routes
 
-The user comes from the `X-Demo-User-Id` header and defaults to `demo-user`. The chat thread is one per user per day, built on the server.
+The user comes from the `X-Demo-User-Id` header and defaults to `demo-user`. The chat thread is one per user per local day (`GUARDIAN_TIMEZONE`), built on the server.
 
 | Route | Guardian function | Body |
 | --- | --- | --- |
@@ -105,8 +105,9 @@ All are read from the environment or the root `.env` (git-ignored). Never commit
 | `GUARDIAN_REFLECTOR_MODEL` | No | Default `google_genai:gemini-3.5-flash-lite` |
 | `GUARDIAN_REQUESTS_PER_MINUTE` | No | Chat model calls per minute. Default 12 |
 | `GUARDIAN_REFLECTOR_REQUESTS_PER_MINUTE` | No | Reflector model calls per minute, on a separate limiter so a review cannot slow a chat reply. Default half the chat rate |
+| `GUARDIAN_TIMEZONE` | No | Where a chat day starts and ends (an IANA name). Default `America/New_York`. Each user has one chat thread per local day |
 | `GUARDIAN_DEV_SEEDED` | No | Standalone server only: `1` starts with three approved values |
-| `TEST_DATABASE_URL` | No | Tests only. A disposable database; tests delete rows from it |
+| `TEST_DATABASE_URL` | No | Tests only. A disposable database; tests delete rows from it, and the Judge's tests drop and rebuild its schema there. Guardian's tests refuse to run if it equals `DATABASE_URL`. Never point it at the team database |
 
 ## Running it standalone, behind a tunnel
 

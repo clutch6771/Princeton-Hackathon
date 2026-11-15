@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Sunday Nov 15, 12:30 am. Branch: `guardian`.
+Last updated: Sunday Nov 15, 12:45 am. Branch: `guardian`.
 
 ## Where things stand
 
@@ -23,7 +23,7 @@ Last updated: Sunday Nov 15, 12:30 am. Branch: `guardian`.
 | Demo notebook (`notebooks/demo.ipynb`) | **Not built** (owner's decision). The terminal chat and `guardian_router.live_run` run the demo loop | |
 | Optional items | Not started | |
 
-Offline tests: 482 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
+Offline tests: 517 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -339,6 +339,39 @@ Built: `guardian/eval/learning_eval.py`, committed before its first live run. Fu
 - Not a blind test of the skill: see the caveat under Step 3 and in the report.
 
 **Change after the evaluation:** the Reflector's limit of model calls per run was raised from 25 to 35 (owner's decision, Nov 15), because run 1 above reached 25. A normal review uses about 14. Rollback and retry are unchanged: a run that reaches the limit still fails, is rolled back, and is retried on a later call, up to three times.
+
+## Code and security review (Nov 15)
+
+Three ECC reviewers read everything written since the morning of Nov 14: a Python review of `guardian/`, a FastAPI review of `guardian_router/` and the three edits in the Judge server, and a security review of all of it. **None found a critical or high-severity issue.** They reported 38 medium and low findings between them (some twice).
+
+**Secrets.** None of the secret values in `.env` (the Gemini key, the xAI key, the database connection string, or its password or host alone) is in any of the 344 tracked files or in any of the 53 commits on any branch. `.env` is ignored and untracked. The only key-shaped strings in tracked files are placeholders and obvious test fakes.
+
+Fixed, though none was high severity, because each was confirmed, small, and touches an integrity or injection guarantee or would show in a demo:
+
+| Finding | Fix |
+| --- | --- |
+| The quote check matched fragments inside words: "an" passed as a quote of "I want less" (two reviewers) | A quote must begin and end on word boundaries |
+| A user ID with a trailing newline was accepted (two reviewers) | The whole ID must match |
+| The Reflector's refinement guard could be sidestepped with a space in the value ID | The ID is normalized before the check |
+| Text in the brief could close its own label with a nested or upper-case tag, and so appear as instructions in the Guardian's prompt | Every form of the tag is replaced by a marker |
+| After an approval, if the model failed, the user got only "could not reply" and could not tell whether the value was saved | The reply says "Saved as V1." (or that nothing changed) in plain words |
+| A "What I learned" card began "Before I answer", but the message it replaced is never answered | The lead-in no longer promises an answer |
+| The chat thread was keyed by the UTC date, so at 7 pm Eastern the conversation restarted and a waiting card was stranded | The thread follows the local day (`GUARDIAN_TIMEZONE`, default `America/New_York`) |
+| Pointing `TEST_DATABASE_URL` at the real database would let the tests delete the demo user's rows | Guardian's tests refuse when it equals `DATABASE_URL` |
+| The evaluation said "no proposal" when the Reflector's review had in fact failed | It now says the review did not complete |
+
+Not fixed (medium):
+
+- **`reflect_flow.review_session`:** the final commit is outside the try block, so a store error halfway through it leaves the session marked running for 10 minutes with some cards already visible.
+- **Rollback covers only this session's summary.** The Reflector may write any file under `sessions/`, and another session's summary it overwrote is not restored if the run fails.
+- **Caps can be passed by a race or by form.** Three `queue_question` calls in one model turn can pass the two-per-run cap; the brief's cap counts words, so one very long token passes.
+- **The CONTEXT block is not escaped.** `stated_goals`, reel IDs and the session ID are placed in it as given, so the app or the user can forge context lines. It is the same trust level as the user's own message and cannot change a value.
+- **No size limits on request bodies** (`message`, `edited_text`, `flagged_reels`).
+- **Postgres locks hold a pooled connection** while waiting and while held. About ten concurrent decisions or reviews would exhaust the pool of 10 for 30 seconds. Not reachable with one demo user.
+- **The chat log is one record per day, read and rewritten** on each turn without a lock: two simultaneous requests for one user could lose a turn. The app's chat route serializes turns per user; the JSON routes do not.
+- **A finished session with no judged reels is skipped for good**, even if reels were judged later. The Judge only marks a session ended once its reels are processed, so this needs a 10-minute idle session with unjudged reels.
+
+Not fixed (low): the value write and the proposal's status are two writes with no recovery between them; listings stop at 1,000 records per kind; a rejected change is re-proposable if only its Evidence line differs; a review attempt starts on every chat message with no cooldown; request models reject `null` where the app sends none; per-user adapter state grows with each distinct header value; only the last digest is remembered; the Judge server now imports `guardian_router` at import time, so it must be started from the repository root with Guardian's packages installed; the reset command prints the variable name but not the database name; `/skills/` is read-only by permission rule rather than by a read-only mount; the Guardian routes accept any valid user ID where the Judge's routes accept only the configured one (the shared demo identity, by design).
 
 ## Conventions
 

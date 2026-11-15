@@ -18,13 +18,15 @@ card that was on screen is shown again before it can be decided.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from guardian import api, chat_flow
 from guardian.types import (
@@ -44,7 +46,9 @@ SUGGESTED_WORDING_NOTE = (
     "tell me how you would say it."
 )
 INBOX_LEAD_IN = "Before I answer, something from reviewing your last session:"
-LEARNED_LEAD_IN = "Before I answer, here is what I learned from your last session:"
+# The message that triggered this card is not answered afterwards (the card ends with
+# its own question), so the lead-in must not promise an answer.
+LEARNED_LEAD_IN = "Here is what I learned from your last session:"
 INBOX_APPROVED = "Saved. It is now part of your values."
 INBOX_REJECTED = "Okay, I left your values as they were."
 INBOX_FAILED = "That card could not be applied."
@@ -57,6 +61,8 @@ INBOX_KINDS = ("learned", "value_change")
 # was probably never shown.
 APP_GIVES_UP_AFTER_SECONDS = 29.0
 VALUE_HEADER_PREFIX = "## "
+TIMEZONE_VAR = "GUARDIAN_TIMEZONE"  # an IANA name; where a chat day starts and ends
+DEFAULT_TIMEZONE = "America/New_York"
 
 
 @dataclass(frozen=True)
@@ -77,6 +83,17 @@ class Conversation:
     learned_session: str | None = None
     explained_digest: str | None = None
     undelivered: tuple[str, str] | None = None  # (message, reply) the app timed out on
+
+
+def local_day(moment: datetime) -> str:
+    """The date where the users are. A UTC date would start a new conversation, and
+    strand a waiting card, in the middle of the evening in the Americas."""
+    name = os.environ.get(TIMEZONE_VAR, "").strip() or DEFAULT_TIMEZONE
+    try:
+        zone: tzinfo = ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        zone = UTC
+    return moment.astimezone(zone).date().isoformat()
 
 
 def parse_decision(text: str) -> str | None:
@@ -163,8 +180,8 @@ class ChatAdapter:
         return updated
 
     def thread_id(self, user_id: str) -> str:
-        """One chat thread per user per day."""
-        return f"{user_id}:{self._clock().date().isoformat()}"
+        """One chat thread per user per local day."""
+        return f"{user_id}:{local_day(self._clock())}"
 
     # --- one turn -------------------------------------------------------------------------
 

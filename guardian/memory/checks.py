@@ -39,11 +39,16 @@ def normalize(text: str) -> str:
 
 
 def quote_found(quote: str, sources: Iterable[str]) -> bool:
-    """Whether the quote appears word for word in one of the sources."""
+    """Whether the quote appears word for word in one of the sources.
+
+    The quote must begin and end on word boundaries: "an" is not a quote of
+    "I want less", though the letters are there.
+    """
     wanted = normalize(quote).strip(string.punctuation + " ")
     if not wanted:
         return False
-    return any(wanted in normalize(source) for source in sources)
+    whole_words = re.compile(rf"(?<!\w){re.escape(wanted)}(?!\w)")
+    return any(whole_words.search(normalize(source)) for source in sources)
 
 
 def user_statements(
