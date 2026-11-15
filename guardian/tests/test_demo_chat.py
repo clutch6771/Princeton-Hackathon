@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from langchain_core.messages import HumanMessage
 
-from guardian import api, demo_chat
+from guardian import api, chat_flow, demo_chat
 from guardian.tests.conftest import USER
 from guardian.tests.fakes import reply, tool_call
 
@@ -91,6 +91,16 @@ def test_answering_without_a_card_prints_the_error(start):
     start([reply("unused")])
 
     assert run("/approve").startswith("! ")
+
+
+def test_open_lets_the_guardian_speak_first(start):
+    model = start([reply("Hi! What would you like to see less of?")])
+
+    output = run("/open")
+
+    sent = [str(m.content) for m in model.calls[0] if isinstance(m, HumanMessage)][-1]
+    assert chat_flow.OPENED_CHAT in sent
+    assert output == "Guardian: Hi! What would you like to see less of?"
 
 
 def test_drift_opens_an_explanation_of_the_demo_reels(start, with_values):

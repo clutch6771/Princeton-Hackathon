@@ -142,6 +142,50 @@ def test_quote_can_come_from_a_comment_the_user_typed_outside_the_app_buttons(
     assert propose(store, datasource, text=text).error is None
 
 
+def test_an_agent_cannot_add_a_date_to_the_evidence_line(
+    store, datasource, with_values
+):
+    # Seen live: a refinement arrived with "updated 2026-11-18", a date nobody gave.
+    stored = values.get_value(store, USER, "V1").text
+    refined = stored.replace("- Unless: none", "- Unless: rehab progress")
+    invented = refined.replace(
+        "said at onboarding", "said at onboarding; updated 2026-11-18 for rehab"
+    )
+
+    refused = propose(store, datasource, text=invented, value_id="V1")
+    accepted = propose(store, datasource, text=refined, value_id="V1")
+
+    assert refused.proposal is None and "date" in refused.error
+    assert accepted.error is None  # the stored approval date may stay
+
+
+def test_a_new_value_may_not_carry_a_made_up_date_but_an_approval_stamp_is_ignored(
+    store, datasource
+):
+    say(store, QUOTE)
+    dated = f"{NEW_FITNESS} on 2026-11-02"  # the Evidence line is the last one
+    stamped = f"{NEW_FITNESS}; approved 2026-11-14"
+
+    assert "date" in propose(store, datasource, text=dated).error
+    assert propose(store, datasource, text=stamped).error is None
+
+
+def test_a_change_that_alters_nothing_but_the_evidence_line_is_refused(
+    store, datasource, with_values
+):
+    # Seen live: the user said a value still fits, and a card arrived that only
+    # added their sentence to the Evidence line.
+    stored = values.get_value(store, USER, "V1").text
+    only_evidence = stored.replace(
+        "said at onboarding", 'said at onboarding; added: "it still fits"'
+    )
+
+    refused = propose(store, datasource, text=only_evidence, value_id="V1")
+
+    assert refused.proposal is None and "changes nothing" in refused.error
+    assert proposals.pending_for_thread(store, USER, THREAD) is None
+
+
 def test_another_users_words_do_not_count(store, datasource):
     say(store, QUOTE, user=OTHER_USER)
 

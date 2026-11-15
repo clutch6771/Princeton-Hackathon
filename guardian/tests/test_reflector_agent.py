@@ -463,6 +463,62 @@ def test_queue_question_accepts_an_exact_quote_from_a_chat_message(
     assert "Queued" in results[0]
 
 
+def test_queue_question_refuses_a_refinement_that_renames_or_regrades_the_value(
+    store, datasource, clock, with_values
+):
+    stored = values.get_value(store, USER, "V1").text
+    renamed = stored.replace(
+        "Fitness without body comparison", "Avoid body comparison in gym content"
+    ).replace("- Unless: none", "- Unless: injury rehab and recovery progress")
+    regraded = stored.replace("(strength: high)", "(strength: low)")
+
+    _, results = run_reflector(
+        store,
+        datasource,
+        clock,
+        [
+            queue(
+                {"value_id": "V1", "new_text": renamed, "evidence": "fb_001, fb_003"},
+                prompt="You disagreed with rehab flags.",
+            ),
+            queue(
+                {"value_id": "V1", "new_text": regraded, "evidence": "fb_001, fb_003"},
+                prompt="You disagreed with rehab flags.",
+                call="call_2",
+            ),
+        ],
+    )
+
+    assert (
+        "Queued" not in results[0] and "Fitness without body comparison" in results[0]
+    )
+    assert "Queued" not in results[1] and "strength" in results[1]
+    assert inbox.list_cards(store, USER) == []
+
+
+def test_queue_question_accepts_a_refinement_that_changes_only_the_unless_line(
+    store, datasource, clock, with_values
+):
+    stored = values.get_value(store, USER, "V1").text
+    refined = stored.replace(
+        "- Unless: none", "- Unless: injury rehab and recovery progress"
+    )
+
+    _, results = run_reflector(
+        store,
+        datasource,
+        clock,
+        [
+            queue(
+                {"value_id": "V1", "new_text": refined, "evidence": "fb_001, fb_003"},
+                prompt="You disagreed with rehab flags.",
+            )
+        ],
+    )
+
+    assert "Queued" in results[0]
+
+
 def test_queue_question_refuses_missing_evidence_and_bad_input(
     store, datasource, clock
 ):

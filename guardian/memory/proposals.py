@@ -152,6 +152,23 @@ def discard_staged(store: BaseStore, user_id: str) -> None:
 # --- Creating ------------------------------------------------------------------------
 
 
+def _date_error(
+    entry: formats.ValueEntry, current: values.StoredValue | None
+) -> str | None:
+    """An agent may not date the evidence: the only date in an Evidence line is the
+    approval date, which code writes. Dates already in the stored entry may stay."""
+    stored = formats.parse_entry(current.text).entry if current else None
+    kept = set(formats.dates_written(stored.evidence)) if stored else set()
+    added = [day for day in formats.dates_written(entry.evidence) if day not in kept]
+    if not added:
+        return None
+    return (
+        f"Do not write a date in the Evidence line (found {', '.join(added)}). The "
+        "app adds the approval date itself. Cite feedback IDs, reel IDs or the "
+        "user's own words."
+    )
+
+
 def _check_and_record(
     store: BaseStore,
     datasource: DataSource,
@@ -184,6 +201,7 @@ def _check_and_record(
         _target_error(store, user_id, target, entry, current)
         or _wording_error(store, datasource, user_id, entry, current)
         or _evidence_error(datasource, user_id, entry, evidence)
+        or _date_error(entry, current)
         or _duplicate_error(store, user_id, target, text, source)
     )
     if error:
@@ -261,7 +279,29 @@ def _target_error(
         return f"{target} is not one of the user's stored values."
     if entry.header_id != target:
         return f'The header must name the value being changed: "## {target}: ...".'
+    stored = formats.parse_entry(current.text).entry
+    if stored is not None and _same_apart_from_evidence(entry, stored):
+        return (
+            f"This changes nothing in {target}: every line but Evidence is as it is "
+            "stored. Propose a change only when the user wants a line changed."
+        )
     return None
+
+
+def _same_apart_from_evidence(
+    entry: formats.ValueEntry, stored: formats.ValueEntry
+) -> bool:
+    """Whether a proposal leaves the value itself as it is, changing at most the
+    Evidence line. Such a card would ask the user to approve nothing."""
+    pairs = (
+        (entry.title, stored.title),
+        (entry.strength, stored.strength),
+        (entry.want_more, stored.want_more),
+        (entry.want_less, stored.want_less),
+        (entry.unless, stored.unless),
+        (entry.wording_text, stored.wording_text),
+    )
+    return all(formats.same_text(new, old) for new, old in pairs)
 
 
 def _wording_error(

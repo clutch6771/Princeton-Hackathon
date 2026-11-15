@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Saturday Nov 14, 9:50 pm. Branch: `guardian`.
+Last updated: Saturday Nov 14, 11:25 pm. Branch: `guardian`.
 
 ## Where things stand
 
@@ -17,12 +17,12 @@ Last updated: Saturday Nov 14, 9:50 pm. Branch: `guardian`.
 | Backend brief Part A: survey of the app and the teammate's backend | Done | |
 | Backend brief Part B: storage on Postgres | Done; tables created in the team database | `d28f583` |
 | Backend brief Part C: Guardian router (`guardian_router/`) | Done | `f6c5e46` |
-| Integration: Guardian wired into the Judge server, team database migrated, run page, reset command | Done | `ce62e33`, `6d5e642`, this commit |
-| 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) | Not started; the closing question on the "What I learned" card is already in | |
+| Integration: Guardian wired into the Judge server, team database migrated, run page, reset command | Done | `ce62e33`, `6d5e642`, `fbdf1a0` |
+| 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) and the new onboarding interview | Done | this commit |
 | 5. Learning evaluation | Not started | |
 | Optional items | Not started | |
 
-Offline tests: 400 passing in memory (`guardian/` and `guardian_router/`); 625 when every storage test also runs on Postgres. The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
+Offline tests: 457 passing in memory (`guardian/` and `guardian_router/`); 700 when every storage test also runs on Postgres. The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -272,6 +272,43 @@ The teammates handed integration to the Guardian owner, who allowed edits to `wa
   - *Empty sessions.* A finished session with no judged reels is marked `skipped` and never run.
 
 Tests: Guardian and router 400 in memory, 625 with Postgres; the Judge's suite 499, unchanged. Four of the Judge's Postgres-only tests fail on the local test container, before and after the wiring: they log in as a role without a password, which the container's password authentication rejects.
+
+## Step 4b: reflection, an active Guardian, and the new interview
+
+Built from `docs/GUARDIAN_REFLECTION_ADDENDUM.md` plus the owner's changes of Nov 14. No entry-point signature changed.
+
+- **The Guardian speaks first.** `chat` with an empty message sends the model a CONTEXT block saying the user has just opened the chat. Nothing is added to the chat log. The Guardian's last reply on a thread is kept while it is unanswered and returned again on the next empty message, with no model call, unless the context names different reels or a different session card.
+- **Prompt.** New item 0 (open the conversation) and item 4 (reflect); three new rules (respond before asking, ask and do not advise, one reflection question per reply). With nothing to follow up on, the opener names one value and asks whether it still fits.
+- **Onboarding interview.** "At most three questions" is replaced: one question at a time until the Guardian knows what the user wants less of, a concrete recent example, the exception, and why it matters. Three to five questions, never more than six; straight to the card if the user says they are done. Notes are saved along the way. After an approval it asks whether there is anything else, for up to three values. It does not ask what the user wants more of.
+- **Honest entries.** "none" on any line the evidence does not support, in the prompt and the skill. A refinement changes only the lines the evidence supports.
+- **Three checks added in code,** because the live runs showed Flash-Lite breaking the rule in each case:
+
+| Seen in a live run | Check |
+| --- | --- |
+| The Reflector's refinement of V1 rewrote the title and the strength | A Reflector refinement that changes the title or strength is refused |
+| A refinement's Evidence line said "updated 2026-11-18", a date nobody gave | An agent may not write a date in an Evidence line; the approval date is written by code |
+| The user said a value still fits, and a card arrived that only added their sentence to the Evidence line | A proposal that changes nothing but the Evidence line is refused. The prompt also says to ask before proposing after a reflection answer |
+
+Results: 457 offline tests (700 with Postgres). Live through `/agent2/chat` on seed data (`python -m guardian_router.live_reflection`, Flash-Lite):
+
+| Behaviour | What the live run showed |
+| --- | --- |
+| Speaks first | Onboarding: a greeting and a first question. With values: "How has V2 (News without outrage) been holding up in your feed lately?" |
+| Interview | Four questions, one per message: what less, a recent example, the exception, why it matters. Then the card |
+| "none" and "want less" | The card had "Want more: none"; the exception the user gave went on the "Unless" line; "In my words" was an exact quote |
+| After approval | "Is there anything else you've noticed on your feed that you'd rather see less of?" |
+| Notes as it goes | Four notes during onboarding, each with the user's exact sentence |
+| Responds first, one reflection question | After the explanation and "Yes, that matches": one open question about what made the reels hard to scroll past. The answer was saved as a note in the user's words |
+| Opens about a value, proposes nothing if it fits | The user said it still fits; no card |
+| Refinement in chat | After a disagreement about a rehab reel: V1 with only "Unless" changed |
+| Refinement by the Reflector | V1 with only "Unless" changed, the feedback IDs added to Evidence. Title, strength and the other lines as stored |
+| Reopening | An empty message returned the last reply in 0.0 seconds |
+
+Limits seen, not fixed:
+
+- The turn that records a disagreement and proposes a refinement makes four or five model calls. Run back to back with other turns it took 20 seconds, because the chat rate limiter (12 calls a minute) had been used up. Paced like a person, with 8 seconds between messages, the same turn took 2.7 seconds and every reply took 0.6 to 2.7 seconds. `LIVE_PAUSE_SECONDS` sets the pace of the live script.
+- Notes are saved for almost every onboarding answer, including ones that state the value itself, and a note's summary sometimes adds a word the user did not use ("draining"). The quoted evidence is always exact.
+- One review queued only the V1 refinement and not a value for the three hustle marks; earlier runs queued both.
 
 ## Conventions
 

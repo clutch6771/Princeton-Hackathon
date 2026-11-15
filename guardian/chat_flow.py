@@ -11,7 +11,7 @@ from langgraph.types import Command
 
 from guardian import config
 from guardian.deps import ChatRunContext, Deps
-from guardian.memory import formats, proposals, records, values
+from guardian.memory import formats, last_reply, proposals, records, values
 from guardian.types import ChatContext, Decision, GuardianResponse, Interrupt
 
 logger = logging.getLogger("guardian")
@@ -21,6 +21,11 @@ logger = logging.getLogger("guardian")
 LOOK_UP_REELS_FIRST = (
     "The user is asking about these reels. Call get_reels with these IDs before you "
     "reply, then explain each reel."
+)
+
+# Written into the CONTEXT block when the app opens the chat with an empty message.
+OPENED_CHAT = (
+    "The user has just opened the chat and has not written anything yet. Speak first."
 )
 
 # Shown when a card carries suggested wording and the model sent no text with it, so
@@ -41,7 +46,7 @@ START_FROM_STATED_GOALS = (
 
 ERROR_INVALID_USER = "The user ID is missing or not valid."
 ERROR_WRONG_THREAD = "This conversation does not belong to this user."
-ERROR_EMPTY_MESSAGE = "The message is empty."
+ERROR_BAD_MESSAGE = "The message must be text."
 ERROR_BAD_CONTEXT = "The chat context is not valid."
 ERROR_DECIDE_FIRST = "Please approve, edit or reject the value card first."
 ERROR_NO_CARD = "No value card is waiting in this conversation."
@@ -97,13 +102,28 @@ def stated_goals(context: ChatContext | None) -> str:
     return (context or {}).get("stated_goals", "").strip()
 
 
-def context_block(deps: Deps, user_id: str, context: ChatContext | None) -> str:
+def context_key(context: ChatContext | None) -> str | None:
+    """What a turn is about, when it is about something in particular: the reels of a
+    notification or a session's card. None for an ordinary turn."""
+    if not context or not (context.get("reel_ids") or context.get("session_id")):
+        return None
+    reel_ids = ",".join(context.get("reel_ids", []))
+    return f"{context.get('entry', 'chat')}|{reel_ids}|{context.get('session_id', '')}"
+
+
+def context_block(
+    deps: Deps, user_id: str, context: ChatContext | None, opened: bool = False
+) -> str:
     """The CONTEXT block placed before the user's message. With no context and no
-    approved values, the conversation is treated as onboarding."""
+    approved values, the conversation is treated as onboarding. `opened` marks a
+    turn in which the user wrote nothing: the app has just opened the chat."""
     if context is None:
         if values.has_values(deps.store, user_id):
-            return ""
-        context = ChatContext(entry="onboarding")
+            if not opened:
+                return ""
+            context = ChatContext(entry="chat")
+        else:
+            context = ChatContext(entry="onboarding")
     lines = ["CONTEXT", f"entry: {context.get('entry', 'chat')}"]
     if context.get("reel_ids"):
         lines.append(f"reel_ids: {', '.join(context['reel_ids'])}")
@@ -113,6 +133,8 @@ def context_block(deps: Deps, user_id: str, context: ChatContext | None) -> str:
     if stated_goals(context):
         lines.append(f'stated_goals: "{stated_goals(context)}"')
         lines.append(START_FROM_STATED_GOALS)
+    if opened:
+        lines.append(OPENED_CHAT)
     return "\n".join([*lines, "END CONTEXT"])
 
 
@@ -135,8 +157,8 @@ def chat(
     context: ChatContext | None,
 ) -> GuardianResponse:
     error = thread_error(user_id, thread_id) or context_error(context)
-    if error is None and not (isinstance(message, str) and message.strip()):
-        error = ERROR_EMPTY_MESSAGE
+    if error is None and not isinstance(message, str):
+        error = ERROR_BAD_MESSAGE
     if error:
         return respond(error=error)
 
@@ -145,18 +167,45 @@ def chat(
         return respond(pending=proposals.card(waiting), error=ERROR_DECIDE_FIRST)
 
     text = message.strip()
-    block = context_block(deps, user_id, context)
+    key = context_key(context)
+    if not text:
+        # The app has just opened the chat. An unanswered message is not repeated
+        # by the model: the Guardian's last one is returned as it was.
+        unanswered = last_reply.get(deps.store, user_id, thread_id)
+        if unanswered is not None and key in (None, unanswered.context):
+            return respond(reply=unanswered.reply)
+    else:
+        last_reply.forget(deps.store, user_id, thread_id)
+
+    block = context_block(deps, user_id, context, opened=not text)
     # Recorded before the agent runs, so the quote check can find what the user just said.
     record_stated_goals(deps, user_id, context)
-    records.append_chat_turn(deps.store, user_id, records.ROLE_USER, text, deps.clock())
-    content = f"{block}\n\n{text}" if block else text
-    return run(
+    if text:
+        records.append_chat_turn(
+            deps.store, user_id, records.ROLE_USER, text, deps.clock()
+        )
+    content = f"{block}\n\n{text}" if block and text else block or text
+    response = run(
         deps,
         agent,
         user_id,
         thread_id,
         {"messages": [{"role": "user", "content": content}]},
     )
+    return remembered(deps, user_id, thread_id, response, key)
+
+
+def remembered(
+    deps: Deps,
+    user_id: str,
+    thread_id: str,
+    response: GuardianResponse,
+    key: str | None,
+) -> GuardianResponse:
+    """Keep the Guardian's reply as its last, unanswered message on this thread."""
+    if response["reply"] and not response["pending"] and not response["error"]:
+        last_reply.remember(deps.store, user_id, thread_id, response["reply"], key)
+    return response
 
 
 def resume(
@@ -187,9 +236,9 @@ def resume(
 
     outcome = {"outcome": result.outcome, "value_id": result.value_id}
     response = continue_run(deps, agent, user_id, thread_id, outcome)
-    return (
-        GuardianResponse(**{**response, "error": result.error}) if stale else response
-    )
+    if stale:
+        return GuardianResponse(**{**response, "error": result.error})
+    return remembered(deps, user_id, thread_id, response, None)
 
 
 def continue_run(

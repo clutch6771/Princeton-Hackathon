@@ -32,6 +32,9 @@ SECRET_VARS = (
     "GUARDIAN_DATABASE_URL",
     "MIGRATION_DATABASE_URL",
     "TEST_DATABASE_URL",
+    # The Judge's provider keys: it runs in the same process and shares the .env.
+    "XAI_API_KEY",
+    "GEMINI_API_KEY",
 )
 
 

@@ -52,9 +52,10 @@ NOTHING_TO_SAY = "I have nothing to add just now."
 # The goal the app sends when the user has not typed one. It is not the user's words.
 APP_DEFAULT_GOAL = "low-stress feed"
 INBOX_KINDS = ("learned", "value_change")
-# The app stops waiting for a chat reply after 12 seconds and asks the user to try
-# again. A turn that took about that long was probably never shown.
-APP_GIVES_UP_AFTER_SECONDS = 11.0
+# The app stops waiting for a chat reply after 30 seconds (`timeoutInterval` in its
+# LiveAgentBackend) and asks the user to try again. A turn that took about that long
+# was probably never shown.
+APP_GIVES_UP_AFTER_SECONDS = 29.0
 VALUE_HEADER_PREFIX = "## "
 
 
