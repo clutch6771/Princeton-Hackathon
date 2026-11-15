@@ -63,6 +63,10 @@ enum SharedStore {
         get { defaults?.bool(forKey: "useLiveBackend") ?? false }
         set { defaults?.set(newValue, forKey: "useLiveBackend") }
     }
+    static var demoUserID: String {
+        get { defaults?.string(forKey: "demoUserID") ?? "demo-user" }
+        set { defaults?.set(newValue, forKey: "demoUserID") }
+    }
     static var sensitivity: String {
         get { defaults?.string(forKey: "sensitivity") ?? "medium" }
         set { defaults?.set(newValue, forKey: "sensitivity") }

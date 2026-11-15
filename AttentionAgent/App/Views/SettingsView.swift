@@ -16,6 +16,7 @@ struct SettingsView: View {
                     }.navigationTitle("Set Checkpoints")
                 }
                 NavigationLink("Adjust Notification Preferences") { NotificationPreferencesView() }
+                NavigationLink("Backend Connection") { BackendConnectionView() }
             }
             Section {
                 permission("Allow Notifications", icon: "bell")
@@ -97,5 +98,30 @@ struct NotificationPreferencesView: View {
             bannerStatus = "Banner alerts enabled."
         }
         if settings.scheduledDeliverySetting == .enabled { bannerStatus += " Scheduled Summary is enabled." }
+    }
+}
+struct BackendConnectionView: View {
+    @State private var url = SharedStore.backendBaseURL
+    @State private var live = SharedStore.useLiveBackend
+    @State private var connected: Bool?
+    @State private var testing = false
+    var body: some View {
+        Form {
+            Section("Backend Connection") {
+                TextField("Server URL", text: $url).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .onChange(of: url) { _, value in SharedStore.backendBaseURL = value; connected = nil }
+                Toggle("Live Python Backend", isOn: $live).onChange(of: live) { _, value in SharedStore.useLiveBackend = value }
+                Text(live ? "Live mode" : "Mock Mode")
+                Button(testing ? "Testing…" : "Test Connection") {
+                    testing = true
+                    Task {
+                        do { try await LiveAgentBackend().health(); connected = true }
+                        catch { connected = false }
+                        testing = false
+                    }
+                }.disabled(testing)
+                if let connected { Text(connected ? "Connected" : "Offline").foregroundStyle(connected ? .green : .red) }
+            }
+        }.navigationTitle("Backend Connection")
     }
 }

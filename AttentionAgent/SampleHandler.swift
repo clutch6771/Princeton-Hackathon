@@ -46,6 +46,16 @@ class SampleHandler: RPBroadcastSampleHandler {
         timer?.cancel()
         tracker.flush()
         _ = audio.finish()
+        if SharedStore.useLiveBackend {
+            let sessionID = SharedStore.sessionID
+            Task {
+                while hasPendingUploads() {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                do { try await LiveAgentBackend().endSession(sessionID) }
+                catch { NSLog("Session end failed: %@", error.localizedDescription) }
+            }
+        }
         SharedStore.clearHeartbeat()
     }
 
@@ -60,8 +70,9 @@ class SampleHandler: RPBroadcastSampleHandler {
         let transcript = audio.finish()
         if SharedStore.useLiveBackend && !obs.sensitiveSkipped {
             let payload = ReelIngestPayload(sessionId: SharedStore.sessionID, reelIndex: count + 1,
-                dwellSeconds: obs.duration, ocrText: obs.ocrText, transcriptText: transcript,
-                frameBase64: tracker.frameBase64, sensitivity: SharedStore.sensitivity, statedGoals: SharedStore.userGoal)
+                dwellSeconds: min(obs.duration, 90), ocrText: obs.ocrText, transcriptText: transcript,
+                frameBase64: tracker.frameBase64, sensitivity: SharedStore.sensitivity, statedGoals: SharedStore.userGoal,
+                startedAt: obs.startedAt)
             enqueue(payload)
         }
         SharedStore.append(obs)
@@ -94,6 +105,10 @@ class SampleHandler: RPBroadcastSampleHandler {
         uploadLock.lock(); defer { uploadLock.unlock() }
         guard !pendingUploads.isEmpty else { uploading = false; return nil }
         return pendingUploads.removeFirst()
+    }
+    private func hasPendingUploads() -> Bool {
+        uploadLock.lock(); defer { uploadLock.unlock() }
+        return uploading || !pendingUploads.isEmpty
     }
     private func drainUploads() async {
         while let payload = nextUpload() {
