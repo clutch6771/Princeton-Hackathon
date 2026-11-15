@@ -19,6 +19,7 @@ card that was on screen is shown again before it can be decided.
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 import uuid
@@ -49,6 +50,28 @@ INBOX_LEAD_IN = "Before I answer, something from reviewing your last session:"
 # The message that triggered this card is not answered afterwards (the card ends with
 # its own question), so the lead-in must not promise an answer.
 LEARNED_LEAD_IN = "Here is what I learned from your last session:"
+LEARNED_AFTER_ANSWER = "Also, here is what I learned from your last session:"
+OFFER_ONE = (
+    "I also have a flagged reel from your latest check-in. " "Want me to go through it?"
+)
+OFFER_MANY = (
+    "I also have {count} flagged reels from your latest check-in. "
+    "Want me to go through them?"
+)
+# A reply that accepts the offer to go through the flagged reels begins with one of these.
+YES_WORDS = frozenset(
+    {"yes", "yeah", "yep", "yup", "sure", "ok", "okay", "please", "y"}
+)
+# A message is about the flagged reels if it names them or the notification...
+_REEL_WORDS = re.compile(
+    r"\b(reels?|videos?|clips?|flag(?:s|ged)?|notifications?|alerts?"
+    r"|conflict(?:s|ed)?|check-?ins?)\b",
+    re.IGNORECASE,
+)
+# ...or is a short message that points at them ("why?", "and these?"), which right
+# after a notification can only be about it.
+POINTING_WORDS = frozenset({"why", "what", "which", "huh", "these", "those", "them"})
+SHORT_MESSAGE_WORDS = 4
 INBOX_APPROVED = "Saved. It is now part of your values."
 INBOX_REJECTED = "Okay, I left your values as they were."
 INBOX_FAILED = "That card could not be applied."
@@ -82,6 +105,8 @@ class Conversation:
     answering_learned: bool = False  # a "What I learned" card was just shown
     learned_session: str | None = None
     explained_digest: str | None = None
+    offered_digest: str | None = None  # the digest whose reels were offered, once
+    offer_open: bool = False  # the offer was made in the Guardian's last reply
     undelivered: tuple[str, str] | None = None  # (message, reply) the app timed out on
 
 
@@ -94,6 +119,28 @@ def local_day(moment: datetime) -> str:
     except (ZoneInfoNotFoundError, ValueError):
         zone = UTC
     return moment.astimezone(zone).date().isoformat()
+
+
+def first_word(text: str) -> str:
+    words = text.split()
+    return words[0].strip(".,!?;:").lower() if words else ""
+
+
+def is_yes(text: str) -> bool:
+    """Whether a reply accepts an offer: it begins with yes, sure, ok and the like."""
+    return first_word(text) in YES_WORDS or text.lower().startswith("go ahead")
+
+
+def about_reels(text: str) -> bool:
+    """Whether a message that arrives with a digest is asking about the flagged reels."""
+    if _REEL_WORDS.search(text):
+        return True
+    words = [word.strip(".,!?;:").lower() for word in text.split()]
+    return len(words) <= SHORT_MESSAGE_WORDS and bool(POINTING_WORDS & set(words))
+
+
+def offer_line(count: int) -> str:
+    return OFFER_ONE if count == 1 else OFFER_MANY.format(count=count)
 
 
 def parse_decision(text: str) -> str | None:
@@ -225,7 +272,10 @@ class ChatAdapter:
 
         if not self._state(user_id).answering_learned:
             card = self._next_inbox_card(user_id)
+            if card is not None and card["kind"] == "learned":
+                return self._present_learned(user_id, card, text, goals, digest)
             if card is not None:
+                # A value card waits for a decision; the message is answered after it.
                 self._update(user_id, held_message=text or None)
                 return self._present(user_id, card)
         return self._ask_guardian(user_id, text, goals, digest)
@@ -248,17 +298,27 @@ class ChatAdapter:
         return match[0]
 
     def _present(self, user_id: str, card: Question) -> str:
-        if card["kind"] == "learned":
-            api.answer_question(user_id, card["id"], Answer(action="dismiss"))
-            self._update(
-                user_id,
-                held_message=None,
-                answering_learned=True,
-                learned_session=card["session_id"],
-            )
-            return f"{LEARNED_LEAD_IN}\n{card['prompt']}"
+        """Show an inbox value card and wait for approve or reject."""
         self._update(user_id, awaiting_question=card["id"])
         return question_text(card)
+
+    def _present_learned(
+        self, user_id: str, card: Question, text: str, goals: str, digest: Digest | None
+    ) -> str:
+        """Show a "What I learned" card and dismiss it. A message that arrived with it
+        is answered in the same reply, so nothing the user says is dropped."""
+        api.answer_question(user_id, card["id"], Answer(action="dismiss"))
+        self._update(user_id, held_message=None)
+        answer = self._ask_guardian(user_id, text, goals, digest) if text else ""
+        # The user's next message is taken as their answer to the card's question.
+        self._update(
+            user_id, answering_learned=True, learned_session=card["session_id"]
+        )
+        if not answer:
+            return f"{LEARNED_LEAD_IN}\n{card['prompt']}"
+        if answer.endswith(CARD_ENDING):  # a value card must stay last
+            return f"{LEARNED_LEAD_IN}\n{card['prompt']}\n\n{answer}"
+        return f"{answer}\n\n{LEARNED_AFTER_ANSWER}\n{card['prompt']}"
 
     def _decide(
         self,
@@ -278,7 +338,10 @@ class ChatAdapter:
             parts = [result["error"] or INBOX_FAILED]
 
         following = self._next_inbox_card(user_id)
-        if following is not None:
+        if following is not None and following["kind"] == "learned":
+            shown = self._present_learned(user_id, following, held or "", goals, digest)
+            parts.append(shown)
+        elif following is not None:
             parts.append(self._present(user_id, following))
         elif held:
             self._update(user_id, held_message=None)
@@ -290,9 +353,17 @@ class ChatAdapter:
     def _ask_guardian(
         self, user_id: str, text: str, goals: str, digest: Digest | None
     ) -> str:
+        """Send the message to the Guardian and return its reply as text.
+
+        A new digest is explained in this reply only when the message is empty,
+        is about the flagged reels, or accepts an offer to go through them.
+        Otherwise the Guardian answers what the user said, and one line offering
+        to go through the reels is added, once per digest.
+        """
         state = self._state(user_id)
         context: ChatContext | None = None
         explaining: str | None = None
+        offering: Digest | None = None
         if state.answering_learned:
             context = ChatContext(entry="learned")
             if state.learned_session:
@@ -302,12 +373,24 @@ class ChatAdapter:
             if goals:
                 context = ChatContext(entry="onboarding", stated_goals=goals)
         elif digest and digest.reel_ids and digest.key != state.explained_digest:
-            context = ChatContext(
-                entry="drift_notification", reel_ids=list(digest.reel_ids)
-            )
-            explaining = digest.key
+            offered = state.offered_digest == digest.key
+            accepted = offered and state.offer_open and is_yes(text)
+            if not text or accepted or about_reels(text):
+                context = ChatContext(
+                    entry="drift_notification", reel_ids=list(digest.reel_ids)
+                )
+                explaining = digest.key
+            elif not offered:
+                offering = digest
 
         response = api.chat(user_id, self.thread_id(user_id), text, context)
-        if explaining and response["error"] is None:
-            self._update(user_id, explained_digest=explaining)
-        return response_text(response)
+        answer = response_text(response)
+        succeeded = response["error"] is None
+        if explaining and succeeded:
+            self._update(user_id, explained_digest=explaining, offer_open=False)
+        elif offering and succeeded and not response["pending"]:
+            self._update(user_id, offered_digest=offering.key, offer_open=True)
+            answer = f"{answer}\n\n{offer_line(len(offering.reel_ids))}"
+        else:
+            self._update(user_id, offer_open=False)
+        return answer

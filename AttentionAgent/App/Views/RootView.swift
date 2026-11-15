@@ -46,7 +46,7 @@ struct RootView: View {
         .onChange(of: phase) { _, value in
             if value == .active { session.refreshBroadcastState() }
             if value == .background { wasBackground = true; session.saveConversationMemory() }
-            if value == .active && wasBackground { session.beginFreshConversation(); wasBackground = false }
+            if value == .active && wasBackground { wasBackground = false }
         }
         .onChange(of: session.activeDigest) { _, digest in
             guard let digest else { return }

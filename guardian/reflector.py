@@ -21,7 +21,7 @@ from langchain.agents.middleware import (
     TodoListMiddleware,
 )
 
-from guardian import middleware, prompts
+from guardian import config, key_fallback, middleware, models, prompts
 from guardian.deps import Deps, ReflectorRun
 from guardian.memory import reflector_files
 from guardian.tools_reflector import build_reflector_tools
@@ -101,7 +101,13 @@ def write_permissions() -> list[FilesystemPermission]:
 def build_reflector(deps: Deps, model: Any, run: ReflectorRun) -> Any:
     """Build the Reflector for one run."""
     backend = build_backend(deps, run.user_id)
+
+    def with_key(api_key: str) -> Any:
+        name = config.reflector_model_name()
+        return models.build_model(name, background=True, api_key=api_key)
+
     agent_middleware: list[Any] = [
+        key_fallback.middleware(with_key),  # outermost: after the retries below fail
         TodoListMiddleware(),
         middleware.ToolAllowlist(ALLOWED_TOOLS),
         middleware.frame_text_guard(trusted_tools=TRUSTED_TOOLS),

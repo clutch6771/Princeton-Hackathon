@@ -97,3 +97,33 @@ def _tool_name(tool: Any) -> str:
         function = tool.get("function", {})
         return str(tool.get("name") or function.get("name") or "")
     return str(getattr(tool, "__name__", ""))
+
+
+QUOTA_ERROR = (
+    "Error calling model 'gemini-3.5-flash-lite' (RESOURCE_EXHAUSTED): 429 "
+    "RESOURCE_EXHAUSTED. Quota exceeded for metric: generate_content_free_tier_requests, "
+    "limit: 500. Generate content requests per day limit exceeded on Free Tier."
+)
+
+
+class QuotaChatModel(BaseChatModel):
+    """A chat model whose key has run out of quota: every call fails with a 429."""
+
+    attempts: list[int] = Field(default_factory=list)
+
+    @property
+    def _llm_type(self) -> str:
+        return "out-of-quota"
+
+    def bind_tools(self, tools: Sequence[Any], **kwargs: Any) -> QuotaChatModel:
+        return self
+
+    def _generate(
+        self,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        self.attempts.append(len(self.attempts) + 1)
+        raise RuntimeError(QUOTA_ERROR)

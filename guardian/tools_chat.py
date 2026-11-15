@@ -15,7 +15,7 @@ from langgraph.types import interrupt
 
 from guardian.datasource import FeedProfile, NewFeedback, Reel, ReelSummary
 from guardian.deps import ChatRunContext, Deps
-from guardian.memory import notes, proposals, reflector_files
+from guardian.memory import notes, proposals, sessions
 
 REFUSED_PREFIX = "Refused: "
 TRANSCRIPT_EXCERPT_CHARACTERS = 400
@@ -180,15 +180,16 @@ def _read_memory_tool(deps: Deps) -> Any:
         name: Literal["notes", "last_session"], runtime: ToolRuntime[ChatRunContext]
     ) -> str:
         """Read the user's saved notes (things they told you about their life and
-        feelings) or the latest session summary. Call this when their earlier words would
-        help, for example before explaining a flag."""
+        feelings) or their last session: its time and number of reels, then its
+        summary or, if it has not been reviewed yet, the Judge's records for it. Call
+        this when their earlier words would help, for example before explaining a
+        flag, and whenever they ask about their last session."""
         user_id = runtime.context.user_id
         if name == "notes":
             return notes.render_notes(deps.store, user_id) or "No notes saved yet."
-        summary = reflector_files.latest_session_summary(
-            deps.store, deps.datasource, user_id
+        return sessions.last_session_report(
+            deps.store, deps.datasource, user_id, deps.clock()
         )
-        return summary or "No session summary yet."
 
     return read_memory
 

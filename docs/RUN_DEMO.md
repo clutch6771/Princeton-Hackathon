@@ -11,6 +11,7 @@ One file, `.env` in the repository root (git-ignored; never commit it). Both hal
 ```bash
 # Keys and database
 GOOGLE_API_KEY=...          # Guardian and Reflector (Gemini)
+GOOGLE_API_KEY_FALLBACKS=key2,key3   # optional spare Gemini keys, comma-separated
 DATABASE_URL=...            # the team database; the Judge and the Guardian share it
 XAI_API_KEY=...             # Judge, for PROVIDER_MODE=grok
 
@@ -112,6 +113,31 @@ guardian/.venv/bin/python -m guardian_router.reset_demo --user demo-user --yes  
 It deletes that one user's Guardian records (values, cards, notes, chat) and Judge rows (sessions, reels, feedback). Nothing can be recovered. Start the server again afterwards.
 
 Then, in the app: open the chat and finish onboarding (approve the first value) **before** recording. Until a value is approved the Judge has nothing to judge against.
+
+## If the Guardian stops replying
+
+The Gemini free tier allows 500 requests a day for each model on a key. A chat turn uses 2 to 5 requests and a session review about 14, so a long demo day can use them up. The count starts again at 3:00 am Eastern.
+
+How to recognise it:
+
+- In the app, every Guardian reply is "The Guardian could not reply just now. Please try again in a moment."
+- In the server log, each failed turn has a line like this:
+
+```text
+chat run failed for thread demo-user:2026-11-15: GoogleRateLimitError: Error calling model 'gemini-3.5-flash-lite' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED ... Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 500 ... Please retry in 8m5s.
+```
+
+The words to look for are `RESOURCE_EXHAUSTED` and `Quota exceeded`. (A failed review logs `session review failed` or `review of session ... failed` with the same error.)
+
+**Automatic, if spare keys are listed.** Put spare Gemini keys in `GOOGLE_API_KEY_FALLBACKS` in `.env`, separated by commas, before starting the server. When a Guardian or Reflector call fails with a quota or rate-limit error that the usual retries did not clear, the server switches to the next key, repeats the call once, and stays on that key. The log then has one line, and never a key:
+
+```text
+switched to fallback key 1
+```
+
+The switch lasts until the server restarts; a restart begins again with `GOOGLE_API_KEY`. The Judge's provider key is separate and is not covered by this.
+
+**By hand, if every key is used up** (the error lines continue after the last `switched to fallback key` line), or if no spare keys were listed: put a fresh key in `GOOGLE_API_KEY` in `.env` and restart the server. Nothing is lost: values, cards and the chat are in the database.
 
 ## 6. The three most likely failures
 

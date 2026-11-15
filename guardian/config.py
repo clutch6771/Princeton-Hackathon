@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from dotenv import load_dotenv
 
 API_KEY_VAR = "GOOGLE_API_KEY"
+API_KEY_FALLBACKS_VAR = "GOOGLE_API_KEY_FALLBACKS"  # optional, comma-separated
 CHAT_MODEL_VAR = "GUARDIAN_CHAT_MODEL"
 REFLECTOR_MODEL_VAR = "GUARDIAN_REFLECTOR_MODEL"
 
@@ -76,8 +77,17 @@ def reflector_model_name() -> str:
     return os.environ.get(REFLECTOR_MODEL_VAR, "").strip() or DEFAULT_REFLECTOR_MODEL
 
 
+def fallback_api_keys() -> list[str]:
+    """Extra Gemini keys to switch to when the current one runs out of quota."""
+    load_env()
+    listed = os.environ.get(API_KEY_FALLBACKS_VAR, "")
+    return [key.strip() for key in listed.split(",") if key.strip()]
+
+
 def redact_secrets(text: str) -> str:
-    """Remove the API key and any database connection string from text about to be logged."""
+    """Remove every API key and any database connection string from text about to be logged."""
+    for key in fallback_api_keys():
+        text = text.replace(key, REDACTED)
     for name in SECRET_VARS:
         secret = os.environ.get(name, "").strip()
         if not secret:

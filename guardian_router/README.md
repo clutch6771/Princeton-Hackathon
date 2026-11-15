@@ -98,6 +98,7 @@ All are read from the environment or the root `.env` (git-ignored). Never commit
 | Variable | Needed | Purpose |
 | --- | --- | --- |
 | `GOOGLE_API_KEY` | Yes | Gemini key for the Guardian and Reflector |
+| `GOOGLE_API_KEY_FALLBACKS` | No | Spare Gemini keys, comma-separated. On a quota or rate-limit error that retries do not clear, the process switches to the next key and stays on it |
 | `DATABASE_URL` | For persistence | Postgres connection, the same variable the Judge server uses. Unset: everything is kept in memory |
 | `GUARDIAN_DATABASE_URL` | No | Overrides `DATABASE_URL` for Guardian only. Needed only if the Judge runs with a SELECT-only role |
 | `MIGRATION_DATABASE_URL` | No | An owner role, used only by `python -m guardian.storage setup` |

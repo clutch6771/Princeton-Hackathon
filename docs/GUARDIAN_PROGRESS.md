@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Sunday Nov 15, 12:45 am. Branch: `guardian`.
+Last updated: Sunday Nov 15, 3:20 am. Branch: `guardian`.
 
 ## Where things stand
 
@@ -23,7 +23,7 @@ Last updated: Sunday Nov 15, 12:45 am. Branch: `guardian`.
 | Demo notebook (`notebooks/demo.ipynb`) | **Not built** (owner's decision). The terminal chat and `guardian_router.live_run` run the demo loop | |
 | Optional items | Not started | |
 
-Offline tests: 517 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
+Offline tests: 559 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -372,6 +372,14 @@ Not fixed (medium):
 - **A finished session with no judged reels is skipped for good**, even if reels were judged later. The Judge only marks a session ended once its reels are processed, so this needs a 10-minute idle session with unjudged reels.
 
 Not fixed (low): the value write and the proposal's status are two writes with no recovery between them; listings stop at 1,000 records per kind; a rejected change is re-proposable if only its Evidence line differs; a review attempt starts on every chat message with no cooldown; request models reject `null` where the app sends none; per-user adapter state grows with each distinct header value; only the last digest is remembered; the Judge server now imports `guardian_router` at import time, so it must be started from the repository root with Guardian's packages installed; the reset command prints the variable name but not the database name; `/skills/` is read-only by permission rule rather than by a read-only mount; the Guardian routes accept any valid user ID where the Judge's routes accept only the configured one (the shared demo identity, by design).
+
+## Final round (Nov 15, about 3 am)
+
+- **App, one line** (`ee75a44`): `RootView.swift` no longer starts a fresh conversation when the app returns from the background, so the chat stays on screen. `xcodebuild` could not load on the build machine; both targets were type-checked with the Swift compiler against the iOS SDK instead.
+- **The first message after returning is always answered** (`a042181`, `guardian_router/chat_adapter.py`). A message that arrives with a new digest is answered first; the reels are explained in that reply only if the message is empty, is about the reels, or accepts the offer, and otherwise one line offers to go through them. A message that arrives while a "What I learned" card is waiting is answered in the same reply, followed by the summary.
+- **"Last session" is the most recently ended session with judged reels** (`guardian/memory/sessions.py`). If it has not been reviewed, the Guardian says so and answers from the Judge's records for it, stating its time and reel count; it never falls back to an older session's summary. This is the cut-down part of the session-accuracy item; the rest was not done.
+- **Quota.** The Gemini free tier's 500 requests a day for `gemini-3.5-flash-lite` ran out at 2:52 am during this round. `docs/RUN_DEMO.md` now says how to recognise that and what to do.
+- **Fallback keys** (`guardian/key_fallback.py`). `GOOGLE_API_KEY_FALLBACKS` is an optional comma-separated list of spare Gemini keys. A model-call middleware, outside the retry middleware in both agents, switches the process to the next key when a quota or rate-limit error survives the retries, repeats the call once, and stays on the new key. The only log line is "switched to fallback key N"; the fallback keys are redacted like the others. Tested with a scripted model that raises the quota error; no live run was made.
 
 ## Conventions
 

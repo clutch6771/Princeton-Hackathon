@@ -9,6 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import HumanMessage
 
@@ -363,29 +364,50 @@ def test_a_digest_with_no_flagged_reels_is_an_ordinary_message(serve):
 
 
 def test_a_learned_card_is_shown_as_text_and_dismissed_once_shown(serve):
-    server = serve([reply("unused")], seeded=True)
+    server = serve([reply("Hello!")], seeded=True)
     server.add_learned_card()
 
     text = server.say("hi")
 
     assert "You marked 3 hustle reels as not for you. [fb_002, fb_004, fb_007]" in text
     assert text.endswith("What made them easy to skip?")
-    assert server.model.calls == []
     assert server.client.get("/questions", headers=HEADERS).json() == []
 
 
+def test_a_message_that_arrives_with_a_learned_card_is_answered_in_the_same_reply(
+    serve,
+):
+    # The first message after returning to the app must not be dropped.
+    server = serve(
+        [reply("You can change a value by telling me what to change.")], seeded=True
+    )
+    server.add_learned_card()
+
+    text = server.say("how do I change one of my values?")
+
+    assert text.startswith("You can change a value by telling me what to change.")
+    assert chat_adapter.LEARNED_AFTER_ANSWER in text
+    assert text.endswith("What made them easy to skip?")
+    asked = sent_to_model(server)
+    assert asked.rstrip().endswith("how do I change one of my values?")
+    assert "entry: learned" not in asked  # their message is not an answer to the card
+    assert len(server.model.calls) == 1
+
+
 def test_the_answer_to_a_learned_card_goes_to_the_guardian_as_a_learned_entry(serve):
-    server = serve([reply("That makes sense."), reply("Sure.")], seeded=True)
+    server = serve(
+        [reply("Hello!"), reply("That makes sense."), reply("Sure.")], seeded=True
+    )
     server.add_learned_card()
     server.say("hi")
 
     server.say("they all felt like ads")
     server.say("anyway")
 
-    answer = sent_to_model(server, 0)
+    answer = sent_to_model(server, 1)
     assert "entry: learned" in answer and "session_id: s_001" in answer
     assert answer.rstrip().endswith("they all felt like ads")
-    assert "CONTEXT" not in sent_to_model(server, 1)
+    assert "CONTEXT" not in sent_to_model(server, 2)
 
 
 def test_an_inbox_value_card_is_shown_with_its_prompt_and_the_instruction(serve):
@@ -442,7 +464,7 @@ def test_rejecting_an_inbox_card_by_text_changes_nothing(serve):
 
 
 def test_inbox_cards_come_one_at_a_time_oldest_first(serve):
-    server = serve([reply("unused")], seeded=True)
+    server = serve([reply("Hello! What's on your mind?")], seeded=True)
     server.add_value_card(NOW)
     server.add_learned_card(NOW.replace(hour=22))
 
@@ -451,8 +473,9 @@ def test_inbox_cards_come_one_at_a_time_oldest_first(serve):
 
     assert first.endswith(ENDING) and "What made them easy to skip?" not in first
     assert second.startswith(chat_adapter.INBOX_APPROVED)
+    assert "Hello! What's on your mind?" in second  # the held "hi" is answered too
     assert second.endswith("What made them easy to skip?")
-    assert server.model.calls == []
+    assert len(server.model.calls) == 1
     assert server.client.get("/questions").json() == []
 
 
@@ -501,14 +524,122 @@ def test_users_do_not_see_each_others_cards(serve):
     assert other.json()["text"] == "Hello."
 
 
-def test_a_learned_card_does_not_promise_an_answer_to_the_message_it_replaced(serve):
+def test_opening_the_chat_with_a_learned_card_shows_only_the_card(serve):
     server = serve([reply("unused")], seeded=True)
     server.add_learned_card()
 
-    text = server.say("why did you flag the hustle reels?")
+    text = server.say("")
 
-    assert "Before I answer" not in text
+    assert (
+        text.startswith(chat_adapter.LEARNED_LEAD_IN) and "Before I answer" not in text
+    )
+    assert server.model.calls == []
+
+
+def test_a_card_from_the_guardians_answer_stays_last_when_a_summary_is_shown(serve):
+    server = serve([propose()], seeded=True)
+    server.add_learned_card()
+
+    text = server.say(f"Honestly, {QUOTE}.")
+
     assert text.startswith(chat_adapter.LEARNED_LEAD_IN)
+    assert text.endswith(ENDING)
+
+
+# --- A message that arrives with a new digest ---------------------------------------------
+
+
+def test_a_message_with_a_new_digest_is_answered_first_and_the_reels_are_offered(serve):
+    # The first message after returning to the app: it is not about the reels.
+    server = serve(
+        [reply("You can change a value by telling me what to change.")], seeded=True
+    )
+
+    text = server.say(
+        "how do I change one of my values?", context=digest("rl_014", "rl_015")
+    )
+
+    asked = sent_to_model(server)
+    assert "drift_notification" not in asked and "rl_014" not in asked
+    assert asked == "how do I change one of my values?"
+    assert text == (
+        "You can change a value by telling me what to change.\n\n"
+        + chat_adapter.offer_line(2)
+    )
+    assert "2 flagged reels" in text and text.endswith("?")
+
+
+def test_saying_yes_to_the_offer_explains_the_reels(serve):
+    server = serve([reply("Like this."), reply("The first touched V1.")], seeded=True)
+    flagged = digest("rl_014", "rl_015", digest_id="D1")
+    server.say("how do I change one of my values?", context=flagged)
+
+    for word in ("Yes please",):
+        text = server.say(word, context=flagged)
+
+    explained = sent_to_model(server)
+    assert text == "The first touched V1."
+    assert "entry: drift_notification" in explained
+    assert "reel_ids: rl_014, rl_015" in explained
+    assert chat_flow.LOOK_UP_REELS_FIRST in explained
+
+
+def test_the_offer_is_made_once_and_anything_but_yes_is_an_ordinary_message(serve):
+    server = serve([reply("One."), reply("Two."), reply("Three.")], seeded=True)
+    flagged = digest("rl_014", digest_id="D1")
+
+    first = server.say("hello there", context=flagged)
+    second = server.say("no thanks", context=flagged)
+    third = server.say("yes", context=flagged)  # the offer is no longer open
+
+    assert first.endswith(chat_adapter.offer_line(1)) and "a flagged reel" in first
+    assert second == "Two." and third == "Three."
+    assert all("drift_notification" not in sent_to_model(server, n) for n in range(3))
+
+
+def test_asking_about_the_reels_later_still_explains_them(serve):
+    server = serve([reply("One."), reply("Explained.")], seeded=True)
+    flagged = digest("rl_014", digest_id="D1")
+    server.say("hello there", context=flagged)
+
+    text = server.say("ok, why was that reel flagged?", context=flagged)
+
+    assert text == "Explained."
+    assert "reel_ids: rl_014" in sent_to_model(server)
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "",
+        "Why were these flagged?",
+        "why?",
+        "and these?",
+        "what about them?",
+        "what happened?",
+        "tell me about the videos",
+        "what was the notification about",
+        "which reels conflicted",
+    ],
+)
+def test_an_empty_message_or_one_about_the_reels_is_explained_straight_away(
+    serve, message
+):
+    server = serve([reply("The first touched V1.")], seeded=True)
+
+    text = server.say(message, context=digest("rl_014"))
+
+    assert text == "The first touched V1."
+    assert "reel_ids: rl_014" in sent_to_model(server)
+
+
+def test_no_offer_is_added_to_a_reply_that_carries_a_card_or_an_error(serve):
+    server = serve([propose()], seeded=True)
+
+    card = server.say(f"Honestly, {QUOTE}.", context=digest("rl_014"))
+
+    assert card.endswith(ENDING)
+    assert "flagged reel" not in card
 
 
 # --- One conversation per local day ----------------------------------------------------------
