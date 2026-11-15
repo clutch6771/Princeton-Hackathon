@@ -1,22 +1,24 @@
 # Guardian handover for the backend
 
-For the backend owner. Checkpoint 1 covers the chat routes: `/chat`, `/chat/resume`, `/status` and `/memory`. Checkpoint 2 adds the inbox routes and the background review job; they are described at the end of this page.
+For the backend owner. This page is the reference for the Guardian's functions and the exact JSON of each route. **The routes are already built:** `guardian_router/` is a FastAPI router your server includes with one line (see `docs/GUARDIAN_FOR_BACKEND_OWNER.md` for the short version and `guardian_router/README.md` for the details). It also serves `POST /agent2/chat`, the route today's app calls.
 
-The Guardian package exposes Python functions; you own the routes. Each route below is one function call. Return the function's result as the response body, unchanged.
+The Guardian package exposes Python functions. Each route below is one function call, and the router returns the function's result as the response body, unchanged.
 
 ## Wiring
 
 ```python
 from guardian import api
 
-api.configure(store, checkpointer, datasource)   # once at startup: MongoDBStore, MongoDBSaver, your DataSource
+api.configure(datasource=datasource)   # once: storage comes from DATABASE_URL (Postgres) or stays in memory
 ```
 
-- **User ID:** read it from the request header the team agreed on (shown here as `X-User-Id`). It may contain only letters, digits, `_` and `-`.
+The router does this itself on the first request, with `app.state.guardian_datasource`. The rest of this section applies if you call the functions directly.
+
+- **User ID:** the `X-Demo-User-Id` header, default `demo-user`. It may contain only letters, digits, `_` and `-`.
 - **Thread ID:** build it on the server, one per user per day: `thread_id = f"{user_id}:{date}"`. The app does not send it.
 - **Timing:** `chat` and `resume` call the model and take about 2 to 10 seconds. They are ordinary blocking functions, so declare the FastAPI routes with `def`, not `async def`, and FastAPI will run them in its thread pool.
 - **Errors:** the functions return errors in the `error` field; they do not raise for anything a user can cause. Send the body back with status 200 and let the app show `error`. The only exception raised is `guardian.config.ConfigError` (missing `configure` call or API key), which is a server fault.
-- **Your `DataSource`:** implement the protocol in `guardian/datasource.py` over MongoDB. Until then, `FakeDataSource.from_seed("demo-user")` serves 40 seed reels.
+- **Your `DataSource`:** `JudgeDataSource` (`watcher_Agent/judge/integration/guardian_source.py`) implements the protocol in `guardian/datasource.py`. It must be called from a worker thread, which a `def` route is. `FakeDataSource.from_seed("demo-user")` serves 40 seed reels for development.
 
 ## Routes
 
@@ -34,6 +36,14 @@ api.configure(store, checkpointer, datasource)   # once at startup: MongoDBStore
 ```
 
 `entry` is one of `onboarding`, `chat`, `drift_notification`, `reel`, `learned`. Send `reel_ids` when the user taps a drift notification or a reel in the Timeline. Send `null` for an ordinary message.
+
+One optional field was added for the app's chat adapter: `stated_goals`, the goal the user typed when setting up the app. With `"entry": "onboarding"` the Guardian starts from it and may quote it as the user's own words:
+
+```json
+{"entry": "onboarding", "stated_goals": "less gym comparison stuff"}
+```
+
+`api.pending_card(user_id, thread_id)` is also new: it returns the value card waiting on a thread (the `pending` object below) or `None`, without sending a message.
 
 ## `POST /chat`
 
@@ -175,13 +185,13 @@ Read-only. File name to markdown text; an empty string means nothing is stored y
 `api.reflect_pending(user_id)` runs the Reflector on every finished session that has not been reviewed and returns how many it reviewed.
 
 - **Never call it inside a request the app is waiting on.** One session takes 1 to 3 minutes. Run it as a background task.
-- Call it in three places: when the broadcast stops (`POST /session/end`), when the app opens, and on a 10-minute timer. Extra calls are harmless: it returns `0` if a review is already running or nothing is waiting.
+- Call it in three places: when the broadcast stops (`POST /session/end`), when the app opens, and on a 10-minute timer. Extra calls are harmless: it returns `0` if a review is already running or nothing is waiting. `guardian_router.review_sessions(user_id)` wraps it for a background task (it never raises and waits briefly for a session that is still being judged), and the router also starts a review on each `POST /agent2/chat` and `GET /questions`.
 - A session counts as finished when `stopped` is true or it has had no new reels for 10 minutes. Both come from your `DataSource.list_sessions`.
 - It does not raise for a failed review. A failed run is rolled back and retried on a later call, up to three times.
 
 ### `GET /questions`
 
-Returns the cards waiting for the user, oldest first. `created` is a Python `datetime`; send it as an ISO 8601 string.
+Returns the cards waiting for the user, oldest first. `created` is a Python `datetime`; the router sends it as an ISO 8601 string in UTC, such as `2026-11-14T22:30:00Z`.
 
 ```json
 [
@@ -192,7 +202,7 @@ Returns the cards waiting for the user, oldest first. `created` is a Python `dat
     "session_id": "s_001",
     "value_change": null,
     "reel_ids": null,
-    "created": "2026-11-14T22:30:00+00:00"
+    "created": "2026-11-14T22:30:00Z"
   },
   {
     "id": "q_3f9a1c2b7d4e",
@@ -206,7 +216,7 @@ Returns the cards waiting for the user, oldest first. `created` is a Python `dat
       "evidence": "fb_001, fb_003, fb_005"
     },
     "reel_ids": null,
-    "created": "2026-11-14T22:30:01+00:00"
+    "created": "2026-11-14T22:30:01Z"
   }
 ]
 ```
@@ -276,7 +286,9 @@ Guardian keeps its state in memory by default and in Postgres when a connection 
 
 With no `store` and `checkpointer` passed, `api.configure(datasource=...)` reads these itself. On Postgres it uses LangGraph's `PostgresStore` and `PostgresSaver` (package `langgraph-checkpoint-postgres`, the version the Judge pins) in schema `public`: tables `store`, `store_migrations`, `checkpoints`, `checkpoint_blobs`, `checkpoint_writes`, `checkpoint_migrations`.
 
-**The role Guardian connects with needs SELECT, INSERT, UPDATE and DELETE on those tables.** The Judge's `grant` step gives its runtime role SELECT only on `store`; that is right for the Judge and not enough for Guardian. Either grant Guardian's role write access, or give Guardian its own role through `GUARDIAN_DATABASE_URL`.
+**The role Guardian connects with needs SELECT, INSERT, UPDATE and DELETE on those tables.** The team uses one database role for the hackathon, so nothing needs granting. Do not run the Judge's `migrate.py grant` step for that role: it revokes everything on `public.store` and grants back SELECT only, which would stop every approval. If the Judge later gets its own SELECT-only role, give Guardian a writing role through `GUARDIAN_DATABASE_URL`.
+
+The tables were created in the team database on Nov 14 with `python -m guardian.storage setup`. The Judge's `setup-store` step calls the same LangGraph setup and is safe to run afterwards, though not needed. Never run `watcher_Agent/scripts/seed_dev_values.py` against the team database: it overwrites the rows that hold approved values.
 
 Guardian also takes Postgres advisory locks (`pg_advisory_lock`) so that a value card is decided once, value IDs are never reused, and one review runs per user, even with several server processes.
 
@@ -300,16 +312,16 @@ Guardian guarantees the following, and a test pins it (`test_the_judges_select_f
 
 **Preferred instead:** call `guardian.api.get_values(user_id)`. Then the storage layout can change without breaking the Judge. The contract above holds until that switch is made.
 
-## A reference server until the backend is ready
+## The router, and a standalone server
 
-`dev_server/` holds a temporary FastAPI server with exactly these four routes, one fixed user (`demo-user`), in-memory storage and the seed data. It is not the team's backend and should be deleted once the real routes exist. It doubles as a working example of the wiring above.
+`guardian_router/` serves every route on this page, plus `POST /agent2/chat` for today's app. Include it in the Judge server with one line, or run it on its own with seed data, one demo user and in-memory storage:
 
 ```bash
-pip install -r dev_server/requirements.txt
-GUARDIAN_DEV_SEEDED=1 uvicorn dev_server.app:create_app --factory --host 0.0.0.0 --port 8000
+pip install -r guardian_router/requirements.txt
+GUARDIAN_DEV_SEEDED=1 uvicorn guardian_router.standalone:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
-`GUARDIAN_DEV_SEEDED=1` starts it with three approved values, so a drift explanation works straight away. Leave it out to start with none and go through the interview. See `dev_server/README.md` for curl examples.
+`GUARDIAN_DEV_SEEDED=1` starts it with three approved values, so a drift explanation works straight away. Leave it out to start with none and go through the interview. See `guardian_router/README.md`.
 
 ## Try it without a server
 

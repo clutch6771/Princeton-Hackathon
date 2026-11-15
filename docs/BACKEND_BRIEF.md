@@ -1,10 +1,10 @@
 # Backend brief: storage and the Guardian router, before step 4b
 
-From the Guardian owner, Saturday Nov 14. Checkpoint 2 was accepted on the live run. This work comes before step 4b. Revised after the Part A survey, which found that a teammate has already built the Judge server (branch `Reel-Watcher-Agent`, `watcher_Agent/`) on PostgreSQL.
+From the Guardian owner, Saturday Nov 14. Checkpoint 2 was accepted on the live run. This work comes before step 4b. Parts A, B and C are done; results are in `docs/GUARDIAN_PROGRESS.md`. Revised after the Part A survey, which found that a teammate has already built the Judge server (branch `Reel-Watcher-Agent`, `watcher_Agent/`) on PostgreSQL.
 
 ## Decisions after the survey
 
-1. **Database:** Postgres, in the teammate's database. MongoDB is dropped.
+1. **Database:** Postgres. MongoDB is dropped. The team database is a Tiger Data instance created by the Guardian owner on Nov 14; the teammate points their server's `DATABASE_URL` at it and runs their own migrations there. One database role for the hackathon; `GUARDIAN_DATABASE_URL` stays as an option but is not set.
 2. **Part C:** no new backend, Judge, reel storage or MongoDataSource. Build a small Guardian router that the teammate's server includes.
 3. **App version:** match the teammate's branch (`Reel-Watcher-Agent`): `X-Demo-User-Id` header, `POST feedback`, `session/end`, a digest built from the timeline. Build nothing for the calls only the `main` version makes (`agent2/checkpoint`, `agent2/feedback`, `pending-intervention`).
 4. **Value cards:** build a text fallback in the chat adapter. Keep the JSON card routes for a later card UI.
@@ -31,21 +31,21 @@ Stop and report after Part B.
 
 ## Part C: Guardian router (outside guardian/, replacing dev_server/)
 
-- A FastAPI router their app can include with one line, plus a standalone app on seed data (keep GUARDIAN_DEV_SEEDED). User comes from the X-Demo-User-Id header, default demo-user.
+- A FastAPI router the teammate's server can include with one line, plus a standalone app on seed data (keep GUARDIAN_DEV_SEEDED). User comes from the X-Demo-User-Id header, default demo-user. Match the teammate's app version (branch Reel-Watcher-Agent). Do not edit the iOS code or the teammate's code.
 - JSON routes as in the handover: /chat, /chat/resume, /status, /memory, /questions, /questions/{id}/answer.
 - POST /agent2/chat adapter: accepts {message, profile, context} and returns the ChatMessage shape the app decodes (id, sender "coachAgent", text, timestamp; attached_digest and client_action null).
   - A context digest becomes a drift-notification entry using the IDs in flagged_reels. Verify these are the reel IDs their JudgeDataSource knows.
-  - Pass profile.stated_goals to the Guardian as background in onboarding, so it starts from what the user already wrote.
+  - Pass profile.stated_goals to the Guardian as background in onboarding.
   - Card fallback: a pending card is shown as plain text ending "Reply approve or reject." The decision is parsed in code, not by the model: exactly approve/yes or reject/no, case-insensitive, applied through resume or answer_question. Any other reply returns the card text again. No editing in the fallback.
   - Inbox through chat: at the start of a chat turn with no chat card pending, present pending inbox cards one at a time, oldest first. A "What I learned" card is shown as text and dismissed once shown; value cards use the same approve/reject fallback.
-- Reflector trigger: export one function for their /session/end to call as a background task. Also start reflect_pending in the background on each /agent2/chat and GET /questions call, so reviews happen even before they add that line.
-- App feedback comments are canned strings, not the user's words: exclude every source="app" comment from the quote check.
+- Reflector trigger: export one function for their /session/end to call as a background task. Also start reflect_pending in the background on each /agent2/chat and GET /questions call.
+- App feedback comments are canned strings: exclude every source="app" comment from the quote check.
 - Tests: offline tests for every route and the fallback. Then one live run through HTTP on seed data: onboarding from stated_goals, approve by text, digest explanation, disagreement, reflect, inbox card through chat, approve, get_values changed.
 - README: the one-line include, the JudgeDataSource wiring, every environment variable, running standalone behind a tunnel.
-- docs/GUARDIAN_FOR_BACKEND_OWNER.md, one page for the teammate: the one-line include; call get_values instead of the SELECT; call the session-end function; their Judge prompt must handle the values format including "Agreed wording", "Want more: none" and "Unless"; check whether ocr_text from the app is being dropped.
+- docs/GUARDIAN_FOR_BACKEND_OWNER.md, one page for the teammate: the one-line include; the steps to run their migrations against the team database and whether their setup-store step is safe after ours; call get_values instead of the SELECT; call the session-end function; their Judge prompt must handle the values format including "Agreed wording", "Want more: none" and "Unless"; check whether ocr_text from the app is being dropped.
 
 Cap Part C at about two hours. Stop and report after it.
 
 ## After that
 
-Step 4b (docs/GUARDIAN_REFLECTION_ADDENDUM.md, plus the two prompt changes above), then the learning evaluation. Feature freeze is 4:00 am.
+Step 4b (docs/GUARDIAN_REFLECTION_ADDENDUM.md; "none" for any value line the evidence does not support; the interview focuses on "want less"), then the learning evaluation. Feature freeze is 4:00 am.

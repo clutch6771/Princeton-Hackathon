@@ -33,8 +33,11 @@ message), brief.md and hypotheses.md.
    - Then any hypothesis promoted in step 4.
    Prefer refining an existing value, often with an Unless line, over adding
    one. For a new value, write the header as "## New: <title> (strength: ...)".
-   Wording: if the user wrote a comment or chat message that states it, use
+   Wording: if the user wrote a chat message that states it (see
+   /scratch/chats.md), use
    - In my words: "<their exact words>"
+   A comment on feedback sent from the app is a preset option the user tapped,
+   not their own words: use it as evidence, never as a quote.
    Otherwise use
    - Suggested wording: "<your wording>"
    and make the card's prompt say the wording is a suggestion they can edit,

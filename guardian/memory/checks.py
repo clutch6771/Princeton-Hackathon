@@ -19,7 +19,10 @@ from guardian.datasource import DataSource
 from guardian.memory import records
 
 BEGINNING_OF_TIME = datetime(2000, 1, 1, tzinfo=UTC)
-AGENT_WRITTEN_SOURCE = "chat"  # feedback recorded by the chat agent's tool
+# Feedback comments from these sources are not the user's typed words: "chat" comments
+# are written by the chat agent's tool, and "app" comments are preset correction
+# strings the user tapped.
+NOT_TYPED_SOURCES = frozenset({"chat", "app"})
 _STRAIGHT_QUOTES = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'"})
 _EVIDENCE_ID = re.compile(r"\b(rl|fb|s)_[A-Za-z0-9]+\b")
 
@@ -40,16 +43,18 @@ def quote_found(quote: str, sources: Iterable[str]) -> bool:
 def user_statements(
     store: BaseStore, datasource: DataSource, user_id: str
 ) -> list[str]:
-    """Everything this user wrote: chat messages and comments typed in the app.
+    """Everything this user wrote: chat messages and feedback comments they typed.
 
     Comments on feedback recorded through chat are left out. The chat agent writes
     those, often as a paraphrase, and the user's real words are already in the chat
-    log. Counting them would let an agent's wording pass as the user's own.
+    log. Comments on feedback sent by the app are left out too: the app sends a
+    preset correction, not typed text. Counting either would let wording the user
+    never wrote pass as their own.
     """
     comments = [
         item["comment"]
         for item in datasource.get_feedback(user_id, BEGINNING_OF_TIME)
-        if item["comment"] and item["source"] != AGENT_WRITTEN_SOURCE
+        if item["comment"] and item["source"] not in NOT_TYPED_SOURCES
     ]
     return [*records.user_chat_messages(store, user_id), *comments]
 

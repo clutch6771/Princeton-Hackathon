@@ -1,6 +1,6 @@
 # Guardian package
 
-The two agents that talk with the user and learn about them: the **Guardian** (chat agent) and the **Reflector** (background session review). This package exposes Python functions only. The backend wraps them in routes; the Judge calls one of them for the values text.
+The two agents that talk with the user and learn about them: the **Guardian** (chat agent) and the **Reflector** (background session review). This package exposes Python functions only. `guardian_router/` (outside this package) wraps them in HTTP routes for the team's server to include; the Judge calls one of them for the values text.
 
 Status: the whole demo loop works on seed data: chat, value approval, the values lookup, reel explanation, feedback in chat, the Reflector's session review, and the inbox.
 
@@ -57,7 +57,7 @@ Call `configure` once at startup, then call the entry points from your routes.
 ```python
 from guardian import api
 
-api.configure(store, checkpointer, datasource)   # MongoDBStore, MongoDBSaver, your DataSource
+api.configure(datasource=datasource)   # storage from DATABASE_URL (Postgres), or in memory
 
 response = api.chat(user_id, f"{user_id}:{date}", "hi")
 # {"reply": "...", "pending": None, "error": None}
@@ -68,7 +68,7 @@ may_record = api.has_values(user_id)      # app blocks recording until True
 memory = api.get_memory(user_id)          # {"values.md": ..., "brief.md": ..., "hypotheses.md": ..., "notes.md": ...}
 ```
 
-To run without MongoDB, use the in-memory versions and the fake data:
+To run without a database, pass the in-memory versions and the fake data:
 
 ```python
 from datetime import UTC, datetime
@@ -126,7 +126,7 @@ Request and response shapes are in `guardian/types.py`. They match the build spe
 
 ## Fake data
 
-`FakeDataSource.from_seed(user_id)` serves 40 invented reels and 8 feedback items for one user, generated from `seed/persona.md` by `seed/build_seed.py`. It implements the `DataSource` protocol in `guardian/datasource.py`, which is what the real MongoDB-backed implementation needs to provide. `FakeDataSource.from_records(user_id, reels, feedback)` accepts real Judge output in the same record shape.
+`FakeDataSource.from_seed(user_id)` serves 40 invented reels and 8 feedback items for one user, generated from `seed/persona.md` by `seed/build_seed.py`. It implements the `DataSource` protocol in `guardian/datasource.py`, which the Judge server's `JudgeDataSource` also implements. `FakeDataSource.from_records(user_id, reels, feedback)` accepts real Judge output in the same record shape.
 
 ## Tests
 

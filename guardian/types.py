@@ -16,6 +16,9 @@ class ChatContext(TypedDict, total=False):
         str
     ]  # drift_notification: the conflicting reels; reel: one reel from the Timeline
     session_id: str  # learned: open the chat on a session's "What I learned"
+    # Optional addition for the app's chat adapter: the goal the user typed when
+    # they set up the app, passed as background during onboarding.
+    stated_goals: str
 
 
 class ValueChange(TypedDict):

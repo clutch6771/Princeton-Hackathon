@@ -114,8 +114,30 @@ def test_quote_check_ignores_case_spacing_and_surrounding_punctuation(
     assert propose(store, datasource).error is None
 
 
-def test_quote_can_come_from_a_feedback_comment(store, datasource):
+def test_a_comment_on_app_feedback_is_not_the_users_words(store, datasource):
+    # The app sends preset correction strings as the comment, not typed text.
     text = NEW_FITNESS.replace(QUOTE, "physio before and after is different")
+
+    created = propose(store, datasource, text=text)
+
+    assert created.proposal is None
+    assert "Suggested wording" in created.error
+
+
+def test_quote_can_come_from_a_comment_the_user_typed_outside_the_app_buttons(
+    store, datasource
+):
+    typed = "I never want to see crypto pitches"
+    datasource.record_feedback(
+        USER,
+        {
+            "reel_id": "rl_003",
+            "label": "not_for_me",
+            "comment": typed,
+            "source": "share",
+        },
+    )
+    text = NEW_FITNESS.replace(QUOTE, typed)
 
     assert propose(store, datasource, text=text).error is None
 
@@ -583,15 +605,27 @@ def test_chat_log_keeps_user_messages_and_drops_turns_older_than_seven_days(
     ]
 
 
-def test_user_statements_combine_chat_messages_and_feedback_comments(
+def test_user_statements_are_chat_messages_and_typed_comments_but_not_app_comments(
     store, datasource: FakeDataSource
 ):
     say(store, "I scroll when I'm stressed")
+    datasource.record_feedback(
+        USER,
+        {
+            "reel_id": "rl_003",
+            "label": "not_for_me",
+            "comment": "typed",
+            "source": "share",
+        },
+    )
 
     statements = checks.user_statements(store, datasource, USER)
 
     assert "I scroll when I'm stressed" in statements
-    assert "physio before and after is different, I find it motivating" in statements
+    assert "typed" in statements
+    assert (
+        "physio before and after is different, I find it motivating" not in statements
+    )
     assert checks.user_statements(store, datasource, OTHER_USER) == []
 
 

@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Saturday Nov 14, 6:34 pm. Branch: `guardian`.
+Last updated: Saturday Nov 14, 9:05 pm. Branch: `guardian`.
 
 ## Where things stand
 
@@ -15,13 +15,13 @@ Last updated: Saturday Nov 14, 6:34 pm. Branch: `guardian`.
 | 3. Reflector | Done | `5caef44` |
 | 4. Inbox approval (`get_questions`, `answer_question`) | Done; integration checkpoint 2 waiting on the owner | this commit |
 | Backend brief Part A: survey of the app and the teammate's backend | Done | |
-| Backend brief Part B: storage on Postgres | Done; tables not yet created in the team database | this commit |
-| Backend brief Part C: Guardian router | Not started | |
+| Backend brief Part B: storage on Postgres | Done; tables created in the team database | `d28f583` |
+| Backend brief Part C: Guardian router (`guardian_router/`) | Done | this commit |
 | 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) | Not started; the closing question on the "What I learned" card is already in | |
 | 5. Learning evaluation | Not started | |
 | Optional items | Not started | |
 
-Offline tests: 307 passing in `guardian/` in memory and 9 in `dev_server/`; 521 in total when every storage test also runs on Postgres. They use a scripted model and make no API calls.
+Offline tests: 381 passing in memory (`guardian/` and `guardian_router/`); 597 when every storage test also runs on Postgres. They use a scripted model and make no API calls.
 
 ## Step 0: library findings
 
@@ -112,7 +112,7 @@ What exists for trying the chat before the Reflector is built:
 
 - `python -m guardian.demo_chat`: a terminal chat on seed data (interview, `/approve`, `/edit`, `/reject`, `/drift`, `/values`, `/memory`, `/seed`). Tested with a scripted model and run once against Gemini.
 - `docs/GUARDIAN_BACKEND_HANDOVER.md`: exact request and response JSON for `/chat`, `/chat/resume`, `/status` and `/memory`, generated from the real functions.
-- `dev_server/`: a temporary FastAPI server with those four routes, because the team's backend was not ready. One fixed user, in-memory storage, seed data. Delete it once the real backend serves the routes.
+- `dev_server/`: a temporary FastAPI server with those four routes, because the team's backend was not ready. Replaced in Part C by `guardian_router/` and deleted.
 
 Results: the dev server answered all four routes against the live model (status, a drift explanation, an error body, memory) and returns 422 for a malformed body.
 
@@ -193,7 +193,70 @@ Built: `guardian/storage.py` (in memory or Postgres, chosen from the environment
 
 Results: every existing storage test runs on both backends through one parametrized fixture: 521 tests pass with `TEST_DATABASE_URL` set (a local Postgres 16 in Docker), 316 in memory without it. Six Postgres-only tests cover locks across two connections, the Judge's SELECT, wildcard isolation, decide-once from two processes, concurrent value IDs, and a restart (an approved value and a pending card are both still there after everything is rebuilt, and the card can then be approved).
 
-State of the team database (checked read-only): reachable, the role may create tables, and it is empty. Guardian's tables have not been created there.
+State of the team database: a Tiger Data instance (Postgres 18.6) created by the Guardian owner on Nov 14. `python -m guardian.storage setup` created Guardian's six tables in `public`. A check with a throwaway user passed: a value approved through `chat` and `resume` came back from `get_values`, the Judge's SELECT returned the same text, and the user's rows were then deleted. The teammate points their server at this database and runs their own migrations; one role for the hackathon.
+
+### Part C: the Guardian router
+
+Built: `guardian_router/`, outside `guardian/`, replacing `dev_server/`. A FastAPI router the Judge server includes with one line, a standalone app on seed data, and `review_sessions(user_id)` for the session-end hook. During this part the owner merged the teammate's Judge server into `guardian` (PR #7), so the router could be tested inside it.
+
+- **JSON routes:** `/chat`, `/chat/resume`, `/status`, `/memory`, `/questions`, `/questions/{id}/answer`. One Guardian function each, result unchanged. The user comes from `X-Demo-User-Id`, default `demo-user`.
+- **`POST /agent2/chat`** returns the `ChatMessage` the app decodes. The adapter turns the Guardian's structured responses into chat text:
+  - A pending value card is plain text ending "Reply approve or reject." The decision is parsed in code (exactly approve / yes / reject / no, any case) and applied through `resume` or `answer_question`. Anything else shows the card again.
+  - Inbox cards are presented at the start of a turn, one at a time, oldest first. A "What I learned" card is shown and dismissed; the next message goes to the Guardian with `entry="learned"`. A value card waits for approve or reject.
+  - The digest becomes a drift-notification entry with the IDs in `flagged_reels`.
+  - `profile.stated_goals` is passed as background during onboarding.
+- **Configuration is lazy.** The router reads `app.state.guardian_datasource` on the first request and calls `api.configure(datasource=...)`. Every route is a plain `def`, so the Judge's data source is always called from a worker thread.
+- **Reviews** start in a background thread on each `/agent2/chat` and `GET /questions`, and through `review_sessions`. One per user at a time in the process, on top of the package's own lock.
+
+What the survey of the app's code settled:
+
+| Question | Finding | What the router does |
+| --- | --- | --- |
+| Are the digest's `flagged_reels` IDs the reel IDs `JudgeDataSource` knows? | Yes. Both are the Judge's reel record ID: the app copies `id` from `GET /timeline`. But Swift encodes a UUID in upper case and the Judge's records are lower case | Lower-cases UUIDs. Confirmed by a test inside the real Judge app |
+| When does the app attach the digest? | To every message after a notification, not only the first | Each digest is explained once |
+| What is `stated_goals` when the user typed nothing? | The app's default, "Low-Stress Feed" | Ignores that string |
+| How long does the app wait for a reply? | 12 seconds, then "Coach unavailable. Please try again." | If the user sends the same message again, returns the reply they missed. Asked the teammate to raise the timeout |
+
+Changes inside `guardian/` that Part C needed:
+
+- `api.pending_card(user_id, thread_id)`: a read-only look at the card waiting on a thread. An addition to the spec's entry points.
+- `ChatContext` gained an optional `stated_goals`. The goals are put in the CONTEXT block and recorded once with the user's chat messages, so a quote from them passes the quote check.
+- **Feedback comments from the app no longer count as the user's words** (`source="app"`), because the app sends a preset correction. The session-review skill says so. The seed feedback has source "app", so in the seed data only chat messages can be quoted now.
+- **Rate limiting.** The Reflector has its own limiter at half the chat rate, so a review cannot make a chat reply wait. Both limiters now start full: LangChain's starts empty, which made the first call wait 5 seconds.
+- `guardian/judge_prompt.md` says a line reading "none" has nothing to match.
+
+Choices made where the brief was silent:
+
+- The message that arrives when an inbox value card is shown is held, and answered by the Guardian once the cards are decided, so it is not lost.
+- After a "What I learned" card, the next message goes to the Guardian before any further inbox card, because that card ends with a question.
+- A card with suggested wording says "reply reject and tell me how you would say it", since the fallback has no editing.
+- No review is started for a user with no approved value.
+- The standalone app also serves `GET /health` and `POST /session/end`. It has no timeline or feedback route.
+- What has been shown to whom is kept in the process only. After a restart a card is shown again before it can be decided.
+
+Results: 60 router tests, including 3 that run the router inside the real Judge app on its fakes; 381 offline tests in all, 597 with Postgres.
+
+Live run through HTTP on seed data (`python -m guardian_router.live_run`, Flash-Lite), run twice, 8 of 8 checks both times:
+
+| Step | Run 2 (final code) |
+| --- | --- |
+| Onboarding from the stated goal | The Guardian opened from the goal and proposed a card on the second message, quoting the goal under `In my words` |
+| Approve by text | "Approve" stored V1; `/status` turned true |
+| Digest explanation | Both flagged reels explained, citing V1 and quoting each transcript |
+| Disagreement | Recorded; the Guardian asked what made the reel fine |
+| Review | Started by the chat turn; cards were in the inbox 150 seconds after `/session/end` |
+| Inbox through chat | A refinement of V1 (an "Unless" line for injury rehab), then a new hustle value with suggested wording, then the "What I learned" card ending with a question |
+| Approve, values changed | V1 updated; V2 stored with `Agreed wording` |
+
+Chat replies took 0.7 to 6.9 seconds in run 2. In run 1, before the limiters started full, they took 4.5 to 15.1 seconds, and two would have passed the app's 12-second timeout. Run 1's review queued one value card (the V1 refinement) and not the hustle value; run 2's queued both.
+
+Seen in these runs and left for 4b: the Reflector's V1 refinement also rewrote the title, the strength and the "Want more" line, not only "Unless".
+
+Found and not fixed (outside this part):
+
+- The evidence check recognises only seed-style IDs (`rl_`, `fb_`, `s_`). The Judge's IDs are UUIDs, so with real data a cited ID is not checked for existence. Nothing breaks; the check is weaker.
+- `reflect_pending` reviews every finished session, including one with no judged reels. With real data that wastes a Reflector run on an empty session.
+- Their Judge prompt never explains "Want more" and "Want less", and the app's `ocr_text` is dropped by their upload model. Both are in `docs/GUARDIAN_FOR_BACKEND_OWNER.md`.
 
 ## Conventions
 

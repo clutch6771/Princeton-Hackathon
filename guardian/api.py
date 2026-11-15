@@ -30,6 +30,7 @@ from guardian.types import (
     ChatContext,
     Decision,
     GuardianResponse,
+    Interrupt,
     Question,
 )
 
@@ -113,6 +114,15 @@ def resume(user_id: str, thread_id: str, decision: Decision) -> GuardianResponse
     return chat_flow.resume(deps, _agent(deps), user_id, thread_id, decision)
 
 
+def pending_card(user_id: str, thread_id: str) -> Interrupt | None:
+    """The value card waiting on a thread, or None. Read-only.
+
+    An addition to the spec's entry points, for a chat adapter that shows the card
+    as text: it needs to know a card is waiting without sending a message.
+    """
+    return chat_flow.pending_card(_require_deps(), user_id, thread_id)
+
+
 def reflect_pending(user_id: str) -> int:
     """Review every finished session that has not been reviewed; returns how many.
 
@@ -123,7 +133,9 @@ def reflect_pending(user_id: str) -> int:
     deps = _require_deps()
 
     def build_model() -> Any:
-        return deps.reflector_model or models.build_model(config.reflector_model_name())
+        return deps.reflector_model or models.build_model(
+            config.reflector_model_name(), background=True
+        )
 
     return reflect_flow.reflect_pending(deps, user_id, build_model)
 

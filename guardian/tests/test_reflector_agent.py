@@ -411,7 +411,7 @@ def test_queue_question_refuses_a_quote_the_user_never_wrote(store, datasource, 
     assert inbox.list_cards(store, USER) == []
 
 
-def test_queue_question_accepts_an_exact_quote_from_a_feedback_comment(
+def test_queue_question_refuses_a_quote_taken_from_an_app_feedback_comment(
     store, datasource, clock, with_values
 ):
     stored = values.get_value(store, USER, "V1").text
@@ -421,6 +421,32 @@ def test_queue_question_accepts_an_exact_quote_from_a_feedback_comment(
         "gym stuff is great, comparing bodies is not",
         "rehab progress is fine, it's about getting better not looking better",
     )
+    change = {
+        "value_id": "V1",
+        "new_text": refined,
+        "evidence": "fb_001, fb_003, fb_005",
+    }
+
+    _, results = run_reflector(
+        store,
+        datasource,
+        clock,
+        [queue(change, prompt="You disagreed with 5 rehab flags.")],
+    )
+
+    assert "Suggested wording" in results[0] and "Queued" not in results[0]
+    assert inbox.list_cards(store, USER) == []
+
+
+def test_queue_question_accepts_an_exact_quote_from_a_chat_message(
+    store, datasource, clock, with_values
+):
+    said = "rehab progress is fine, it's about getting better not looking better"
+    records.append_chat_turn(store, USER, records.ROLE_USER, f"Honestly, {said}.", NOW)
+    stored = values.get_value(store, USER, "V1").text
+    refined = stored.replace(
+        "- Unless: none", "- Unless: injury rehab and recovery progress"
+    ).replace("gym stuff is great, comparing bodies is not", said)
     change = {
         "value_id": "V1",
         "new_text": refined,
