@@ -1,128 +1,122 @@
 import SwiftUI
+import UserNotifications
 import Speech
 
 struct HomeView: View {
     @Environment(SessionManager.self) private var session
-    @State private var showConnection = false
-    @State private var pickerTrigger = 0
-
+    @State private var trigger = 0
+    @State private var showError = false
+    @State private var preparing = false
+    @State private var showPermissionNotice = false
+    @State private var permissionNotice = ""
+    @Environment(\.openURL) private var openURL
+    private var ratio: Double { Double(session.sessionFlagged) / Double(max(1, session.sessionTotal)) }
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer()
-            Image(systemName: session.isMonitoring ? "eye.fill" : "eye.slash")
-                .font(.system(size: 64))
-                .foregroundStyle(session.isMonitoring ? .green : .secondary)
-
-            Text(session.isMonitoring ? "Monitoring is on" : "Monitoring is off")
-                .font(.title2.bold())
-
-            Picker("Source", selection: Binding(
-                get: { session.mode }, set: { session.setMode($0) })) {
-                ForEach(SourceMode.allCases) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.menu)
-            .disabled(session.isMonitoring)
-
-            VStack {
-                Picker("Checkpoint", selection: Binding(get: { session.checkpointInterval }, set: { session.setInterval($0) })) {
-                    ForEach([10, 15, 30, 50], id: \.self) { Text("\($0) reels").tag($0) }
-                }.pickerStyle(.segmented)
-                Stepper("Every \(session.checkpointInterval) reels", value: Binding(get: { session.checkpointInterval }, set: { session.setInterval($0) }), in: 1...100)
-                Button("Simulate Checkpoint") { session.simulateCheckpoint() }
-                    .buttonStyle(.bordered)
-                Text("Demo coach • simulated checkpoint data").font(.caption).foregroundStyle(.secondary)
-            }.padding(.horizontal)
-
-            Button("Backend Connection & Permissions") { showConnection = true }
-            Text(hint)
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            FriendlyEye(open: session.isMonitoring).frame(width: 150, height: 90)
+                .accessibilityLabel(session.isMonitoring ? "Eye open, monitoring" : "Eye closed, resting")
+                .padding(.bottom, 44)
             Button {
-                if session.isMonitoring {
-                    session.stop()
-                } else {
-                    session.start()
-                    if session.mode == .instagramBroadcast, SharedStore.isAvailable {
-                        pickerTrigger += 1
-                    }
+                Vigil.tap()
+                if session.isMonitoring { session.stop() }
+                else {
+                    Task { await prepareMonitoring() }
                 }
             } label: {
-                Text(session.isMonitoring ? "Stop Monitoring" : "Start Monitoring")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(session.isMonitoring ? Color.red : Color.accentColor)
-                    .foregroundStyle(.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .padding(.horizontal)
-
-            if let msg = session.statusMessage {
-                Text(msg).font(.footnote).foregroundStyle(.orange)
-                    .multilineTextAlignment(.center).padding(.horizontal)
-            }
-
-            if session.isMonitoring {
-                Text("\(session.reelCount) Reels, checkpoint every \(session.checkpointInterval)")
-                    .font(.footnote.monospacedDigit())
-            }
-            Spacer()
-        }
-        .background(
-            BroadcastPicker(trigger: pickerTrigger)
-                .frame(width: 44, height: 44)
-                .opacity(0.01)
-                .allowsHitTesting(false)
-        )
-        .sheet(isPresented: $showConnection) { NavigationStack { BackendConnectionView() } }
-        .navigationTitle("AttentionAgent")
+                Text(session.isMonitoring ? "STOP" : "START")
+                    .font(.system(size: 30, weight: .bold, design: .rounded)).tracking(2)
+                    .foregroundStyle(Vigil.canvas).frame(width: 190, height: 190)
+                    .background(session.isMonitoring ? LinearGradient(colors: [Vigil.coral, Vigil.indigo], startPoint: .topLeading, endPoint: .bottomTrailing) : Vigil.accent, in: Circle())
+                    .shadow(color: (session.isMonitoring ? Vigil.coral : .green).opacity(0.18), radius: 28, y: 8)
+            }.disabled(preparing).buttonStyle(.plain).animation(Vigil.spring, value: session.isMonitoring)
+                .background(BroadcastPicker(trigger: trigger).frame(width: 1, height: 1).opacity(0.01))
+            GeometryReader { geometry in
+                Capsule().fill(.white.opacity(0.28)).overlay(alignment: .leading) {
+                    Capsule().fill(Vigil.coral).frame(width: geometry.size.width * ratio)
+                }
+            }.frame(height: 13).frame(maxWidth: 300).padding(.top, 44)
+                .animation(Vigil.spring, value: ratio)
+                .accessibilityLabel("Flagged share of watched reels").accessibilityValue("\(Int(ratio * 100)) percent")
+            HStack {
+                VStack(spacing: 5) { Text("\(session.sessionFlagged)").foregroundStyle(Vigil.coral); Text("Flagged").font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                VStack(spacing: 5) { Text("\(max(0, session.sessionTotal - session.sessionFlagged))"); Text("Unflagged").font(.caption).foregroundStyle(.secondary) }
+                Spacer()
+                VStack(spacing: 5) { Text("\(session.sessionTotal)"); Text("Watched").font(.caption).foregroundStyle(.secondary) }
+            }.font(.headline.monospacedDigit()).frame(maxWidth: 300).padding(.top, 18)
+            Text(session.sessionTotal == 0 ? "No completed reels detected yet" : "Most recent session")
+                .font(.caption).foregroundStyle(.secondary).padding(.top, 12)
+            Spacer(minLength: 24)
+        }.frame(maxWidth: .infinity).toolbar(.hidden, for: .navigationBar)
+            .alert("Some features are unavailable", isPresented: $showPermissionNotice) {
+                Button("Continue Monitoring") { beginBroadcast() }
+                Button("Open Settings") { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } }
+                Button("Cancel", role: .cancel) { }
+            } message: { Text(permissionNotice) }
+            .onChange(of: session.broadcastControlTrigger) { _, _ in trigger += 1 }
+            .alert("Monitoring unavailable", isPresented: $showError) { Button("OK", role: .cancel) {} } message: { Text(session.statusMessage ?? "Please try again.") }
     }
 
-    private var hint: String {
-        switch session.mode {
-        case .feedDirect:
-            return "Opens the Reels tab. Each swipe is counted directly. Use this to test the interface."
-        case .inAppCapture:
-            return "Captures this app's own screen and runs the real detector on the Reels tab. Stay on that tab."
-        case .instagramBroadcast:
-            return "Tap Start, choose AttentionBroadcast, tap Start Broadcast, then open Instagram. Stop here or from the red status bar."
+    @MainActor private func prepareMonitoring() async {
+        guard !preparing else { return }
+        preparing = true
+        defer { preparing = false }
+        var unavailable: [String] = []
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        if settings.authorizationStatus == .notDetermined {
+            do { _ = try await center.requestAuthorization(options: [.alert, .sound]) }
+            catch { unavailable.append("Notification permission could not be requested.") }
         }
+        let notifications = await center.notificationSettings()
+        if notifications.authorizationStatus != .authorized && notifications.authorizationStatus != .provisional {
+            unavailable.append("Notifications are off, so checkpoint alerts won't appear.")
+        }
+        // Reel soundtrack is supplied by ReplayKit .audioApp; microphone access is not used.
+        if SFSpeechRecognizer.authorizationStatus() == .notDetermined {
+            let _: SFSpeechRecognizerAuthorizationStatus = await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+            }
+        }
+        if SFSpeechRecognizer.authorizationStatus() != .authorized {
+            unavailable.append("Speech Recognition is off, so reel audio won't be transcribed.")
+        }
+        if unavailable.isEmpty { beginBroadcast() }
+        else { permissionNotice = unavailable.joined(separator: "\n\n"); showPermissionNotice = true }
+    }
+
+    @MainActor private func beginBroadcast() {
+        guard BroadcastPicker.installedExtensionID != nil else {
+            session.statusMessage = "AttentionAgent's screen broadcast extension is missing. Reinstall the complete app to enable monitoring."
+            showError = true
+            return
+        }
+        session.setMode(.instagramBroadcast)
+        session.start()
+        if SharedStore.isAvailable && Date().timeIntervalSince1970 >= SharedStore.pausedUntil { trigger += 1 }
+        else { showError = true }
     }
 }
-
-
-struct BackendConnectionView: View {
-    @State private var url = SharedStore.backendBaseURL
-    @State private var live = SharedStore.useLiveBackend
-    @State private var connected: Bool?
-    @State private var testing = false
-    @State private var speech = SFSpeechRecognizer.authorizationStatus()
+struct FriendlyEye: View {
+    let open: Bool
     var body: some View {
-        Form {
-            Section("Backend Connection") {
-                TextField("Server URL", text: $url).textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .onChange(of: url) { _, value in SharedStore.backendBaseURL = value; connected = nil }
-                Toggle("Live Python Backend", isOn: $live).onChange(of: live) { _, value in SharedStore.useLiveBackend = value }
-                Text(live ? "Live mode" : "Mock Mode")
-                Button(testing ? "Testing…" : "Test Connection") {
-                    testing = true
-                    Task {
-                        do { try await LiveAgentBackend().health(); connected = true }
-                        catch { connected = false }
-                        testing = false
-                    }
-                }.disabled(testing)
-                if let connected { Text(connected ? "Connected" : "Offline").foregroundStyle(connected ? .green : .red) }
+        ZStack {
+            if open {
+                Path { p in
+                    p.move(to: CGPoint(x: 5, y: 45))
+                    p.addQuadCurve(to: CGPoint(x: 145, y: 45), control: CGPoint(x: 75, y: -22))
+                    p.addQuadCurve(to: CGPoint(x: 5, y: 45), control: CGPoint(x: 75, y: 108))
+                }.fill(.white.opacity(0.95))
+                Circle().fill(Vigil.accent).frame(width: 54, height: 54)
+                Circle().fill(Vigil.canvas).frame(width: 28, height: 28)
+                Circle().fill(.white).frame(width: 12, height: 12).offset(x: -8, y: -9)
+                Circle().fill(.white.opacity(0.7)).frame(width: 5, height: 5).offset(x: 9, y: 9)
+            } else {
+                Path { p in p.move(to: CGPoint(x: 10, y: 30)); p.addQuadCurve(to: CGPoint(x: 140, y: 30), control: CGPoint(x: 75, y: 96)) }
+                    .stroke(.white, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                ForEach(0..<3) { i in Capsule().fill(.white).frame(width: 6, height: 17).rotationEffect(.degrees(Double(i - 1) * -25)).offset(x: CGFloat(i - 1) * 38, y: 25) }
             }
-            Section("Speech Recognition Permission") {
-                Text(speech == .authorized ? "Authorized • on-device only" : speech == .notDetermined ? "Not requested" : "Unavailable — enable Speech Recognition in Settings")
-                Button("Request Speech Permission") {
-                    SFSpeechRecognizer.requestAuthorization { status in Task { @MainActor in speech = status } }
-                }
-            }
-        }.navigationTitle("Connection & Permissions")
+        }.animation(Vigil.spring, value: open)
     }
 }

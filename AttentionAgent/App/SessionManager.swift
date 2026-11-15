@@ -7,6 +7,41 @@ final class SessionManager {
     static let shared = SessionManager()
 
     // UI state
+    var broadcastControlTrigger = 0
+    var sessionInsights: [SessionInsight] = []
+    var sessionStart: Date?
+    private var pendingBroadcastStart: Date?
+    private var broadcastTotal = 0
+    private var broadcastFlags: [FlaggedReelEvent] = []
+    var sessionTotal: Int { max(currentRecords.count, broadcastTotal) }
+    var sessionFlagged: Int {
+        let local = currentRecords.filter { !($0.analysis?.flaggedPatterns.isEmpty ?? true) }.map(\.id)
+        return min(sessionTotal, Set(local + broadcastFlags.map(\.id)).count)
+    }
+    private var currentRecords: [ReelRecord] {
+        guard let start = sessionStart else { return [] }
+        return records.filter { $0.observation.endedAt >= start }
+    }
+    func resetSessionCounter() {
+        sessionStart = Date()
+        persistSessionInsights()
+    }
+    private func beginSession() {
+        sessionStart = pendingBroadcastStart ?? Date()
+        pendingBroadcastStart = nil
+        sessionInsights.insert(SessionInsight(startedAt: sessionStart!), at: 0)
+        persistSessionInsights()
+    }
+    private func persistSessionInsights() {
+        let defaults = UserDefaults(suiteName: AppConfig.appGroupID)
+        if let start = sessionStart, !sessionInsights.isEmpty {
+            let history = records.filter { $0.observation.endedAt >= sessionInsights[0].startedAt }
+            sessionInsights[0].total = max(history.count, broadcastTotal)
+            sessionInsights[0].flagged = sessionFlagged
+            defaults?.set(start, forKey: "sessionCounterStart")
+        }
+        if let data = try? JSONEncoder().encode(sessionInsights) { defaults?.set(data, forKey: "sessionInsights") }
+    }
     var selectedTab: AppTab = .home
     var mode: SourceMode = .feedDirect
     var isMonitoring = false
@@ -27,7 +62,7 @@ final class SessionManager {
     var showReport = false
 
     // Chat state
-    var messages = [ChatMessage(isUser: false, text: "Tell me what you want from your feed.")]
+    var messages: [ChatMessage] = []
     var savedPreferences: [String] = []
     var proposal: ProposedPreference?
 
@@ -55,6 +90,9 @@ final class SessionManager {
         checkpointInterval = SharedStore.checkpointInterval
         consumed = d.integer(forKey: "consumed")
         loadHistory()
+        let shared = UserDefaults(suiteName: AppConfig.appGroupID)
+        sessionStart = shared?.object(forKey: "sessionCounterStart") as? Date
+        if let data = shared?.data(forKey: "sessionInsights"), let saved = try? JSONDecoder().decode([SessionInsight].self, from: data) { sessionInsights = saved }
         resetNextCheckpoint()
 
         DarwinNotifier.observe {
@@ -93,9 +131,10 @@ final class SessionManager {
         }
         SharedStore.sessionID = UUID().uuidString
         statusMessage = nil
-        notifier.requestPermission()
+        // Home completes permission onboarding before presenting ReplayKit.
         switch mode {
         case .feedDirect:
+            beginSession()
             isMonitoring = true
             startedAt = Date()
             selectedTab = .feed
@@ -123,6 +162,7 @@ final class SessionManager {
                 statusMessage = "App Group missing. Add the App Groups capability to both targets."
                 return
             }
+            pendingBroadcastStart = Date()
             SharedStore.stopRequested = false
             statusMessage = "Choose AttentionBroadcast, tap Start Broadcast, then open Instagram."
         }
@@ -136,7 +176,9 @@ final class SessionManager {
             capture.stop()
             tracker.flush()
         case .instagramBroadcast:
-            SharedStore.stopRequested = true
+            // The system picker owns normal stopping. Do not signal the extension's error path.
+            broadcastControlTrigger += 1
+            return
         }
         isMonitoring = false
         statusMessage = nil
@@ -154,7 +196,29 @@ final class SessionManager {
 
     // MARK: Timer
 
+    func refreshBroadcastState() {
+        if let start = SharedStore.broadcastStartedAt,
+           sessionInsights.first?.startedAt != start {
+            sessionStart = start
+            pendingBroadcastStart = nil
+            sessionInsights.insert(SessionInsight(startedAt: start), at: 0)
+        }
+        broadcastTotal = SharedStore.broadcastReelCount
+        broadcastFlags = SharedStore.broadcastFlaggedEvents
+        ingestBacklog()
+        if let digest = SharedStore.latestDigest, activeDigest?.id != digest.id {
+            activeDigest = digest
+            for event in digest.flaggedReels {
+                if let i = records.firstIndex(where: { $0.id == event.id }) {
+                    records[i].status = .analyzed
+                    records[i].analysis = AnalysisResult(reelID: event.id, topics: [event.topic], flaggedPatterns: [event.emotionTag], summary: event.topic)
+                }
+            }
+        }
+        persistSessionInsights()
+    }
     private func tick() {
+        if mode == .instagramBroadcast { refreshBroadcastState() }
         if isMonitoring && SharedStore.useLiveBackend && !polling && Date().timeIntervalSince(lastPoll) >= 8 {
             lastPoll = Date(); polling = true
             Task {
@@ -171,7 +235,14 @@ final class SessionManager {
             let active = SharedStore.broadcastActive && !SharedStore.stopRequested
             if active != isMonitoring {
                 isMonitoring = active
-                if active { startedAt = Date(); statusMessage = nil } else { ingestBacklog() }
+                if active {
+                    if sessionStart == nil { beginSession() }
+                    startedAt = sessionStart; statusMessage = nil
+                } else {
+                    ingestBacklog()
+                    if !sessionInsights.isEmpty { sessionInsights[0].endedAt = Date() }
+                    persistSessionInsights()
+                }
             }
         }
         if mode == .inAppCapture { debugLine = tracker.debug }
@@ -200,6 +271,7 @@ final class SessionManager {
     func ingest(_ obs: ReelObservation) {
         guard !records.contains(where: { $0.id == obs.id }) else { return }
         records.append(ReelRecord(observation: obs))
+        persistSessionInsights()
         save()
         Task { await analyze(obs) }
         if reelCount >= nextCheckpointAt {
@@ -220,7 +292,12 @@ final class SessionManager {
     private func update(_ id: UUID, _ change: (inout ReelRecord) -> Void) {
         guard let i = records.firstIndex(where: { $0.id == id }) else { return }
         change(&records[i])
+        // A completed live Judge result takes precedence over the legacy local classifier.
+        if let event = broadcastFlags.first(where: { $0.id == id }) {
+            records[i].analysis = AnalysisResult(reelID: id, topics: [event.topic], flaggedPatterns: [event.emotionTag], summary: event.topic)
+        }
         save()
+        persistSessionInsights()
     }
 
     private func refreshReport(notify: Bool) async {
@@ -301,18 +378,37 @@ final class SessionManager {
         records = loaded
     }
 
+    // Conversation memory survives a fresh visible thread and is sent as structured context.
+    private var conversationGeneration = UUID()
+    func saveConversationMemory() {
+        let defaults = UserDefaults(suiteName: AppConfig.appGroupID)
+        var memory = (defaults?.data(forKey: "guardianMemory").flatMap { try? JSONDecoder().decode([ChatMessage].self, from: $0) }) ?? []
+        let ids = Set(memory.map(\.id))
+        memory.append(contentsOf: messages.filter { !ids.contains($0.id) })
+        if let data = try? JSONEncoder().encode(Array(memory.suffix(200))) { defaults?.set(data, forKey: "guardianMemory") }
+    }
+    func beginFreshConversation() {
+        saveConversationMemory()
+        conversationGeneration = UUID()
+        messages = []
+    }
+
     // MARK: Chat
 
     func send(_ text: String) {
         messages.append(ChatMessage(isUser: true, text: text))
         let context = activeDigest
+        let generation = conversationGeneration
+        saveConversationMemory()
         Task {
             do {
                 let reply = try await agentBackend.sendMessageToCoach(text, context: context)
+                guard generation == conversationGeneration else { return }
                 messages.append(reply)
+                saveConversationMemory()
                 if let action = reply.clientAction { execute(action) }
             }
-            catch { messages.append(ChatMessage(isUser: false, text: "Coach unavailable. Please try again.")) }
+            catch { if generation == conversationGeneration { messages.append(ChatMessage(isUser: false, text: "Coach unavailable. Please try again.")) } }
         }
     }
 

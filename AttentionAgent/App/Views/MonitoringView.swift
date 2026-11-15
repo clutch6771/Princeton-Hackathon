@@ -1,67 +1,30 @@
 import SwiftUI
+import Charts
 
 struct MonitoringView: View {
     @Environment(SessionManager.self) private var session
-
+    private var recent: [SessionInsight] { Array(session.sessionInsights.prefix(7).reversed()) }
     var body: some View {
-        List {
-            Section("Session") {
-                row("Status", session.isMonitoring ? "Active" : "Stopped")
-                row("Source", session.mode.rawValue)
-                row("Reels detected", "\(session.reelCount)")
-                row("Analyzed", "\(session.analyzedCount)")
-                row("Flagged", "\(session.flaggedCount)")
-                row("Failed", "\(session.failedCount)")
-                row("Checkpoint every", "\(session.checkpointInterval)")
-                if !session.debugLine.isEmpty {
-                    row("Detector", session.debugLine)
-                }
-            }
-            Section {
-                ProgressView(
-                    value: Double(session.reelCount % max(session.checkpointInterval, 1)),
-                    total: Double(session.checkpointInterval))
-                if session.latestReport != nil {
-                    Button("Open latest report") { session.openReport() }
-                }
-            }
-            Section("Recent Reels") {
-                if session.records.isEmpty {
-                    Text("Nothing yet.").foregroundStyle(.secondary)
-                }
-                ForEach(session.records.reversed().prefix(40)) { rec in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(rec.observation.sensitiveSkipped
-                                 ? "Text skipped (sensitive)"
-                                 : (rec.observation.ocrText.first ?? "No text read"))
-                                .lineLimit(1)
-                            Spacer()
-                            statusIcon(rec.status)
-                        }
-                        Text(String(format: "%.1fs  confidence %.2f",
-                                    rec.observation.duration, rec.observation.confidence))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .navigationTitle("Session")
-    }
-
-    private func row(_ k: String, _ v: String) -> some View {
-        HStack {
-            Text(k)
-            Spacer()
-            Text(v).foregroundStyle(.secondary).monospacedDigit().multilineTextAlignment(.trailing)
-        }
-    }
-
-    @ViewBuilder private func statusIcon(_ s: AnalysisStatus) -> some View {
-        switch s {
-        case .pending: ProgressView()
-        case .analyzed: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                if recent.isEmpty { ContentUnavailableView("Your sessions will appear here", systemImage: "chart.bar", description: Text("Start monitoring to record your first session.")) }
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Flagged per session").font(.headline)
+                    Chart(Array(recent.enumerated()), id: \.element.id) { index, item in
+                        BarMark(x: .value("Session", "\(index + 1)"), y: .value("Flagged", Double(item.flagged) / Double(max(1, item.total))))
+                            .foregroundStyle(Vigil.coral).cornerRadius(5)
+                    }.chartYScale(domain: 0...1).chartYAxis { AxisMarks { value in AxisGridLine(); AxisValueLabel { if let number = value.as(Double.self) { Text(number, format: .percent.precision(.fractionLength(0))) } } } }
+                        .chartXAxisLabel("Last seven sessions · oldest to newest").frame(height: 220)
+                }.vigilCard()
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Reels per session").font(.headline)
+                    Chart(Array(recent.enumerated()), id: \.element.id) { index, item in
+                        BarMark(x: .value("Session", "\(index + 1)"), y: .value("Reels", item.flagged)).foregroundStyle(by: .value("Type", "Flagged"))
+                        BarMark(x: .value("Session", "\(index + 1)"), y: .value("Reels", max(0, item.total - item.flagged))).foregroundStyle(by: .value("Type", "Neutral"))
+                    }.chartForegroundStyleScale(["Flagged": Vigil.coral, "Neutral": Color.gray.opacity(0.5)])
+                        .chartXAxisLabel("Last seven sessions · oldest to newest").frame(height: 220)
+                }.vigilCard()
+            }.padding(20)
+        }.navigationTitle("Statistics")
     }
 }

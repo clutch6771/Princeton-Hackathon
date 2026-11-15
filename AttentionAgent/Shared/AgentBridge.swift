@@ -56,7 +56,13 @@ struct MockAgentBackend: AgentBackendServing {
     // TODO: Teammate Backend Hook: Send text and attached digest to APIClient coach endpoint.
     func sendMessageToCoach(_ text: String, context: CheckpointDigest?) async throws -> ChatMessage {
         let reply: String
-        if text.lowercased().contains("reset") { reply = context?.suggestedAction ?? "Pause for 30 seconds and choose one topic you want to learn about next." }
+        let stored = UserDefaults(suiteName: AppConfig.appGroupID)?.data(forKey: "guardianMemory")
+        let memory = stored.flatMap { try? JSONDecoder().decode([ChatMessage].self, from: $0) } ?? []
+        let previous = memory.filter { $0.isUser && $0.text != text }.last
+        if text.lowercased().contains("remember"), let previous {
+            reply = "You previously told me: ‘\(previous.text)’. Your feed goal is ‘\(SharedStore.userGoal)’. What would you like to build on?"
+        }
+        else if text.lowercased().contains("reset") { reply = context?.suggestedAction ?? "Pause for 30 seconds and choose one topic you want to learn about next." }
         else if text.lowercased().contains("goal") { reply = "What would you like more of, and what would you like less of? Use Update my feed goals to save your intention." }
         else { reply = "You said: ‘\(text)’. With your goal of ‘\(SharedStore.userGoal)’ in mind, how did the last few reels leave you feeling?" }
         return ChatMessage(isUser: false, text: reply, attachedDigest: context)
@@ -76,14 +82,31 @@ enum AgentNotification {
             UNNotificationAction(identifier: keep, title: "Keep Scrolling", options: [])
         ], intentIdentifiers: [], options: [])])
     }
-    static func deliver(_ digest: CheckpointDigest) async throws {
+    static func content(for digest: CheckpointDigest) throws -> UNMutableNotificationContent {
         let c = UNMutableNotificationContent()
-        c.title = "Agent Check-In • \(digest.flaggedReels.count)/\(digest.totalReelsWatched) Flagged"
-        c.subtitle = digest.userGoalConflict ?? "Checking in with your feed goals"
-        c.body = digest.coachHookMessage
+        let fields = Set((UserDefaults(suiteName: AppConfig.appGroupID)?.string(forKey: "notificationFields") ?? "ratio,total,flagged,neutral,comment").split(separator: ",").map(String.init))
+        let flagged = digest.flaggedReels.count
+        let total = digest.totalReelsWatched
+        c.title = "Agent Check-In"
+        var parts: [String] = []
+        if fields.contains("ratio") { parts.append("\(flagged) / \(total) flagged") }
+        if fields.contains("total") { parts.append("\(total) watched") }
+        if fields.contains("flagged") { parts.append("\(flagged) flagged") }
+        if fields.contains("neutral") { parts.append("\(max(0, total - flagged)) neutral") }
+        c.subtitle = parts.joined(separator: " · ")
+        c.body = fields.contains("comment") ? digest.coachHookMessage : "Tap to check in with your Guardian."
         c.categoryIdentifier = category
         c.sound = .default
         c.userInfo = ["digest": try JSONEncoder().encode(digest)]
-        try await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: digest.id.uuidString, content: c, trigger: nil))
+        return c
+    }
+    static func deliver(_ digest: CheckpointDigest) async throws {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+            throw NSError(domain: "AttentionAgent.Notifications", code: 1, userInfo: [NSLocalizedDescriptionKey: "Notifications are disabled. Enable alerts for AttentionAgent in Apple Settings."])
+        }
+        try await center.add(UNNotificationRequest(identifier: digest.id.uuidString, content: try content(for: digest), trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)))
+        SharedStore.lastNotificationScheduled = Date()
     }
 }

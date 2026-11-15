@@ -36,12 +36,17 @@ struct LiveAgentBackend: AgentBackendServing {
         var verdict: String?; var reason: String
     }
 
-    struct ChatRequest: Encodable { var message: String; var profile: UserProfileContext; var context: CheckpointDigest? }
+    struct ChatRequest: Encodable { var message: String; var profile: UserProfileContext; var context: CheckpointDigest?
+        var conversationMemory: [ChatMessage] = {
+            guard let data = UserDefaults(suiteName: AppConfig.appGroupID)?.data(forKey: "guardianMemory") else { return [] }
+            return (try? JSONDecoder().decode([ChatMessage].self, from: data)) ?? []
+        }()
+    }
     func request(_ path: String, body: (some Encodable)?, method: String = "POST") async throws -> Data {
         guard let base = URL(string: SharedStore.backendBaseURL), ["http", "https"].contains(base.scheme ?? ""), base.host != nil else { throw URLError(.badURL) }
         var request = URLRequest(url: URL(string: path, relativeTo: base.appendingPathComponent("/"))!)
         request.httpMethod = method
-        request.timeoutInterval = 12
+        request.timeoutInterval = 30
         request.setValue(SharedStore.demoUserID, forHTTPHeaderField: "X-Demo-User-Id")
         if let body {
             let encoder = JSONEncoder(); encoder.keyEncodingStrategy = .convertToSnakeCase; encoder.dateEncodingStrategy = .iso8601

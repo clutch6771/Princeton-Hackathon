@@ -70,3 +70,11 @@ struct SampleReel: Identifiable, Hashable {
         return SampleReel(id: i, caption: c.0, tag: c.1, hue: Double((i * 37) % 100) / 100)
     }
 }
+
+struct SessionInsight: Identifiable, Codable {
+    var id = UUID()
+    var startedAt: Date
+    var endedAt: Date?
+    var total = 0
+    var flagged = 0
+}

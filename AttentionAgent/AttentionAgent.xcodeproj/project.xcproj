@@ -169,6 +169,7 @@
         "DEVELOPMENT_TEAM": "J24J3XV956",
         "GENERATE_INFOPLIST_FILE": "YES",
         "INFOPLIST_FILE": "AttentionBroadcast/Info.plist",
+        "IPHONEOS_DEPLOYMENT_TARGET": "17.0",
         "INFOPLIST_KEY_CFBundleDisplayName": "AttentionBroadcast",
         "INFOPLIST_KEY_NSHumanReadableCopyright": "",
         "LD_RUNPATH_SEARCH_PATHS": [
