@@ -69,6 +69,7 @@ NO_EXAMPLES = "(none)"
 NO_PROPOSAL = (
     "no proposal: the Reflector queued no value change, so there is nothing to approve"
 )
+NOT_REVIEWED = "not run: the Reflector's review did not complete, so nothing was queued"
 
 # What each feedback label means, in words the Judge cannot mistake for a verdict.
 REACTIONS = {
@@ -542,10 +543,11 @@ def _run_lines(cache: Cache) -> list[str]:
 
 
 def render(report: Report, cache: Cache) -> str:
+    missing = NO_PROPOSAL if report.outcome.reviewed else NOT_REVIEWED
     refined = (
         _score_line(STAGE_TITLES[REFINED], report.refined.score)
         if report.refined
-        else f"{STAGE_TITLES[REFINED]:<36} {NO_PROPOSAL}"
+        else f"{STAGE_TITLES[REFINED]:<36} {missing}"
     )
     sections = [
         "LEARNING EVALUATION",

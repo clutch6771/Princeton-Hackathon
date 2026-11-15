@@ -31,13 +31,28 @@ NOW = datetime(2026, 11, 14, 22, 0, tzinfo=UTC)
 TEST_DATABASE_URL_VAR = "TEST_DATABASE_URL"
 
 
+REAL_DATABASE_VARS = ("DATABASE_URL", "GUARDIAN_DATABASE_URL", "MIGRATION_DATABASE_URL")
+
+
+def _setting(name: str) -> str:
+    """A variable from the environment or, failing that, the repository's .env."""
+    value = os.environ.get(name, "").strip()
+    return value or str(dotenv_values(config.DEFAULT_ENV_PATH).get(name) or "").strip()
+
+
 def disposable_database_url() -> str:
-    """The disposable test database, from the environment or the repository's .env."""
-    value = os.environ.get(TEST_DATABASE_URL_VAR, "").strip()
-    if value:
-        return value
-    from_file = dotenv_values(config.DEFAULT_ENV_PATH).get(TEST_DATABASE_URL_VAR)
-    return str(from_file or "").strip()
+    """The disposable test database, from the environment or the repository's .env.
+
+    The tests delete rows, so they refuse a test database that is also the real one.
+    """
+    value = _setting(TEST_DATABASE_URL_VAR)
+    same = [name for name in REAL_DATABASE_VARS if value and _setting(name) == value]
+    if same:
+        raise RuntimeError(
+            f"{TEST_DATABASE_URL_VAR} points at the same database as {same[0]}. "
+            "The tests delete rows; point it at a disposable database."
+        )
+    return value
 
 
 def clean_test_users(opened: storage.Storage) -> None:

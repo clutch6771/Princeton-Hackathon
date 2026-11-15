@@ -185,7 +185,7 @@ def _check_and_record(
 
     Returns the proposal, or an error written for the agent that proposed it.
     """
-    target = _normalize_target(value_id)
+    target = normalize_target(value_id)
     if target is None:
         return CreateResult(
             None, 'value_id must be "new" or the ID of a stored value such as V3.'
@@ -255,7 +255,8 @@ def create_proposal(
         )
 
 
-def _normalize_target(value_id: str) -> str | None:
+def normalize_target(value_id: str) -> str | None:
+    """ "new", a stored value's ID, or None if it is neither. Spacing is ignored."""
     cleaned = (value_id or "").strip()
     if cleaned.lower() == TARGET_NEW:
         return TARGET_NEW

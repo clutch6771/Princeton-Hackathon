@@ -172,7 +172,12 @@ def refinement_problem(deps: Deps, user_id: str, change: dict[str, Any]) -> str 
     refinement must keep both. Which other lines it may change depends on the
     evidence, which the skill covers.
     """
-    stored = values.get_value(deps.store, user_id, change["value_id"])
+    target = proposals.normalize_target(change["value_id"])
+    stored = (
+        values.get_value(deps.store, user_id, target)
+        if target and target != proposals.TARGET_NEW
+        else None
+    )
     proposed = formats.parse_entry(change["new_text"]).entry
     current = formats.parse_entry(stored.text).entry if stored else None
     if current is None or proposed is None:

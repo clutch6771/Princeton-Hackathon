@@ -3,12 +3,16 @@ reflection addendum (docs/GUARDIAN_REFLECTION_ADDENDUM.md)."""
 
 from __future__ import annotations
 
+import re
+
 from guardian.memory import formats
 
 NO_VALUES_YET = "(none yet: this user has no approved values, so begin by learning one)"
 NO_BRIEF_YET = "(none yet)"
 BRIEF_OPEN = "<notes_about_user>"
 BRIEF_CLOSE = "</notes_about_user>"
+REMOVED_TAG = "[tag removed]"
+_BRIEF_TAG = re.compile(r"<\s*/?\s*notes_about_user\s*>", re.IGNORECASE)
 
 GUARDIAN_PROMPT = """You are the Guardian, a personal attention companion inside a phone app. The
 user asked you to help them notice when their short-video feed drifts from
@@ -113,8 +117,10 @@ RULES
 
 
 def brief_block(brief_md: str) -> str:
-    """The brief as labelled data. The Reflector writes it from reel text, so it is never instructions."""
-    safe = brief_md.replace(BRIEF_OPEN, "").replace(BRIEF_CLOSE, "").strip()
+    """The brief as labelled data. The Reflector writes it from reel text, so it is
+    never instructions, and nothing in it can open or close the block: every form
+    of the tag is replaced by a marker, whatever its case or spacing."""
+    safe = _BRIEF_TAG.sub(REMOVED_TAG, brief_md).strip()
     return f"{BRIEF_OPEN}\n{safe or NO_BRIEF_YET}\n{BRIEF_CLOSE}"
 
 

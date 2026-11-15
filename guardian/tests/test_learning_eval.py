@@ -258,6 +258,16 @@ def test_a_second_reflector_run_must_be_asked_for_and_both_runs_are_reported(cac
     assert "queued nothing" in text and "Less get-rich-quick content" in text
 
 
+def test_a_review_that_did_not_complete_is_not_reported_as_no_proposal(cache):
+    failed = ScriptedChatModel(script=[reply("I give up.")])  # writes no summary
+    environment = ev.build_environment(clock=lambda: NOW, reflector_model=failed)
+
+    text = ev.render(ev.evaluate(environment, FakeJudge(), cache), cache)
+
+    assert "did not complete" in text
+    assert "queued no value change" not in text
+
+
 def test_with_no_value_card_the_refined_stage_is_no_proposal(cache):
     reflector = ScriptedChatModel(script=good_run(change=None))
     environment = ev.build_environment(clock=lambda: NOW, reflector_model=reflector)

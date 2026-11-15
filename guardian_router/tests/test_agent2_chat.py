@@ -7,13 +7,15 @@ The app has no card UI, so a value card is shown as text and decided with a plai
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
+from fastapi.testclient import TestClient
 from langchain_core.messages import HumanMessage
 
 from guardian import api, chat_flow
-from guardian.tests.fakes import FailingChatModel, reply, tool_call
+from guardian.tests.fakes import FailingChatModel, ScriptedChatModel, reply, tool_call
 from guardian_router import chat_adapter
+from guardian_router.standalone import create_app
 from guardian_router.tests.conftest import HEADERS, HUSTLE, HUSTLE_PROMPT, NOW, USER
 
 QUOTE = "gym stuff is great, comparing bodies is not"
@@ -497,6 +499,70 @@ def test_users_do_not_see_each_others_cards(serve):
     )
 
     assert other.json()["text"] == "Hello."
+
+
+def test_a_learned_card_does_not_promise_an_answer_to_the_message_it_replaced(serve):
+    server = serve([reply("unused")], seeded=True)
+    server.add_learned_card()
+
+    text = server.say("why did you flag the hustle reels?")
+
+    assert "Before I answer" not in text
+    assert text.startswith(chat_adapter.LEARNED_LEAD_IN)
+
+
+# --- One conversation per local day ----------------------------------------------------------
+
+
+def at(hour: int, minute: int, day: int = 14) -> datetime:
+    return datetime(2026, 11, day, hour, minute, tzinfo=UTC)
+
+
+def test_the_chat_thread_does_not_change_at_utc_midnight(monkeypatch):
+    monkeypatch.delenv(chat_adapter.TIMEZONE_VAR, raising=False)
+    before = chat_adapter.ChatAdapter(lambda: at(23, 30)).thread_id(USER)  # 6:30 pm ET
+    after = chat_adapter.ChatAdapter(lambda: at(0, 30, day=15)).thread_id(USER)
+
+    assert before == after == f"{USER}:2026-11-14"
+
+
+def test_the_chat_thread_changes_at_local_midnight(monkeypatch):
+    monkeypatch.delenv(chat_adapter.TIMEZONE_VAR, raising=False)
+    late = chat_adapter.ChatAdapter(lambda: at(4, 30, day=15)).thread_id(
+        USER
+    )  # 11:30 pm ET
+    early = chat_adapter.ChatAdapter(lambda: at(5, 30, day=15)).thread_id(USER)
+
+    assert (late, early) == (f"{USER}:2026-11-14", f"{USER}:2026-11-15")
+
+
+def test_the_time_zone_can_be_set_and_a_bad_one_falls_back_to_utc(monkeypatch):
+    adapter = chat_adapter.ChatAdapter(lambda: at(23, 30))
+    monkeypatch.setenv(chat_adapter.TIMEZONE_VAR, "Asia/Tokyo")
+    tokyo = adapter.thread_id(USER)
+    monkeypatch.setenv(chat_adapter.TIMEZONE_VAR, "Not/AZone")
+
+    assert tokyo == f"{USER}:2026-11-15"
+    assert adapter.thread_id(USER) == f"{USER}:2026-11-14"
+
+
+def test_a_card_shown_before_utc_midnight_can_be_approved_after_it(monkeypatch):
+    monkeypatch.delenv(chat_adapter.TIMEZONE_VAR, raising=False)
+    now = {"value": at(23, 59)}
+    model = ScriptedChatModel(script=[propose(), reply("Saved as V1.")])
+    app = create_app(
+        chat_model=model, clock=lambda: now["value"], launch=lambda task: None
+    )
+    client = TestClient(app)
+    body = {"message": f"Honestly, {QUOTE}.", "profile": {"stated_goals": ""}}
+    card = client.post("/agent2/chat", json=body, headers=HEADERS).json()["text"]
+
+    now["value"] = at(0, 1, day=15)
+    answer = client.post(
+        "/agent2/chat", json={**body, "message": "yes"}, headers=HEADERS
+    ).json()["text"]
+
+    assert card.endswith(ENDING) and answer == "Saved as V1."
 
 
 # --- A reply the app gave up waiting for ------------------------------------------------------
