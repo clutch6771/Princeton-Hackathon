@@ -50,7 +50,7 @@ struct MockAgentBackend: AgentBackendServing {
         }.map { FlaggedReelEvent(id: $0.id, timestamp: $0.endedAt, topic: $0.ocrText.last ?? "Debate", emotionTag: "anger", dwellSeconds: max(0, Int($0.duration))) }
         return CheckpointDigest(totalReelsWatched: max(total, flags.count), flaggedReels: flags,
             userGoalConflict: flags.isEmpty ? nil : "Possible conflict with your ‘\(SharedStore.userGoal)’ goal",
-            coachHookMessage: flags.isEmpty ? "Your recent feed looks calm. Tap to reflect on what you want to watch next." : "I noticed \(flags.count) potentially divisive reels. Does that fit the feed you want? Tap to talk with your coach.",
+            coachHookMessage: flags.isEmpty ? "Your recent feed looks calm. Tap to reflect on what you want to watch next." : "I noticed \(flags.count) potentially divisive reels. Does that fit the feed you want? Tap to talk with Guardian.",
             suggestedAction: "Take a breath, mark an unwanted reel ‘Not interested’, then search for one topic that supports your goal.")
     }
     // TODO: Teammate Backend Hook: Send text and attached digest to APIClient coach endpoint.
@@ -77,7 +77,7 @@ enum AgentNotification {
     static let keep = "agent.keep"
     static func register() {
         UNUserNotificationCenter.current().setNotificationCategories([UNNotificationCategory(identifier: category, actions: [
-            UNNotificationAction(identifier: "agent.talk", title: "Talk to Coach", options: .foreground),
+            UNNotificationAction(identifier: "agent.talk", title: "Talk to Guardian", options: .foreground),
             UNNotificationAction(identifier: reset, title: "Quick Feed Reset", options: .foreground),
             UNNotificationAction(identifier: keep, title: "Keep Scrolling", options: [])
         ], intentIdentifiers: [], options: [])])
@@ -87,7 +87,7 @@ enum AgentNotification {
         let fields = Set((UserDefaults(suiteName: AppConfig.appGroupID)?.string(forKey: "notificationFields") ?? "ratio,total,flagged,neutral,comment").split(separator: ",").map(String.init))
         let flagged = digest.flaggedReels.count
         let total = digest.totalReelsWatched
-        c.title = "Agent Check-In"
+        c.title = "Guardian Check-In"
         var parts: [String] = []
         if fields.contains("ratio") { parts.append("\(flagged) / \(total) flagged") }
         if fields.contains("total") { parts.append("\(total) watched") }
@@ -104,7 +104,7 @@ enum AgentNotification {
         let center = UNUserNotificationCenter.current()
         let settings = await center.notificationSettings()
         guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
-            throw NSError(domain: "AttentionAgent.Notifications", code: 1, userInfo: [NSLocalizedDescriptionKey: "Notifications are disabled. Enable alerts for AttentionAgent in Apple Settings."])
+            throw NSError(domain: "AttentionAgent.Notifications", code: 1, userInfo: [NSLocalizedDescriptionKey: "Notifications are disabled. Enable alerts for Iris in Apple Settings."])
         }
         try await center.add(UNNotificationRequest(identifier: digest.id.uuidString, content: try content(for: digest), trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)))
         SharedStore.lastNotificationScheduled = Date()

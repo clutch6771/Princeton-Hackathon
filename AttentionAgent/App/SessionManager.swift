@@ -204,7 +204,7 @@ final class SessionManager {
             }
             pendingBroadcastStart = Date()
             SharedStore.stopRequested = false
-            statusMessage = "Choose AttentionBroadcast, tap Start Broadcast, then open Instagram."
+            statusMessage = "Choose Iris, tap Start Broadcast, then open Instagram."
         }
     }
 
@@ -458,7 +458,7 @@ final class SessionManager {
                 saveConversationMemory()
                 if let action = reply.clientAction { execute(action) }
             }
-            catch { if generation == conversationGeneration { messages.append(ChatMessage(isUser: false, text: "Coach unavailable. Please try again.")) } }
+            catch { if generation == conversationGeneration { messages.append(ChatMessage(isUser: false, text: "Guardian unavailable. Please try again.")) } }
         }
     }
 

@@ -97,7 +97,7 @@ struct LiveAgentBackend: AgentBackendServing {
         return CheckpointDigest(totalReelsWatched: judged.count, flaggedReels: flags,
                                 userGoalConflict: conflicts.first?.reason,
                                 coachHookMessage: "\(conflicts.count) of your last \(judged.count) judged reels conflicted with your approved values.",
-                                suggestedAction: "Review the reasons and tell your coach whether you agree.")
+                                suggestedAction: "Review the reasons and tell Guardian whether you agree.")
     }
 
     func sendMessageToCoach(_ text: String, context: CheckpointDigest?) async throws -> ChatMessage {

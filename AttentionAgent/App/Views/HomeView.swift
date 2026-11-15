@@ -95,7 +95,7 @@ struct HomeView: View {
 
     @MainActor private func beginBroadcast() {
         guard BroadcastPicker.installedExtensionID != nil else {
-            session.statusMessage = "AttentionAgent's screen broadcast extension is missing. Reinstall the complete app to enable monitoring."
+            session.statusMessage = "Iris's screen broadcast extension is missing. Reinstall the complete app to enable monitoring."
             showError = true
             return
         }

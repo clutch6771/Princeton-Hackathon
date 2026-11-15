@@ -44,7 +44,7 @@ struct RootView: View {
             }.id(session.selectedTab)
             HStack {
                 tab(.home, "house", "Home")
-                tab(.coach, "bubble.left.and.bubble.right", "Chat")
+                tab(.coach, "bubble.left.and.bubble.right", "Guardian")
                 tab(.session, "chart.bar", "Statistics")
                 tab(.settings, "gearshape", "Settings")
             }.padding(.vertical, 18).background(Vigil.background)
