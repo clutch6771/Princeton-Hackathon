@@ -15,7 +15,7 @@ REQUESTS_PER_MINUTE_VAR = "GUARDIAN_REQUESTS_PER_MINUTE"
 DEFAULT_REQUESTS_PER_MINUTE = 12.0  # chat; kept below the free-tier limit
 # The Reflector runs in the background for minutes at a time. It has its own, slower
 # limiter so that a chat reply never waits behind a review (the app gives up on a
-# chat request after 12 seconds). Defaults to half the chat rate.
+# chat request after 30 seconds). Defaults to half the chat rate.
 REFLECTOR_REQUESTS_PER_MINUTE_VAR = "GUARDIAN_REFLECTOR_REQUESTS_PER_MINUTE"
 REFLECTOR_SHARE = 0.5
 REQUEST_TIMEOUT_SECONDS = 60

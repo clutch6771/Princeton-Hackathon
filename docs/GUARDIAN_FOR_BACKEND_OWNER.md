@@ -85,6 +85,7 @@ Each approved value has six lines:
 ## 6. Things to check on your side
 
 - **`ocr_text` from the app is dropped.** `NativeReelUpload` has no `ocr_text` field and uses `extra="ignore"`, so the app's on-screen text never reaches the Judge; `on_screen_text` comes only from the model. Add the field if on-screen text should count. (`stated_goals` and `sensitivity` are dropped on purpose, which is right.)
-- **The app's chat timeout is 12 seconds** (`LiveAgentBackend.request`, `timeoutInterval = 12`). Most Guardian replies took 1 to 7 seconds in a live run, but a turn with several model calls can pass 12. Please raise it to 30 for `agent2/chat`. Until then, if the app gives up and the user sends the same message again, the server returns the reply they missed.
+- **The app's chat timeout is now 30 seconds** (it was 12), which covers every Guardian reply seen in the live runs.
+- **The app could let the Guardian speak first:** call `agent2/chat` with an empty `message` when the chat screen appears and show the reply as the first bubble. The chat now opens empty.
 - **App feedback comments are not treated as the user's words.** The app sends a preset correction as `comment`, so Guardian never quotes it in a value.
 - **The app has no card or inbox screen**, so value cards and "What I learned" cards arrive as chat text, and the user answers "approve" or "reject". The JSON routes are there when a card UI exists.

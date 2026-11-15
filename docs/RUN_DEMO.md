@@ -143,4 +143,4 @@ Other forms: `DEMO_USER_ID is required`, `PRIVACY_MODE must be 'enforce' unless 
 Two more, briefly:
 
 - **`ModuleNotFoundError: No module named 'guardian_router'`** (or `judge`): the command was not run from the repository root, or not with `guardian/.venv`.
-- **The app says "Coach unavailable. Please try again."**: the tunnel or backend URL is wrong, or the reply took longer than the app's 12 seconds. Send the same message again; the server returns the reply that was missed. If the chat text is "The Guardian could not reply just now", the Guardian's model call failed: check `GOOGLE_API_KEY` and the server log.
+- **The app says "Coach unavailable. Please try again."**: the tunnel or backend URL is wrong, or the reply took longer than the app's 30 seconds. Send the same message again; the server returns the reply that was missed. If the chat text is "The Guardian could not reply just now", the Guardian's model call failed: check `GOOGLE_API_KEY` and the server log.
