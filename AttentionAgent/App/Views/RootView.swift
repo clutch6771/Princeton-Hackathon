@@ -46,7 +46,6 @@ struct RootView: View {
                 tab(.settings, "gearshape", "Settings")
             }.padding(.vertical, 18).background(Vigil.background)
         }.background(Vigil.background).font(IrisUI.font(.body)).tint(Vigil.cyan).preferredColorScheme(.dark)
-        }.background(Vigil.background).tint(Vigil.cyan).preferredColorScheme(.dark)
         .scrollDismissesKeyboard(.interactively)
         .onChange(of: phase) { _, value in
             if value == .active { session.refreshBroadcastState() }
