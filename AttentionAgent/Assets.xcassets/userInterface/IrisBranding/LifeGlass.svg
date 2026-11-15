@@ -1,0 +1,44 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<radialGradient id="bg" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(1725.44 -46.0799) rotate(163.858) scale(3278.04)">
+<stop stop-color="#1FDD29"/>
+<stop offset="0.245192" stop-color="#40E379"/>
+<stop offset="0.600962" stop-color="#39BAA6"/>
+<stop offset="0.894331" stop-color="#11C7D4"/>
+</radialGradient>
+<clipPath id="eye"><path d="M911.36 455.372C876.431 515.979 828.496 567.842 771.24 607.422L827.697 705.376L766.269 740.908L709.969 643.248C658.046 668.56 601.928 684.072 544.391 688.999V788.48H473.456V689.693C415.835 685.886 359.422 671.47 307.012 647.169L252.998 740.908L191.553 705.376L245.049 612.54C187.246 574.218 138.46 523.506 102.4 463.855L163.082 427.04C198.998 486.451 249.74 535.473 310.32 569.253C370.901 603.033 439.231 620.415 508.56 619.688C577.886 618.959 645.832 600.149 705.691 565.106C765.551 530.063 815.267 479.992 849.933 419.84L911.36 455.372Z"/></clipPath>
+<linearGradient id="body" x1="512" y1="420" x2="512" y2="790" gradientUnits="userSpaceOnUse">
+<stop stop-color="white" stop-opacity="0.66"/>
+<stop offset="0.55" stop-color="white" stop-opacity="0.36"/>
+<stop offset="1" stop-color="white" stop-opacity="0.54"/>
+</linearGradient>
+<linearGradient id="rim" x1="120" y1="400" x2="900" y2="800" gradientUnits="userSpaceOnUse">
+<stop stop-color="white" stop-opacity="0.98"/>
+<stop offset="0.5" stop-color="white" stop-opacity="0.32"/>
+<stop offset="1" stop-color="white" stop-opacity="0.82"/>
+</linearGradient>
+<filter id="shadow" x="0" y="300" width="1024" height="640" filterUnits="userSpaceOnUse">
+<feGaussianBlur stdDeviation="17"/>
+</filter>
+<filter id="bevel" x="60" y="380" width="900" height="460" filterUnits="userSpaceOnUse">
+<feGaussianBlur in="SourceAlpha" stdDeviation="11" result="height"/>
+<feSpecularLighting in="height" surfaceScale="38" specularConstant="0.85" specularExponent="26" lighting-color="white" result="shine">
+<feDistantLight azimuth="235" elevation="52"/>
+</feSpecularLighting>
+<feComposite in="shine" in2="SourceAlpha" operator="in"/>
+</filter>
+</defs>
+<rect width="1024" height="1024" fill="url(#bg)"/>
+<!-- soft shadow that lifts the glass off the tile -->
+<path d="M911.36 455.372C876.431 515.979 828.496 567.842 771.24 607.422L827.697 705.376L766.269 740.908L709.969 643.248C658.046 668.56 601.928 684.072 544.391 688.999V788.48H473.456V689.693C415.835 685.886 359.422 671.47 307.012 647.169L252.998 740.908L191.553 705.376L245.049 612.54C187.246 574.218 138.46 523.506 102.4 463.855L163.082 427.04C198.998 486.451 249.74 535.473 310.32 569.253C370.901 603.033 439.231 620.415 508.56 619.688C577.886 618.959 645.832 600.149 705.691 565.106C765.551 530.063 815.267 479.992 849.933 419.84L911.36 455.372Z" fill="#0A0420" fill-opacity="0.42" filter="url(#shadow)" transform="translate(0 20)"/>
+<!-- glass body: the tile's own gradient magnified through the shape, then frosted -->
+<g clip-path="url(#eye)">
+<rect x="-512" y="-512" width="2048" height="2048" fill="url(#bg)" transform="translate(512 600) scale(1.3) translate(-512 -600)"/>
+<rect width="1024" height="1024" fill="url(#body)"/>
+</g>
+<!-- specular bevel and bright rim -->
+<path d="M911.36 455.372C876.431 515.979 828.496 567.842 771.24 607.422L827.697 705.376L766.269 740.908L709.969 643.248C658.046 668.56 601.928 684.072 544.391 688.999V788.48H473.456V689.693C415.835 685.886 359.422 671.47 307.012 647.169L252.998 740.908L191.553 705.376L245.049 612.54C187.246 574.218 138.46 523.506 102.4 463.855L163.082 427.04C198.998 486.451 249.74 535.473 310.32 569.253C370.901 603.033 439.231 620.415 508.56 619.688C577.886 618.959 645.832 600.149 705.691 565.106C765.551 530.063 815.267 479.992 849.933 419.84L911.36 455.372Z" fill="black" filter="url(#bevel)"/>
+<g clip-path="url(#eye)">
+<path d="M911.36 455.372C876.431 515.979 828.496 567.842 771.24 607.422L827.697 705.376L766.269 740.908L709.969 643.248C658.046 668.56 601.928 684.072 544.391 688.999V788.48H473.456V689.693C415.835 685.886 359.422 671.47 307.012 647.169L252.998 740.908L191.553 705.376L245.049 612.54C187.246 574.218 138.46 523.506 102.4 463.855L163.082 427.04C198.998 486.451 249.74 535.473 310.32 569.253C370.901 603.033 439.231 620.415 508.56 619.688C577.886 618.959 645.832 600.149 705.691 565.106C765.551 530.063 815.267 479.992 849.933 419.84L911.36 455.372Z" stroke="url(#rim)" stroke-width="15"/>
+</g>
+</svg>
