@@ -393,7 +393,9 @@ def test_read_memory_says_so_when_nothing_is_stored(start):
     api.chat(USER, THREAD, "remind me")
 
     saved_notes, summary = seen(model, 2)
-    assert "No notes saved yet." in saved_notes and "No session summary yet." in summary
+    assert "No notes saved yet." in saved_notes
+    # The last session has no summary yet, so the Judge's records are given instead.
+    assert "has not been reviewed yet" in summary and "8 judged reels" in summary
 
 
 def test_chat_agent_offers_exactly_the_eight_tools_in_the_spec(start):
