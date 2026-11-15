@@ -7,11 +7,10 @@ final class CheckpointNotifier {
     }
 
     func deliver(_ report: CheckpointReport) {
-        let c = UNMutableNotificationContent()
-        c.title = "Checkpoint: \(report.reelCount) Reels"
-        c.body = report.headline
-        c.sound = .default
-        UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+        let digest = CheckpointDigest(totalReelsWatched: report.reelCount, flaggedReels: [], userGoalConflict: report.mismatches.first, coachHookMessage: report.headline, suggestedAction: "Check in with your Guardian.")
+        Task {
+            do { try await AgentNotification.deliver(digest) }
+            catch { SharedStore.notificationError = error.localizedDescription }
+        }
     }
 }

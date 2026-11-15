@@ -25,7 +25,12 @@ struct GuardianClientAction: Codable, Hashable {
 }
 struct LiveAgentBackend: AgentBackendServing {
     struct CheckpointRequest: Encodable { var reelsWatched: Int; var threshold: Int; var profile: UserProfileContext }
-    struct ChatRequest: Encodable { var message: String; var profile: UserProfileContext; var context: CheckpointDigest? }
+    struct ChatRequest: Encodable { var message: String; var profile: UserProfileContext; var context: CheckpointDigest?
+        var conversationMemory: [ChatMessage] = {
+            guard let data = UserDefaults(suiteName: AppConfig.appGroupID)?.data(forKey: "guardianMemory") else { return [] }
+            return (try? JSONDecoder().decode([ChatMessage].self, from: data)) ?? []
+        }()
+    }
     struct Feedback: Encodable { var eventId: UUID; var correction: String; var profile: UserProfileContext }
     struct Pending: Decodable { var digest: CheckpointDigest? }
     func request<T: Encodable>(_ path: String, body: T?, method: String = "POST") async throws -> Data {

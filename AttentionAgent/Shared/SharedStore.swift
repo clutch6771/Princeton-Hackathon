@@ -36,7 +36,8 @@ enum SharedStore {
     static func read(from index: Int) -> (items: [ReelObservation], total: Int) {
         guard let url = fileURL,
               let text = try? String(contentsOf: url, encoding: .utf8) else { return ([], 0) }
-        let lines = text.split(separator: "\n")
+        // A reader may race the extension's append. Consume only complete lines.
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).dropLast()
         let items = lines.dropFirst(index).compactMap {
             try? decoder.decode(ReelObservation.self, from: Data($0.utf8))
         }
@@ -65,6 +66,30 @@ enum SharedStore {
     static var sensitivity: String {
         get { defaults?.string(forKey: "sensitivity") ?? "medium" }
         set { defaults?.set(newValue, forKey: "sensitivity") }
+    }
+    static var broadcastReelCount: Int {
+        get { defaults?.integer(forKey: "broadcastReelCount") ?? 0 }
+        set { defaults?.set(newValue, forKey: "broadcastReelCount") }
+    }
+    static var broadcastFlaggedEvents: [FlaggedReelEvent] {
+        get { defaults?.data(forKey: "broadcastFlaggedEvents").flatMap { try? JSONDecoder().decode([FlaggedReelEvent].self, from: $0) } ?? [] }
+        set { defaults?.set(try? JSONEncoder().encode(newValue), forKey: "broadcastFlaggedEvents") }
+    }
+    static var lastNotificationScheduled: Date? {
+        get { defaults?.object(forKey: "lastNotificationScheduled") as? Date }
+        set { defaults?.set(newValue, forKey: "lastNotificationScheduled") }
+    }
+    static var broadcastStartedAt: Date? {
+        get { defaults?.object(forKey: "broadcastStartedAt") as? Date }
+        set { defaults?.set(newValue, forKey: "broadcastStartedAt") }
+    }
+    static var latestDigest: CheckpointDigest? {
+        get { defaults?.data(forKey: "latestDigest").flatMap { try? JSONDecoder().decode(CheckpointDigest.self, from: $0) } }
+        set { defaults?.set(try? JSONEncoder().encode(newValue), forKey: "latestDigest") }
+    }
+    static var notificationError: String? {
+        get { defaults?.string(forKey: "notificationError") }
+        set { defaults?.set(newValue, forKey: "notificationError") }
     }
     static var sessionID: String {
         get { defaults?.string(forKey: "sessionID") ?? "demo" }

@@ -11,10 +11,17 @@ class SampleHandler: RPBroadcastSampleHandler {
     private let tracker = ReelTracker()
     private var count = 0
     private var interval = 15
+    private var sinceCheckpoint = 0
     private var timer: DispatchSourceTimer?
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         SharedStore.sessionID = UUID().uuidString
+        SharedStore.broadcastStartedAt = Date()
+        count = 0
+        SharedStore.broadcastReelCount = 0
+        SharedStore.broadcastFlaggedEvents = []
+        sinceCheckpoint = 0
+        AgentNotification.register()
         interval = SharedStore.checkpointInterval
         SharedStore.stopRequested = false
         SharedStore.heartbeat()
@@ -61,7 +68,12 @@ class SampleHandler: RPBroadcastSampleHandler {
         DarwinNotifier.post()
         interval = SharedStore.checkpointInterval
         count += 1
-        if count % interval == 0 { notifyCheckpoint() }
+        SharedStore.broadcastReelCount = count
+        if !SharedStore.useLiveBackend {
+            SharedStore.broadcastFlaggedEvents += MockAgentBackend.digest(observations: [obs], total: 1).flaggedReels
+        }
+        sinceCheckpoint += 1
+        if sinceCheckpoint >= interval { sinceCheckpoint = 0; notifyCheckpoint() }
     }
 
     private func enqueue(_ payload: ReelIngestPayload) {
@@ -93,9 +105,24 @@ class SampleHandler: RPBroadcastSampleHandler {
         Task {
             do {
                 let backend: any AgentBackendServing = SharedStore.useLiveBackend ? LiveAgentBackend() : MockAgentBackend()
-                let digest = try await backend.fetchCheckpointDigest(reelsWatched: min(count, interval), threshold: interval)
+                let digest: CheckpointDigest
+                do { digest = try await backend.fetchCheckpointDigest(reelsWatched: min(count, interval), threshold: interval) }
+                catch {
+                    digest = CheckpointDigest(totalReelsWatched: min(count, interval), flaggedReels: [], userGoalConflict: nil,
+                        coachHookMessage: "Checkpoint reached. Analysis is unavailable; open the app to reconnect.", suggestedAction: "Pause and check your connection.")
+                }
+                if SharedStore.useLiveBackend {
+                    let existing = SharedStore.broadcastFlaggedEvents
+                    let ids = Set(existing.map(\.id))
+                    SharedStore.broadcastFlaggedEvents = existing + digest.flaggedReels.filter { !ids.contains($0.id) }
+                }
+                SharedStore.latestDigest = digest
                 try await AgentNotification.deliver(digest)
-            } catch { NSLog("Checkpoint notification failed: %@", error.localizedDescription) }
+                SharedStore.notificationError = nil
+            } catch {
+                SharedStore.notificationError = error.localizedDescription
+                NSLog("Checkpoint notification failed: %@", error.localizedDescription)
+            }
         }
     }
 }
