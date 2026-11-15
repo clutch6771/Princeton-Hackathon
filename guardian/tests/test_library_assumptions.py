@@ -242,7 +242,7 @@ def test_model_call_limit_ends_run_after_limit():
 
 
 def test_model_call_limit_error_mode_raises():
-    # Design: the Reflector's 25-call limit ends the run as failed, so state is restored.
+    # Design: the Reflector's call limit ends the run as failed, so state is restored.
     model = ScriptedChatModel(script=looping_script(5))
     limit = ModelCallLimitMiddleware(run_limit=2, exit_behavior="error")
     agent = create_agent(model=model, tools=[noop], middleware=[limit])
@@ -583,7 +583,7 @@ def test_todo_list_middleware_adds_the_planning_tool():
 
 
 def test_deep_agent_accepts_call_limit_and_passes_context_to_tools():
-    # Design: 25-call limit on the Reflector; its tools are bound to one user by context.
+    # Design: a call limit on the Reflector; its tools are bound to one user by context.
     store = InMemoryStore()
     backend = CompositeBackend(
         default=StateBackend(), routes={"/memories/": user_files(store)}

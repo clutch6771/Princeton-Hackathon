@@ -2,7 +2,7 @@
 
 A running record for the Guardian and Reflector build (`guardian/`). The build spec is `docs/GUARDIAN_SPEC_V5.md`; this file records what was found and what each step produced, so it is not lost between sessions.
 
-Last updated: Sunday Nov 15, 12:15 am. Branch: `guardian`.
+Last updated: Sunday Nov 15, 12:30 am. Branch: `guardian`.
 
 ## Where things stand
 
@@ -20,6 +20,7 @@ Last updated: Sunday Nov 15, 12:15 am. Branch: `guardian`.
 | Integration: Guardian wired into the Judge server, team database migrated, run page, reset command | Done | `ce62e33`, `6d5e642`, `fbdf1a0` |
 | 4b. Reflection addendum (`docs/GUARDIAN_REFLECTION_ADDENDUM.md`) and the new onboarding interview | Done | `3df767e` |
 | 5. Learning evaluation | Done; results in `guardian/eval/REPORT.md` | `7542141`, `6053bd3`, this commit |
+| Demo notebook (`notebooks/demo.ipynb`) | **Not built** (owner's decision). The terminal chat and `guardian_router.live_run` run the demo loop | |
 | Optional items | Not started | |
 
 Offline tests: 482 passing in memory (`guardian/` and `guardian_router/`). The Judge's own suite: 499 passing. They use a scripted model and make no API calls.
@@ -43,7 +44,7 @@ Versions: `deepagents` 0.7.38, `langchain` 1.5.0, `langgraph` 1.2.22, `langchain
 | --- | --- |
 | `@dynamic_prompt` can read `request.runtime.context` | Values and the brief are inserted into the Guardian's prompt on every call |
 | An `after_model` hook may return `jump_to: "model"`, and may replace or remove messages by ID | The value-citation check retries once, then replaces the reply, and removes the rejected reply and the correction from the thread |
-| `ModelCallLimitMiddleware(run_limit=N, exit_behavior="error")` raises `ModelCallLimitExceededError` | Chat is capped at 6 model calls per message; the Reflector will be capped at 25 per run and treat the error as a failed run |
+| `ModelCallLimitMiddleware(run_limit=N, exit_behavior="error")` raises `ModelCallLimitExceededError` | Chat is capped at 6 model calls per message; the Reflector is capped per run (25 in the spec, 35 since Nov 15) and treats the error as a failed run |
 | `@wrap_tool_call` can rewrite a tool's result | The frame-text guard |
 | `ModelRetryMiddleware` retries every exception by default | Used with `max_retries=2, on_failure="error"` |
 
@@ -336,6 +337,8 @@ Built: `guardian/eval/learning_eval.py`, committed before its first live run. Fu
 - **The Reflector step was run three times.** Run 1 hit the 25-call limit and was rolled back, queuing nothing. A traced diagnostic run completed in 14 calls and queued both cards. The retry in the script completed and queued the V1 refinement (only the "Unless" line changed) and a new hustle value; both were approved unchanged and stage 3 uses them.
 - One stage-3 reply had malformed JSON and counts as no match; its verdict field would have matched.
 - Not a blind test of the skill: see the caveat under Step 3 and in the report.
+
+**Change after the evaluation:** the Reflector's limit of model calls per run was raised from 25 to 35 (owner's decision, Nov 15), because run 1 above reached 25. A normal review uses about 14. Rollback and retry are unchanged: a run that reaches the limit still fails, is rolled back, and is retried on a later call, up to three times.
 
 ## Conventions
 

@@ -25,7 +25,9 @@ Made by the Guardian owner during the build. Where they differ from the text bel
 3. **"Want less" first.** The interview does not ask what the user wants more of. "Want more" is "none" unless the user says it unprompted. Any line the evidence does not support is "none".
 4. **Refinements.** A change to an existing value alters only the lines the evidence supports and leaves the title, the strength and the other lines as they were. Code refuses a Reflector refinement that changes the title or strength, any proposal that changes nothing but the Evidence line, and any date an agent writes in an Evidence line.
 5. **Feedback comments from the app are not the user's words** (the app sends a preset correction), so they cannot be quoted under `In my words`.
-6. **Additions to the interfaces:** `pending_card(user_id, thread_id)`; an optional `stated_goals` in `ChatContext`; a `skipped` review status for a finished session with no judged reels; UUIDs accepted as evidence IDs.
+6. **The Reflector's call limit is 35 per run,** raised from 25 after one live review reached 25 and was rolled back. Rollback and retry are unchanged.
+7. **The demo notebook was not built.** The terminal chat (`python -m guardian.demo_chat`) and `python -m guardian_router.live_run` run the demo loop instead.
+8. **Additions to the interfaces:** `pending_card(user_id, thread_id)`; an optional `stated_goals` in `ChatContext`; a `skipped` review status for a finished session with no judged reels; UUIDs accepted as evidence IDs.
 
 ## Instructions for the coding agent
 
@@ -491,7 +493,7 @@ Demo moment: show a draft rejected because it rested only on Judge verdicts.
 | Value-citation check: every value ID cited in a reply exists in values.md; retry once if the library supports it, otherwise replace the reply with a plain "no stored value matches" message | Chat | Custom | MVP |
 | Model retry | Both | Built in | MVP |
 | Model fallback to a second provider | Both | Built in | Optional |
-| Model call limit (chat: 6 per message; Reflector: 25 per run) | Both | Built in | MVP |
+| Model call limit (chat: 6 per message; Reflector: 35 per run, raised from 25 on Nov 15) | Both | Built in | MVP |
 | Dynamic prompt with values.md and brief.md (brief inside a block labelled as notes, not instructions) | Chat | Built in | MVP |
 | Decision trace: tools, files and value IDs per answer, to `/memories/trace.jsonl` | Both | Custom | Optional |
 | Summarization of long chat threads | Chat | Built in | Optional |
@@ -765,7 +767,7 @@ guardian/
     feedback.json
   eval/
     learning_eval.py      # three-stage evaluation with a text-only stand-in Judge
-  notebooks/demo.ipynb
+  notebooks/demo.ipynb        # not built; see "Revisions after V5"
   tests/
 ```
 
@@ -839,7 +841,7 @@ Between stages 2 and 3, `reflect_pending` runs once on the feedback session, and
 - [ ] `get_memory` returns the stored files as text.
 - [ ] Memory caps are enforced (deterministic test).
 - [ ] The learning evaluation runs and prints the three stage results.
-- [ ] The notebook runs the demo loop end to end against `FakeDataSource` with no network services except the model API.
+- [ ] The notebook runs the demo loop end to end against `FakeDataSource` with no network services except the model API. **Not built** (owner's decision, Nov 15): the terminal chat (`python -m guardian.demo_chat`) and `python -m guardian_router.live_run` run the same loop.
 
 **Optional**
 

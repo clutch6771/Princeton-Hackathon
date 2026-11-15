@@ -13,7 +13,7 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 
-from guardian import api, reflect_flow
+from guardian import api, reflect_flow, reflector
 from guardian.datasource import SEED_DIR, FakeDataSource
 from guardian.memory import inbox, locks, proposals, reflector_files, reviews, values
 from guardian.tests.conftest import NOW, OTHER_USER, USER
@@ -301,6 +301,21 @@ def test_a_session_is_skipped_after_three_failed_attempts(reflect, store):
     assert reviews.MAX_ATTEMPTS == 3
     assert reviewed == 0 and model.calls == []
     assert reviews.get_review(store, USER, SESSION).status == reviews.STATUS_FAILED
+
+
+def test_a_run_that_reaches_the_call_limit_fails_and_is_rolled_back(reflect, store):
+    # Seen once in a live run, at the old limit of 25: the review kept updating its
+    # to-do list. The limit is 35 now; reaching it still fails the run cleanly.
+    todo = {"todos": [{"content": "Review", "status": "in_progress"}]}
+    endless = [tool_call("write_todos", todo, f"c{n}") for n in range(60)]
+
+    reviewed, model = reflect(endless)
+
+    assert reviewed == 0
+    assert len(model.calls) == reflector.REFLECTOR_MODEL_CALL_LIMIT == 35
+    assert cards(store) == [] and cards(store, status=inbox.STATUS_STAGED) == []
+    assert reviews.get_review(store, USER, SESSION).attempts == 1
+    assert reviews.get_review(store, USER, SESSION).status == reviews.STATUS_NOT_STARTED
 
 
 @pytest.mark.parametrize(

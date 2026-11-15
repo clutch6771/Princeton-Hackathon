@@ -26,7 +26,10 @@ from guardian.deps import Deps, ReflectorRun
 from guardian.memory import reflector_files
 from guardian.tools_reflector import build_reflector_tools
 
-REFLECTOR_MODEL_CALL_LIMIT = 25  # model calls per run
+# Model calls per run. A normal review takes about 14. The spec's limit of 25 was
+# reached once in a live run (half of a review's calls update its to-do list), so the
+# owner raised it to 35. A run that still reaches it fails, is rolled back and retried.
+REFLECTOR_MODEL_CALL_LIMIT = 35
 MODEL_RETRIES = 2
 RETRY_INITIAL_DELAY_SECONDS = 1.0
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
